@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-import { getSupabaseEnv } from "@/lib/env";
+import { getSupabaseAdminEnv } from "@/lib/env";
 
 let supabaseAdminClient: SupabaseClient | undefined;
 
@@ -9,7 +9,7 @@ export function getSupabaseAdminClient() {
     return supabaseAdminClient;
   }
 
-  const { serviceRoleKey, url } = getSupabaseEnv();
+  const { serviceRoleKey, url } = getSupabaseAdminEnv();
 
   supabaseAdminClient = createClient(url, serviceRoleKey, {
     auth: {

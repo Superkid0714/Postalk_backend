@@ -27,6 +27,13 @@ export function getSupabaseEnv() {
   };
 }
 
+export function getSupabaseAdminEnv() {
+  return {
+    url: readEnv("NEXT_PUBLIC_SUPABASE_URL"),
+    serviceRoleKey: readEnv("SUPABASE_SERVICE_ROLE_KEY"),
+  };
+}
+
 export function getAdminApiKey() {
   return readOptionalEnv("ADMIN_API_KEY");
 }
