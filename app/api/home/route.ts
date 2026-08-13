@@ -158,14 +158,49 @@ export async function GET(request: NextRequest) {
     attentionError ||
     myAdsError
   ) {
+    const homeLoadErrors = {
+      pendingCountError: pendingCountError
+        ? {
+            message: pendingCountError.message,
+            code: pendingCountError.code,
+            details: pendingCountError.details,
+            hint: pendingCountError.hint,
+          }
+        : null,
+      needsFixCountError: needsFixCountError
+        ? {
+            message: needsFixCountError.message,
+            code: needsFixCountError.code,
+            details: needsFixCountError.details,
+            hint: needsFixCountError.hint,
+          }
+        : null,
+      attentionError: attentionError
+        ? {
+            message: attentionError.message,
+            code: attentionError.code,
+            details: attentionError.details,
+            hint: attentionError.hint,
+          }
+        : null,
+      myAdsError: myAdsError
+        ? {
+            message: myAdsError.message,
+            code: myAdsError.code,
+            details: myAdsError.details,
+            hint: myAdsError.hint,
+          }
+        : null,
+    };
+
+    console.error("Failed to load home data", {
+      storeId,
+      ...homeLoadErrors,
+    });
+
     return errorResponse("Failed to load home data", 500, {
       code: "HOME_DATA_LOAD_FAILED",
-      details: [
-        pendingCountError?.message,
-        needsFixCountError?.message,
-        attentionError?.message,
-        myAdsError?.message,
-      ].filter(Boolean),
+      details: homeLoadErrors,
     });
   }
 
