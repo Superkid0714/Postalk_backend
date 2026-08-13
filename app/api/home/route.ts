@@ -127,6 +127,26 @@ export async function GET(request: NextRequest) {
   ]);
 
   if (storeError || !store) {
+    if (storeError) {
+      console.error("Failed to load store for home API", {
+        storeId,
+        message: storeError.message,
+        code: storeError.code,
+        details: storeError.details,
+        hint: storeError.hint,
+      });
+
+      return errorResponse("Failed to load store", 500, {
+        code: "STORE_LOAD_FAILED",
+        details: {
+          message: storeError.message,
+          code: storeError.code,
+          details: storeError.details,
+          hint: storeError.hint,
+        },
+      });
+    }
+
     return errorResponse("Store not found", 404, {
       code: "STORE_NOT_FOUND",
     });
