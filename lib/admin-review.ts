@@ -1,0 +1,144 @@
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import {
+  getSubmissionStatusLabel,
+  getSubmissionStatusMessage,
+  getSubmissionTitle,
+  pickThumbnailAsset,
+  type SubmissionAssetRecord,
+  type SubmissionHomeRecord,
+} from "@/lib/submissions/home";
+
+export type ReviewStoreRecord = {
+  id: string;
+  market_name: string;
+  store_name: string;
+  owner_name?: string | null;
+};
+
+export type ReviewAssetRecord = SubmissionAssetRecord & {
+  file_name?: string | null;
+  mime_type?: string | null;
+  file_size?: number | null;
+};
+
+export type ReviewSubmissionRecord = Omit<
+  SubmissionHomeRecord,
+  "submission_assets"
+> & {
+  submitter_name?: string | null;
+  submitter_affiliation?: string | null;
+  store_type?: string | null;
+  price_text?: string | null;
+  appeal_point?: string | null;
+  extra_message?: string | null;
+  caption?: string | null;
+  hashtags?: string[] | null;
+  admin_notes?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  stores: ReviewStoreRecord | ReviewStoreRecord[] | null;
+  submission_assets?: ReviewAssetRecord[] | null;
+};
+
+export function normalizeReviewStore(
+  store: ReviewStoreRecord | ReviewStoreRecord[] | null,
+) {
+  if (Array.isArray(store)) {
+    return store[0] ?? null;
+  }
+
+  return store;
+}
+
+export async function getReviewSignedUrl(asset: SubmissionAssetRecord | null) {
+  if (!asset) {
+    return null;
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.storage
+    .from(asset.storage_bucket)
+    .createSignedUrl(asset.file_path, 60 * 60);
+
+  if (error || !data?.signedUrl) {
+    return null;
+  }
+
+  return data.signedUrl;
+}
+
+export async function buildReviewListItem(submission: ReviewSubmissionRecord) {
+  const store = normalizeReviewStore(submission.stores);
+  const thumbnailUrl = await getReviewSignedUrl(
+    pickThumbnailAsset(submission.submission_assets),
+  );
+
+  return {
+    submissionId: submission.id,
+    thumbnailUrl,
+    title: getSubmissionTitle(submission, store?.store_name ?? "광고"),
+    storeName: store?.store_name ?? null,
+    marketName: store?.market_name ?? null,
+    status: submission.status,
+    statusLabel: getSubmissionStatusLabel(submission.status),
+    message: getSubmissionStatusMessage(submission.status),
+    createdAt: submission.created_at,
+    updatedAt: submission.updated_at,
+  };
+}
+
+export async function buildReviewDetail(submission: ReviewSubmissionRecord) {
+  const store = normalizeReviewStore(submission.stores);
+
+  const assets = await Promise.all(
+    (submission.submission_assets ?? []).map(async (asset) => ({
+      assetType: asset.asset_type,
+      fileName: asset.file_name ?? null,
+      filePath: asset.file_path,
+      mimeType: asset.mime_type ?? null,
+      fileSize: asset.file_size ?? null,
+      sortOrder: asset.sort_order,
+      url: await getReviewSignedUrl(asset),
+    })),
+  );
+
+  const primaryAsset =
+    pickThumbnailAsset(submission.submission_assets) ??
+    submission.submission_assets?.[0] ??
+    null;
+
+  return {
+    submissionId: submission.id,
+    title: getSubmissionTitle(submission, store?.store_name ?? "광고"),
+    createdAt: submission.created_at,
+    updatedAt: submission.updated_at,
+    status: submission.status,
+    statusLabel: getSubmissionStatusLabel(submission.status),
+    store: {
+      id: store?.id ?? null,
+      marketName: store?.market_name ?? null,
+      storeName: store?.store_name ?? null,
+      ownerName: store?.owner_name ?? null,
+    },
+    submitter: {
+      name: submission.submitter_name ?? null,
+      affiliation: submission.submitter_affiliation ?? null,
+    },
+    content: {
+      storeType: submission.store_type ?? null,
+      targetMenuName: submission.target_menu_name ?? null,
+      priceText: submission.price_text ?? null,
+      appealPoint: submission.appeal_point ?? null,
+      extraMessage: submission.extra_message ?? null,
+      caption: submission.caption ?? null,
+      hashtags: submission.hashtags ?? [],
+    },
+    review: {
+      adminNotes: submission.admin_notes ?? null,
+      reviewedBy: submission.reviewed_by ?? null,
+      reviewedAt: submission.reviewed_at ?? null,
+    },
+    primaryAssetUrl: primaryAsset ? await getReviewSignedUrl(primaryAsset) : null,
+    assets,
+  };
+}
