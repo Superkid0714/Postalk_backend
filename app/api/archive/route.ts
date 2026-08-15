@@ -3,11 +3,11 @@ import type { NextRequest } from "next/server";
 import { errorResponse, successResponse } from "@/lib/api/response";
 import {
   ARCHIVE_STATUSES,
+  VIDEO_ASSET_TYPES,
   attachArchiveSubmissionAssets,
   buildArchiveItem,
   isArchiveMediaType,
   isArchiveStatus,
-  type ArchiveMediaType,
   type ArchiveSubmissionAssetRow,
   type ArchiveStatus,
   type ArchiveSubmissionRecord,
@@ -19,7 +19,7 @@ function buildArchiveQuery(params: {
   storeId: string;
   limit: number;
   status: ArchiveStatus;
-  mediaType: ArchiveMediaType;
+  submissionIds?: string[] | null;
 }) {
   const supabase = getSupabaseAdminClient();
 
@@ -48,8 +48,10 @@ function buildArchiveQuery(params: {
     query = query.eq("status", params.status);
   }
 
-  if (params.mediaType === "video") {
-    query = query.eq("id", "__no_video_submissions__");
+  if (params.submissionIds) {
+    query = params.submissionIds.length
+      ? query.in("id", params.submissionIds)
+      : query.in("id", ["00000000-0000-0000-0000-000000000000"]);
   }
 
   return query.returns<ArchiveSubmissionRecord[]>();
@@ -58,7 +60,7 @@ function buildArchiveQuery(params: {
 function buildCountQuery(params: {
   storeId: string;
   status: Exclude<ArchiveStatus, "all">;
-  mediaType: ArchiveMediaType;
+  submissionIds?: string[] | null;
 }) {
   const supabase = getSupabaseAdminClient();
 
@@ -68,11 +70,31 @@ function buildCountQuery(params: {
     .eq("store_id", params.storeId)
     .eq("status", params.status);
 
-  if (params.mediaType === "video") {
-    query = query.eq("id", "__no_video_submissions__");
+  if (params.submissionIds) {
+    query = params.submissionIds.length
+      ? query.in("id", params.submissionIds)
+      : query.in("id", ["00000000-0000-0000-0000-000000000000"]);
   }
 
   return query;
+}
+
+async function getVideoSubmissionIds(storeId: string) {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("submission_assets")
+    .select("submission_id, submissions!inner(store_id)")
+    .in("asset_type", [...VIDEO_ASSET_TYPES])
+    .eq("submissions.store_id", storeId);
+
+  if (error) {
+    return { data: null, error };
+  }
+
+  return {
+    data: [...new Set((data ?? []).map((item) => item.submission_id))],
+    error: null,
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -133,6 +155,21 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  const videoSubmissionIdsResult =
+    mediaTypeValue === "video" ? await getVideoSubmissionIds(storeId) : null;
+
+  if (videoSubmissionIdsResult?.error) {
+    return errorResponse("Failed to load archive data", 500, {
+      code: "ARCHIVE_LOAD_FAILED",
+      details: {
+        videoSubmissionIdsError: videoSubmissionIdsResult.error.message,
+      },
+    });
+  }
+
+  const mediaSubmissionIds =
+    mediaTypeValue === "video" ? (videoSubmissionIdsResult?.data ?? []) : null;
+
   const [
     { count: pendingReviewCount, error: pendingReviewError },
     { count: rejectedCount, error: rejectedError },
@@ -142,22 +179,22 @@ export async function GET(request: NextRequest) {
     buildCountQuery({
       storeId,
       status: "pending_review",
-      mediaType: mediaTypeValue,
+      submissionIds: mediaSubmissionIds,
     }),
     buildCountQuery({
       storeId,
       status: "rejected",
-      mediaType: mediaTypeValue,
+      submissionIds: mediaSubmissionIds,
     }),
     buildCountQuery({
       storeId,
       status: "approved",
-      mediaType: mediaTypeValue,
+      submissionIds: mediaSubmissionIds,
     }),
     buildArchiveQuery({
       storeId,
       status: statusValue,
-      mediaType: mediaTypeValue,
+      submissionIds: mediaSubmissionIds,
       limit,
     }),
   ]);
@@ -210,7 +247,11 @@ export async function GET(request: NextRequest) {
     submissions ?? [],
     submissionAssets ?? [],
   );
-  const items = await Promise.all(submissionsWithAssets.map(buildArchiveItem));
+  const items = await Promise.all(
+    submissionsWithAssets.map((submission) =>
+      buildArchiveItem(submission, mediaTypeValue),
+    ),
+  );
 
   return successResponse(
     {

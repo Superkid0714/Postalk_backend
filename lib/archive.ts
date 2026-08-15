@@ -14,6 +14,7 @@ export const ARCHIVE_STATUSES = [
   "rejected",
   "approved",
 ] as const;
+export const VIDEO_ASSET_TYPES = ["generated_video", "video_thumbnail"] as const;
 
 export type ArchiveMediaType = (typeof ARCHIVE_MEDIA_TYPES)[number];
 export type ArchiveStatus = (typeof ARCHIVE_STATUSES)[number];
@@ -115,7 +116,10 @@ export async function getArchiveThumbnailUrl(
   return data.signedUrl;
 }
 
-export async function buildArchiveItem(submission: ArchiveSubmissionRecord) {
+export async function buildArchiveItem(
+  submission: ArchiveSubmissionRecord,
+  mediaType: ArchiveMediaType = "photo",
+) {
   const store = normalizeArchiveStore(submission.stores);
   const thumbnailUrl = await getArchiveThumbnailUrl(
     pickThumbnailAsset(submission.submission_assets),
@@ -131,6 +135,6 @@ export async function buildArchiveItem(submission: ArchiveSubmissionRecord) {
     statusLabel: getArchiveStatusLabel(submission.status),
     createdAt: submission.created_at,
     updatedAt: submission.updated_at,
-    mediaType: "photo" as const,
+    mediaType,
   };
 }

@@ -4,11 +4,11 @@ import { errorResponse, successResponse } from "@/lib/api/response";
 import { requireAdminApiKey } from "@/lib/auth/admin";
 import {
   ARCHIVE_STATUSES,
+  VIDEO_ASSET_TYPES,
   attachArchiveSubmissionAssets,
   buildArchiveItem,
   isArchiveMediaType,
   isArchiveStatus,
-  type ArchiveMediaType,
   type ArchiveSubmissionAssetRow,
   type ArchiveStatus,
   type ArchiveSubmissionRecord,
@@ -19,7 +19,7 @@ function buildAdminArchiveQuery(params: {
   marketName: string | null;
   limit: number;
   status: ArchiveStatus;
-  mediaType: ArchiveMediaType;
+  submissionIds?: string[] | null;
 }) {
   const supabase = getSupabaseAdminClient();
 
@@ -51,8 +51,10 @@ function buildAdminArchiveQuery(params: {
     query = query.eq("status", params.status);
   }
 
-  if (params.mediaType === "video") {
-    query = query.eq("id", "__no_video_submissions__");
+  if (params.submissionIds) {
+    query = params.submissionIds.length
+      ? query.in("id", params.submissionIds)
+      : query.in("id", ["00000000-0000-0000-0000-000000000000"]);
   }
 
   return query.returns<ArchiveSubmissionRecord[]>();
@@ -61,7 +63,7 @@ function buildAdminArchiveQuery(params: {
 function buildAdminCountQuery(params: {
   marketName: string | null;
   status: Exclude<ArchiveStatus, "all">;
-  mediaType: ArchiveMediaType;
+  submissionIds?: string[] | null;
 }) {
   const supabase = getSupabaseAdminClient();
 
@@ -74,11 +76,37 @@ function buildAdminCountQuery(params: {
     query = query.eq("stores.market_name", params.marketName);
   }
 
-  if (params.mediaType === "video") {
-    query = query.eq("id", "__no_video_submissions__");
+  if (params.submissionIds) {
+    query = params.submissionIds.length
+      ? query.in("id", params.submissionIds)
+      : query.in("id", ["00000000-0000-0000-0000-000000000000"]);
   }
 
   return query;
+}
+
+async function getAdminVideoSubmissionIds(marketName: string | null) {
+  const supabase = getSupabaseAdminClient();
+
+  let query = supabase
+    .from("submissions")
+    .select("id, submission_assets!inner(asset_type), stores!inner(market_name)")
+    .in("submission_assets.asset_type", [...VIDEO_ASSET_TYPES]);
+
+  if (marketName) {
+    query = query.eq("stores.market_name", marketName);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    return { data: null, error };
+  }
+
+  return {
+    data: [...new Set((data ?? []).map((item) => item.id))],
+    error: null,
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -117,6 +145,23 @@ export async function GET(request: NextRequest) {
       ? Math.min(Math.max(Number(limitParam), 1), 50)
       : 20;
 
+  const videoSubmissionIdsResult =
+    mediaTypeValue === "video"
+      ? await getAdminVideoSubmissionIds(marketName)
+      : null;
+
+  if (videoSubmissionIdsResult?.error) {
+    return errorResponse("Failed to load admin archive data", 500, {
+      code: "ADMIN_ARCHIVE_LOAD_FAILED",
+      details: {
+        videoSubmissionIdsError: videoSubmissionIdsResult.error.message,
+      },
+    });
+  }
+
+  const mediaSubmissionIds =
+    mediaTypeValue === "video" ? (videoSubmissionIdsResult?.data ?? []) : null;
+
   const [
     { count: pendingReviewCount, error: pendingReviewError },
     { count: rejectedCount, error: rejectedError },
@@ -126,22 +171,22 @@ export async function GET(request: NextRequest) {
     buildAdminCountQuery({
       marketName,
       status: "pending_review",
-      mediaType: mediaTypeValue,
+      submissionIds: mediaSubmissionIds,
     }),
     buildAdminCountQuery({
       marketName,
       status: "rejected",
-      mediaType: mediaTypeValue,
+      submissionIds: mediaSubmissionIds,
     }),
     buildAdminCountQuery({
       marketName,
       status: "approved",
-      mediaType: mediaTypeValue,
+      submissionIds: mediaSubmissionIds,
     }),
     buildAdminArchiveQuery({
       marketName,
       status: statusValue,
-      mediaType: mediaTypeValue,
+      submissionIds: mediaSubmissionIds,
       limit,
     }),
   ]);
@@ -195,7 +240,11 @@ export async function GET(request: NextRequest) {
     submissions ?? [],
     submissionAssets ?? [],
   );
-  const items = await Promise.all(submissionsWithAssets.map(buildArchiveItem));
+  const items = await Promise.all(
+    submissionsWithAssets.map((submission) =>
+      buildArchiveItem(submission, mediaTypeValue),
+    ),
+  );
 
   return successResponse(
     {

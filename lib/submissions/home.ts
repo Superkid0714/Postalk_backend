@@ -1,5 +1,10 @@
 type SubmissionStatus = "pending_review" | "approved" | "rejected";
-type SubmissionAssetType = "menu_board" | "food_photo" | "generated_image";
+type SubmissionAssetType =
+  | "menu_board"
+  | "food_photo"
+  | "generated_image"
+  | "generated_video"
+  | "video_thumbnail";
 
 export type SubmissionAssetRecord = {
   asset_type: SubmissionAssetType;
@@ -19,9 +24,11 @@ export type SubmissionHomeRecord = {
 };
 
 const THUMBNAIL_PRIORITY: SubmissionAssetType[] = [
+  "video_thumbnail",
   "food_photo",
   "generated_image",
   "menu_board",
+  "generated_video",
 ];
 
 export function getSubmissionStatusLabel(status: SubmissionStatus) {
