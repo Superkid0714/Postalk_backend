@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
         caption,
         hashtags,
         transcript,
+        ai_metadata,
         status,
         admin_notes,
         reviewed_by,

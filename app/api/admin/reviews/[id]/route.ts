@@ -51,6 +51,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
         extra_message,
         caption,
         hashtags,
+        ai_metadata,
         admin_notes,
         reviewed_by,
         reviewed_at,

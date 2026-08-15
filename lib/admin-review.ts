@@ -33,12 +33,54 @@ export type ReviewSubmissionRecord = Omit<
   extra_message?: string | null;
   caption?: string | null;
   hashtags?: string[] | null;
+  ai_metadata?: Record<string, unknown> | null;
   admin_notes?: string | null;
   reviewed_by?: string | null;
   reviewed_at?: string | null;
   stores: ReviewStoreRecord | ReviewStoreRecord[] | null;
   submission_assets?: ReviewAssetRecord[] | null;
 };
+
+function readMerchantInsights(aiMetadata: Record<string, unknown> | null | undefined) {
+  if (!aiMetadata || typeof aiMetadata !== "object" || Array.isArray(aiMetadata)) {
+    return {
+      targetCustomer: null,
+      peakSalesTime: null,
+      popularMenuNotes: null,
+    };
+  }
+
+  const merchantInsights = aiMetadata.merchantInsights;
+
+  if (
+    !merchantInsights ||
+    typeof merchantInsights !== "object" ||
+    Array.isArray(merchantInsights)
+  ) {
+    return {
+      targetCustomer: null,
+      peakSalesTime: null,
+      popularMenuNotes: null,
+    };
+  }
+
+  const merchantInsightsRecord = merchantInsights as Record<string, unknown>;
+
+  return {
+    targetCustomer:
+      typeof merchantInsightsRecord.targetCustomer === "string"
+        ? merchantInsightsRecord.targetCustomer
+        : null,
+    peakSalesTime:
+      typeof merchantInsightsRecord.peakSalesTime === "string"
+        ? merchantInsightsRecord.peakSalesTime
+        : null,
+    popularMenuNotes:
+      typeof merchantInsightsRecord.popularMenuNotes === "string"
+        ? merchantInsightsRecord.popularMenuNotes
+        : null,
+  };
+}
 
 export function normalizeReviewStore(
   store: ReviewStoreRecord | ReviewStoreRecord[] | null,
@@ -89,6 +131,7 @@ export async function buildReviewListItem(submission: ReviewSubmissionRecord) {
 
 export async function buildReviewDetail(submission: ReviewSubmissionRecord) {
   const store = normalizeReviewStore(submission.stores);
+  const merchantInsights = readMerchantInsights(submission.ai_metadata);
 
   const assets = await Promise.all(
     (submission.submission_assets ?? []).map(async (asset) => ({
@@ -129,6 +172,9 @@ export async function buildReviewDetail(submission: ReviewSubmissionRecord) {
       targetMenuName: submission.target_menu_name ?? null,
       priceText: submission.price_text ?? null,
       appealPoint: submission.appeal_point ?? null,
+      targetCustomer: merchantInsights.targetCustomer,
+      peakSalesTime: merchantInsights.peakSalesTime,
+      popularMenuNotes: merchantInsights.popularMenuNotes,
       extraMessage: submission.extra_message ?? null,
       caption: submission.caption ?? null,
       hashtags: submission.hashtags ?? [],
