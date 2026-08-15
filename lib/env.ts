@@ -3,7 +3,11 @@ type EnvKey =
   | "NEXT_PUBLIC_SUPABASE_ANON_KEY"
   | "SUPABASE_SERVICE_ROLE_KEY";
 
-type OptionalEnvKey = "ADMIN_API_KEY" | "OPENAI_API_KEY";
+type OptionalEnvKey =
+  | "ADMIN_API_KEY"
+  | "OPENAI_API_KEY"
+  | "GEMINI_API_KEY"
+  | "GEMINI_VIDEO_MODEL";
 
 function readEnv(key: EnvKey) {
   const value = process.env[key];
@@ -40,4 +44,12 @@ export function getAdminApiKey() {
 
 export function getOpenAiApiKey() {
   return readOptionalEnv("OPENAI_API_KEY");
+}
+
+export function getGeminiApiKey() {
+  return readOptionalEnv("GEMINI_API_KEY");
+}
+
+export function getGeminiVideoModel() {
+  return readOptionalEnv("GEMINI_VIDEO_MODEL");
 }
