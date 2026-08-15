@@ -132,22 +132,21 @@ export async function startGeminiVideoOperation(params: {
   const apiKey = getRequiredGeminiApiKey();
   const model = getVideoModel();
 
-  const instance: Record<string, unknown> = {
-    prompt: params.prompt,
-  };
-
-  if (params.image) {
-    instance.image = {
-      inlineData: {
-        mimeType: params.image.mimeType,
-        data: params.image.bytesBase64,
-      },
+  const sendRequest = async (includeImage: boolean) => {
+    const instance: Record<string, unknown> = {
+      prompt: params.prompt,
     };
-  }
 
-  const response = await fetch(
-    `${GEMINI_BASE_URL}/models/${model}:predictLongRunning`,
-    {
+    if (includeImage && params.image) {
+      instance.image = {
+        inlineData: {
+          mimeType: params.image.mimeType,
+          data: params.image.bytesBase64,
+        },
+      };
+    }
+
+    return fetch(`${GEMINI_BASE_URL}/models/${model}:predictLongRunning`, {
       method: "POST",
       headers: {
         "x-goog-api-key": apiKey,
@@ -162,8 +161,24 @@ export async function startGeminiVideoOperation(params: {
           numberOfVideos: 1,
         },
       }),
-    },
-  );
+    });
+  };
+
+  let response = await sendRequest(Boolean(params.image));
+
+  if (!response.ok) {
+    const errorText = await response.text();
+
+    if (
+      params.image &&
+      errorText.includes("inlineData") &&
+      errorText.includes("isn't supported")
+    ) {
+      response = await sendRequest(false);
+    } else {
+      throw new Error(`Gemini video start failed: ${errorText}`);
+    }
+  }
 
   if (!response.ok) {
     throw new Error(`Gemini video start failed: ${await response.text()}`);
