@@ -40,6 +40,13 @@ const ALLOWED_ASPECT_RATIOS: VideoAspectRatio[] = ["9:16", "16:9"];
 const ALLOWED_RESOLUTIONS: VideoResolution[] = ["720p", "1080p"];
 const ALLOWED_DURATIONS: VideoDurationSeconds[] = [4, 6, 8];
 
+function isGenerationJobsMissingError(message: string | null | undefined) {
+  return Boolean(
+    message &&
+      (message.includes("generation_jobs") || message.includes("schema cache")),
+  );
+}
+
 export async function POST(request: NextRequest) {
   let body: StartVideoCreationBody;
 
@@ -168,6 +175,7 @@ export async function POST(request: NextRequest) {
 
   if (body.mockMode === true) {
     const createdAt = new Date().toISOString();
+    const mockJobId = crypto.randomUUID();
     const { data: job, error: jobError } = await supabase
       .from("generation_jobs")
       .insert({
@@ -196,11 +204,13 @@ export async function POST(request: NextRequest) {
       })
       .select("id, status, created_at")
       .single();
+    const effectiveJobId = job?.id ?? mockJobId;
+    const effectiveCreatedAt = job?.created_at ?? createdAt;
 
-    if (jobError || !job) {
+    if (jobError && !isGenerationJobsMissingError(jobError.message)) {
       return errorResponse("Failed to create mock video generation job", 500, {
         code: "VIDEO_JOB_CREATE_FAILED",
-        details: jobError?.message,
+        details: jobError.message,
       });
     }
 
@@ -212,7 +222,7 @@ export async function POST(request: NextRequest) {
         "postalk-sample-video.mp4",
       );
       const sampleVideoBytes = await readFile(sampleVideoPath);
-      const filePath = `${submission.store_id}/${submission.id}/generated/${job.id}.mp4`;
+      const filePath = `${submission.store_id}/${submission.id}/generated/${effectiveJobId}.mp4`;
 
       const { error: uploadError } = await supabase.storage
         .from("uploads")
@@ -232,7 +242,7 @@ export async function POST(request: NextRequest) {
           asset_type: "generated_video",
           storage_bucket: "uploads",
           file_path: filePath,
-          file_name: `${job.id}.mp4`,
+          file_name: `${effectiveJobId}.mp4`,
           mime_type: "video/mp4",
           file_size: sampleVideoBytes.byteLength,
         })
@@ -245,29 +255,31 @@ export async function POST(request: NextRequest) {
 
       const completedAt = new Date().toISOString();
 
-      await supabase
-        .from("generation_jobs")
-        .update({
-          status: "completed",
-          completed_at: completedAt,
-          failure_reason: null,
-          result_asset_id: asset.id,
-          result_storage_bucket: "uploads",
-          result_file_path: filePath,
-          result_payload: {
-            script,
-            provider: "mock",
-            sample: true,
-          },
-        })
-        .eq("id", job.id);
+      if (job?.id) {
+        await supabase
+          .from("generation_jobs")
+          .update({
+            status: "completed",
+            completed_at: completedAt,
+            failure_reason: null,
+            result_asset_id: asset.id,
+            result_storage_bucket: "uploads",
+            result_file_path: filePath,
+            result_payload: {
+              script,
+              provider: "mock",
+              sample: true,
+            },
+          })
+          .eq("id", job.id);
+      }
 
       await supabase
         .from("submissions")
         .update({
           ai_metadata: mergeSubmissionVideoWorkflowMetadata(submission.ai_metadata, {
-            currentJobId: job.id,
-            lastCompletedJobId: job.id,
+            currentJobId: effectiveJobId,
+            lastCompletedJobId: effectiveJobId,
             providerOperationName: "mock-operation",
             status: "generated",
             durationSeconds,
@@ -276,6 +288,10 @@ export async function POST(request: NextRequest) {
             stylePreset,
             generatedAt: completedAt,
             lastFailureReason: null,
+            resultStorageBucket: "uploads",
+            resultFilePath: filePath,
+            modelName: "veo-mock",
+            mockMode: true,
             script,
           }),
         })
@@ -283,7 +299,7 @@ export async function POST(request: NextRequest) {
 
       return successResponse(
         {
-          jobId: job.id,
+          jobId: effectiveJobId,
           submissionId: submission.id,
           status: "completed",
           providerOperationName: "mock-operation",
@@ -292,7 +308,7 @@ export async function POST(request: NextRequest) {
           resolution,
           stylePreset,
           mockMode: true,
-          createdAt: job.created_at,
+          createdAt: effectiveCreatedAt,
         },
         "Mock video creation completed",
         201,
@@ -301,14 +317,16 @@ export async function POST(request: NextRequest) {
       const failureReason =
         error instanceof Error ? error.message : "Failed to create mock video";
 
-      await supabase
-        .from("generation_jobs")
-        .update({
-          status: "failed",
-          completed_at: new Date().toISOString(),
-          failure_reason: failureReason,
-        })
-        .eq("id", job.id);
+      if (job?.id) {
+        await supabase
+          .from("generation_jobs")
+          .update({
+            status: "failed",
+            completed_at: new Date().toISOString(),
+            failure_reason: failureReason,
+          })
+          .eq("id", job.id);
+      }
 
       return errorResponse("Failed to create mock video generation", 500, {
         code: "MOCK_VIDEO_GENERATION_FAILED",

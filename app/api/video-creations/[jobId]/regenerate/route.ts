@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { errorResponse } from "@/lib/api/response";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isUuid } from "@/lib/validation";
+import { getSubmissionVideoWorkflowMetadata } from "@/lib/video-creation";
 
 type RouteContext = {
   params: Promise<{
@@ -39,8 +40,51 @@ export async function POST(request: NextRequest, context: RouteContext) {
     .single();
 
   if (error || !job) {
-    return errorResponse("Video generation job not found", 404, {
-      code: "VIDEO_JOB_NOT_FOUND",
+    const { data: submissions, error: submissionsError } = await supabase
+      .from("submissions")
+      .select("id, ai_metadata");
+
+    if (submissionsError || !submissions) {
+      return errorResponse("Video generation job not found", 404, {
+        code: "VIDEO_JOB_NOT_FOUND",
+      });
+    }
+
+    const matchedSubmission = submissions.find((submission) => {
+      const workflow = getSubmissionVideoWorkflowMetadata(
+        (submission.ai_metadata as Record<string, unknown> | null) ?? null,
+      );
+
+      return (
+        workflow.currentJobId === jobId || workflow.lastCompletedJobId === jobId
+      );
+    });
+
+    if (!matchedSubmission) {
+      return errorResponse("Video generation job not found", 404, {
+        code: "VIDEO_JOB_NOT_FOUND",
+      });
+    }
+
+    const workflow = getSubmissionVideoWorkflowMetadata(
+      (matchedSubmission.ai_metadata as Record<string, unknown> | null) ?? null,
+    );
+
+    const forwardedBody = {
+      submissionId: matchedSubmission.id,
+      stylePreset: workflow.stylePreset ?? "market_story",
+      aspectRatio: workflow.aspectRatio ?? "9:16",
+      resolution: workflow.resolution ?? "720p",
+      durationSeconds: workflow.durationSeconds ?? 8,
+      mockMode: body.mockMode === true || workflow.mockMode === true,
+    };
+
+    return fetch(new URL("/api/video-creations/start", request.url), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(forwardedBody),
     });
   }
 

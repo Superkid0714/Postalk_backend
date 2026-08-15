@@ -29,6 +29,10 @@ export type SubmissionVideoWorkflowMetadata = {
   requestedPublishAt?: string | null;
   regenerateCount?: number;
   lastFailureReason?: string | null;
+  resultStorageBucket?: string | null;
+  resultFilePath?: string | null;
+  modelName?: string | null;
+  mockMode?: boolean;
   script?: ReturnType<typeof buildVideoScript> | null;
 };
 

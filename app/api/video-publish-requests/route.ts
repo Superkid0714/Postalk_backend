@@ -67,13 +67,14 @@ export async function POST(request: NextRequest) {
     )
     .sort((left, right) => right.created_at.localeCompare(left.created_at))[0];
 
-  if (!latestCompletedJob) {
+  const workflow = getSubmissionVideoWorkflowMetadata(submission.ai_metadata);
+
+  if (!latestCompletedJob && !workflow.lastCompletedJobId) {
     return errorResponse("No completed generated video is available", 400, {
       code: "GENERATED_VIDEO_NOT_READY",
     });
   }
 
-  const workflow = getSubmissionVideoWorkflowMetadata(submission.ai_metadata);
   const requestedPublishAt = new Date().toISOString();
 
   const { data, error } = await supabase
@@ -81,8 +82,9 @@ export async function POST(request: NextRequest) {
     .update({
       status: "pending_review",
       ai_metadata: mergeSubmissionVideoWorkflowMetadata(submission.ai_metadata, {
-        currentJobId: latestCompletedJob.id,
-        lastCompletedJobId: latestCompletedJob.id,
+        currentJobId: latestCompletedJob?.id ?? workflow.currentJobId ?? null,
+        lastCompletedJobId:
+          latestCompletedJob?.id ?? workflow.lastCompletedJobId ?? null,
         status: "requested_publish",
         requestedPublishAt,
       }),
@@ -103,7 +105,7 @@ export async function POST(request: NextRequest) {
       submissionId: data.id,
       status: data.status,
       videoWorkflowStatus: "requested_publish",
-      jobId: latestCompletedJob.id,
+      jobId: latestCompletedJob?.id ?? workflow.lastCompletedJobId ?? null,
       requestedPublishAt,
       updatedAt: data.updated_at,
     },

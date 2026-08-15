@@ -61,9 +61,94 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     .single();
 
   if (error || !job) {
-    return errorResponse("Video generation job not found", 404, {
-      code: "VIDEO_JOB_NOT_FOUND",
+    const { data: submissions, error: submissionsError } = await supabase
+      .from("submissions")
+      .select("id, status, ai_metadata");
+
+    if (submissionsError || !submissions) {
+      return errorResponse("Video generation job not found", 404, {
+        code: "VIDEO_JOB_NOT_FOUND",
+      });
+    }
+
+    const matchedSubmission = submissions.find((submission) => {
+      const workflow = getSubmissionVideoWorkflowMetadata(
+        (submission.ai_metadata as Record<string, unknown> | null) ?? null,
+      );
+
+      return (
+        workflow.currentJobId === jobId || workflow.lastCompletedJobId === jobId
+      );
     });
+
+    if (!matchedSubmission) {
+      return errorResponse("Video generation job not found", 404, {
+        code: "VIDEO_JOB_NOT_FOUND",
+      });
+    }
+
+    const workflow = getSubmissionVideoWorkflowMetadata(
+      (matchedSubmission.ai_metadata as Record<string, unknown> | null) ?? null,
+    );
+
+    let resultUrl: string | null = null;
+
+    if (workflow.resultStorageBucket && workflow.resultFilePath) {
+      const { data: signedUrlData } = await supabase.storage
+        .from(workflow.resultStorageBucket)
+        .createSignedUrl(workflow.resultFilePath, 60 * 60);
+
+      resultUrl = signedUrlData?.signedUrl ?? null;
+    }
+
+    return successResponse(
+      {
+        jobId,
+        submissionId: matchedSubmission.id,
+        storeId: null,
+        status:
+          workflow.status === "generated"
+            ? "completed"
+            : workflow.status ?? "processing",
+        stylePreset: workflow.stylePreset ?? "market_story",
+        promptText: null,
+        modelName: workflow.modelName ?? "veo-mock",
+        aspectRatio: workflow.aspectRatio ?? "9:16",
+        resolution: workflow.resolution ?? "720p",
+        failureReason: workflow.lastFailureReason ?? null,
+        resultAssetId: null,
+        resultStorageBucket: workflow.resultStorageBucket ?? null,
+        resultFilePath: workflow.resultFilePath ?? null,
+        resultUrl,
+        requestPayload: {
+          provider: workflow.mockMode ? "mock" : "unknown",
+        },
+        resultPayload: {
+          script: workflow.script ?? null,
+          sample: workflow.mockMode ?? false,
+        },
+        startedAt: null,
+        completedAt: workflow.generatedAt ?? null,
+        createdAt: null,
+        workflow: {
+          status: workflow.status ?? "draft",
+          currentJobId: workflow.currentJobId ?? null,
+          lastCompletedJobId: workflow.lastCompletedJobId ?? null,
+          providerOperationName: workflow.providerOperationName ?? null,
+          durationSeconds: workflow.durationSeconds ?? 8,
+          aspectRatio: workflow.aspectRatio ?? "9:16",
+          resolution: workflow.resolution ?? "720p",
+          stylePreset: workflow.stylePreset ?? "market_story",
+          generatedAt: workflow.generatedAt ?? null,
+          requestedPublishAt: workflow.requestedPublishAt ?? null,
+          regenerateCount: workflow.regenerateCount ?? 0,
+          lastFailureReason: workflow.lastFailureReason ?? null,
+          script: workflow.script ?? null,
+        },
+        submissionStatus: matchedSubmission.status ?? null,
+      },
+      "Video generation job loaded",
+    );
   }
 
   const submission = Array.isArray(job.submissions)
