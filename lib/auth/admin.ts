@@ -15,7 +15,9 @@ export function requireAdminApiKey(request: NextRequest) {
     };
   }
 
-  const providedKey = request.headers.get("x-admin-key");
+  const providedKey =
+    request.headers.get("x-admin-key") ??
+    request.headers.get("x-admin-api-key");
 
   if (!providedKey || providedKey !== configuredKey) {
     return {

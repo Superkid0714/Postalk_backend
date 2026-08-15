@@ -259,7 +259,7 @@ export async function POST(request: NextRequest) {
         .select("id")
         .single();
 
-      let resultAssetId: string | null = asset?.id ?? null;
+      const resultAssetId: string | null = asset?.id ?? null;
 
       if (assetError && !isGeneratedVideoAssetConstraintError(assetError.message)) {
         throw new Error(assetError.message);

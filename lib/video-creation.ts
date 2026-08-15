@@ -1,7 +1,6 @@
 import {
   buildVideoPrompt,
   buildVideoScript,
-  type SubmissionForVideoPrompt,
   type VideoAspectRatio,
   type VideoDurationSeconds,
   type VideoResolution,

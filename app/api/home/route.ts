@@ -24,6 +24,9 @@ type SubmissionAssetRow = SubmissionAssetRecord & {
 
 type AttentionSubmissionRecord = SubmissionHomeRecord;
 type MyAdSubmissionRecord = SubmissionHomeRecord;
+type SubmissionStatusRecord = {
+  status: "pending_review" | "approved" | "rejected";
+};
 
 function attachSubmissionAssets<
   T extends {
@@ -94,8 +97,7 @@ export async function GET(request: NextRequest) {
 
   const [
     { data: store, error: storeError },
-    { count: pendingReviewCount, error: pendingCountError },
-    { count: needsFixCount, error: needsFixCountError },
+    { data: submissionStatuses, error: submissionStatusesError },
     { data: attentionSubmissions, error: attentionError },
     { data: myAds, error: myAdsError },
   ] = await Promise.all([
@@ -106,14 +108,9 @@ export async function GET(request: NextRequest) {
       .single<StoreRecord>(),
     supabase
       .from("submissions")
-      .select("id", { count: "exact", head: true })
+      .select("status")
       .eq("store_id", storeId)
-      .eq("status", "pending_review"),
-    supabase
-      .from("submissions")
-      .select("id", { count: "exact", head: true })
-      .eq("store_id", storeId)
-      .eq("status", "rejected"),
+      .returns<SubmissionStatusRecord[]>(),
     supabase
       .from("submissions")
       .select(
@@ -176,26 +173,17 @@ export async function GET(request: NextRequest) {
   }
 
   if (
-    pendingCountError ||
-    needsFixCountError ||
+    submissionStatusesError ||
     attentionError ||
     myAdsError
   ) {
     const homeLoadErrors = {
-      pendingCountError: pendingCountError
+      submissionStatusesError: submissionStatusesError
         ? {
-            message: pendingCountError.message,
-            code: pendingCountError.code,
-            details: pendingCountError.details,
-            hint: pendingCountError.hint,
-          }
-        : null,
-      needsFixCountError: needsFixCountError
-        ? {
-            message: needsFixCountError.message,
-            code: needsFixCountError.code,
-            details: needsFixCountError.details,
-            hint: needsFixCountError.hint,
+            message: submissionStatusesError.message,
+            code: submissionStatusesError.code,
+            details: submissionStatusesError.details,
+            hint: submissionStatusesError.hint,
           }
         : null,
       attentionError: attentionError
@@ -279,6 +267,14 @@ export async function GET(request: NextRequest) {
     submissionAssets ?? [],
   );
   const myAdsWithAssets = attachSubmissionAssets(myAds ?? [], submissionAssets ?? []);
+  const normalizedSubmissionStatuses = submissionStatuses ?? [];
+
+  const normalizedPendingReviewCount = normalizedSubmissionStatuses.filter(
+    (submission) => submission.status === "pending_review",
+  ).length;
+  const normalizedNeedsFixCount = normalizedSubmissionStatuses.filter(
+    (submission) => submission.status === "rejected",
+  ).length;
 
   const attentionItems = await Promise.all(
     attentionSubmissionsWithAssets.map(async (submission) => {
@@ -314,9 +310,6 @@ export async function GET(request: NextRequest) {
       };
     }),
   );
-
-  const normalizedPendingReviewCount = pendingReviewCount ?? 0;
-  const normalizedNeedsFixCount = needsFixCount ?? 0;
 
   return successResponse(
     {
