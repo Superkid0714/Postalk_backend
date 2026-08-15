@@ -17,6 +17,7 @@ type StartAdCreationBody = {
   submissionId?: string;
   adType?: AdType;
   stylePreset?: GenerationStylePreset;
+  mockMode?: boolean;
 };
 
 const ALLOWED_STYLE_PRESETS: GenerationStylePreset[] = [
@@ -59,6 +60,7 @@ export async function POST(request: NextRequest) {
   }
 
   const stylePreset = body.stylePreset ?? "menu_highlight";
+  const mockMode = body.mockMode === true;
   const supabase = getSupabaseAdminClient();
 
   const { data: submission, error: submissionError } = await supabase
@@ -133,13 +135,14 @@ export async function POST(request: NextRequest) {
       status: "queued",
       style_preset: stylePreset,
       prompt_text: promptText,
-      model_name: "gpt-image-2",
+      model_name: mockMode ? "gpt-image-mock" : "gpt-image-2",
       image_size: "1536x1024",
       quality: "medium",
       request_payload: {
         source: "ad-creation-start",
         adType,
         stylePreset,
+        mockMode,
       },
     })
     .select("id, status, created_at")
@@ -190,6 +193,7 @@ export async function POST(request: NextRequest) {
       status: job.status,
       adType,
       stylePreset,
+      mockMode,
       createdAt: job.created_at,
     },
     "Ad creation started",

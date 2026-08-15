@@ -50,6 +50,19 @@ export type SubmissionForGeneration = {
     store_name: string;
     owner_name: string | null;
   } | null;
+  submission_assets?:
+    | Array<{
+        asset_type:
+          | "menu_board"
+          | "food_photo"
+          | "generated_image"
+          | "generated_video"
+          | "video_thumbnail";
+        storage_bucket: string;
+        file_path: string;
+        sort_order: number;
+      }>
+    | null;
 };
 
 export function normalizeStoreRelation(stores: unknown) {

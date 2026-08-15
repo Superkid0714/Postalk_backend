@@ -10,6 +10,32 @@ import {
 } from "@/lib/ad-creation";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
+function pickMockSourceAsset(
+  assets:
+    | Array<{
+        asset_type: string;
+        storage_bucket: string;
+        file_path: string;
+        sort_order: number;
+      }>
+    | null
+    | undefined,
+) {
+  if (!assets || assets.length === 0) {
+    return null;
+  }
+
+  const sortedAssets = [...assets].sort(
+    (left, right) => left.sort_order - right.sort_order,
+  );
+
+  return (
+    sortedAssets.find((asset) => asset.asset_type === "food_photo") ??
+    sortedAssets.find((asset) => asset.asset_type === "menu_board") ??
+    null
+  );
+}
+
 export async function processGenerationJobById(jobId: string) {
   const supabase = getSupabaseAdminClient();
 
@@ -25,6 +51,7 @@ export async function processGenerationJobById(jobId: string) {
       model_name,
       image_size,
       quality,
+      request_payload,
       submissions (
         id,
         title,
@@ -39,6 +66,12 @@ export async function processGenerationJobById(jobId: string) {
           market_name,
           store_name,
           owner_name
+        ),
+        submission_assets (
+          asset_type,
+          storage_bucket,
+          file_path,
+          sort_order
         )
       )
     `)
@@ -98,12 +131,44 @@ export async function processGenerationJobById(jobId: string) {
   }
 
   try {
-    const result = await generatePromoImage({
-      prompt: promptText,
-      model: job.model_name,
-      size: job.image_size,
-      quality: job.quality,
-    });
+    const isMockMode =
+      job.model_name === "gpt-image-mock" ||
+      Boolean(
+        job.request_payload &&
+          typeof job.request_payload === "object" &&
+          "mockMode" in job.request_payload &&
+          job.request_payload.mockMode === true,
+      );
+
+    const result = isMockMode
+      ? await (async () => {
+          const sourceAsset = pickMockSourceAsset(
+            normalizedSubmission.submission_assets,
+          );
+
+          if (!sourceAsset) {
+            throw new Error("Mock generation source asset not found");
+          }
+
+          const { data, error } = await supabase.storage
+            .from(sourceAsset.storage_bucket)
+            .download(sourceAsset.file_path);
+
+          if (error || !data) {
+            throw new Error(error?.message ?? "Mock source image download failed");
+          }
+
+          return {
+            bytes: Buffer.from(await data.arrayBuffer()),
+            revisedPrompt: "mock-image-generated",
+          };
+        })()
+      : await generatePromoImage({
+          prompt: promptText,
+          model: job.model_name,
+          size: job.image_size,
+          quality: job.quality,
+        });
 
     const filePath = `${job.store_id}/${job.submission_id}/generated/${job.id}.png`;
 
@@ -149,6 +214,7 @@ export async function processGenerationJobById(jobId: string) {
         result_file_path: filePath,
         result_payload: {
           revisedPrompt: result.revisedPrompt,
+          mockMode: isMockMode,
         },
       })
       .eq("id", job.id);

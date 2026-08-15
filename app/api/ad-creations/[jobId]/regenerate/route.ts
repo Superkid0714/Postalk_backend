@@ -21,6 +21,7 @@ type RouteContext = {
 
 type RegenerateBody = {
   stylePreset?: GenerationStylePreset;
+  mockMode?: boolean;
 };
 
 const ALLOWED_STYLE_PRESETS: GenerationStylePreset[] = [
@@ -124,13 +125,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
       status: "queued",
       style_preset: stylePreset,
       prompt_text: promptText,
-      model_name: "gpt-image-2",
+      model_name: body.mockMode === true ? "gpt-image-mock" : "gpt-image-2",
       image_size: "1536x1024",
       quality: "medium",
       request_payload: {
         source: "ad-creation-regenerate",
         previousJobId: existingJob.id,
         regenerateCount,
+        mockMode: body.mockMode === true,
       },
     })
     .select("id, status, created_at")
@@ -182,6 +184,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       submissionId: submission.id,
       status: newJob.status,
       stylePreset,
+      mockMode: body.mockMode === true,
       regenerateCount,
       createdAt: newJob.created_at,
     },
