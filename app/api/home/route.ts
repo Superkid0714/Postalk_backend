@@ -18,8 +18,43 @@ type StoreRecord = {
   store_name: string;
 };
 
+type SubmissionAssetRow = SubmissionAssetRecord & {
+  submission_id: string;
+};
+
 type AttentionSubmissionRecord = SubmissionHomeRecord;
 type MyAdSubmissionRecord = SubmissionHomeRecord;
+
+function attachSubmissionAssets<
+  T extends {
+    id: string;
+  },
+>(
+  submissions: T[] | null,
+  assets: SubmissionAssetRow[] | null,
+) {
+  if (!submissions || submissions.length === 0) {
+    return [];
+  }
+
+  const assetsBySubmissionId = new Map<string, SubmissionAssetRecord[]>();
+
+  for (const asset of assets ?? []) {
+    const currentAssets = assetsBySubmissionId.get(asset.submission_id) ?? [];
+    currentAssets.push({
+      asset_type: asset.asset_type,
+      storage_bucket: asset.storage_bucket,
+      file_path: asset.file_path,
+      sort_order: asset.sort_order,
+    });
+    assetsBySubmissionId.set(asset.submission_id, currentAssets);
+  }
+
+  return submissions.map((submission) => ({
+    ...submission,
+    submission_assets: assetsBySubmissionId.get(submission.id) ?? [],
+  }));
+}
 
 async function getSignedThumbnailUrl(asset: SubmissionAssetRecord | null) {
   if (!asset) {
@@ -88,13 +123,7 @@ export async function GET(request: NextRequest) {
           target_menu_name,
           status,
           created_at,
-          updated_at,
-          submission_assets (
-            asset_type,
-            storage_bucket,
-            file_path,
-            sort_order
-          )
+          updated_at
         `,
       )
       .eq("store_id", storeId)
@@ -111,13 +140,7 @@ export async function GET(request: NextRequest) {
           target_menu_name,
           status,
           created_at,
-          updated_at,
-          submission_assets (
-            asset_type,
-            storage_bucket,
-            file_path,
-            sort_order
-          )
+          updated_at
         `,
       )
       .eq("store_id", storeId)
@@ -204,8 +227,61 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  const attentionSubmissionIds = (attentionSubmissions ?? []).map(
+    (submission) => submission.id,
+  );
+  const myAdSubmissionIds = (myAds ?? []).map((submission) => submission.id);
+  const assetSubmissionIds = [
+    ...new Set([...attentionSubmissionIds, ...myAdSubmissionIds]),
+  ];
+
+  const { data: submissionAssets, error: submissionAssetsError } =
+    assetSubmissionIds.length === 0
+      ? { data: [] as SubmissionAssetRow[], error: null }
+      : await supabase
+          .from("submission_assets")
+          .select(
+            `
+              submission_id,
+              asset_type,
+              storage_bucket,
+              file_path,
+              sort_order
+            `,
+          )
+          .in("submission_id", assetSubmissionIds)
+          .returns<SubmissionAssetRow[]>();
+
+  if (submissionAssetsError) {
+    console.error("Failed to load home submission assets", {
+      storeId,
+      message: submissionAssetsError.message,
+      code: submissionAssetsError.code,
+      details: submissionAssetsError.details,
+      hint: submissionAssetsError.hint,
+    });
+
+    return errorResponse("Failed to load home data", 500, {
+      code: "HOME_DATA_LOAD_FAILED",
+      details: {
+        submissionAssetsError: {
+          message: submissionAssetsError.message,
+          code: submissionAssetsError.code,
+          details: submissionAssetsError.details,
+          hint: submissionAssetsError.hint,
+        },
+      },
+    });
+  }
+
+  const attentionSubmissionsWithAssets = attachSubmissionAssets(
+    attentionSubmissions ?? [],
+    submissionAssets ?? [],
+  );
+  const myAdsWithAssets = attachSubmissionAssets(myAds ?? [], submissionAssets ?? []);
+
   const attentionItems = await Promise.all(
-    (attentionSubmissions ?? []).map(async (submission) => {
+    attentionSubmissionsWithAssets.map(async (submission) => {
       const thumbnailUrl = await getSignedThumbnailUrl(
         pickThumbnailAsset(submission.submission_assets),
       );
@@ -223,7 +299,7 @@ export async function GET(request: NextRequest) {
   );
 
   const myAdItems = await Promise.all(
-    (myAds ?? []).map(async (submission) => {
+    myAdsWithAssets.map(async (submission) => {
       const thumbnailUrl = await getSignedThumbnailUrl(
         pickThumbnailAsset(submission.submission_assets),
       );

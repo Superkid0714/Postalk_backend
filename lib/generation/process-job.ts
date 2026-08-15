@@ -1,0 +1,216 @@
+import {
+  buildPromoPrompt,
+  generatePromoImage,
+  normalizeStoreRelation,
+  normalizeSubmissionRelation,
+} from "@/lib/ai/generation";
+import {
+  getSubmissionWorkflowMetadata,
+  mergeSubmissionWorkflowMetadata,
+} from "@/lib/ad-creation";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+
+export async function processGenerationJobById(jobId: string) {
+  const supabase = getSupabaseAdminClient();
+
+  const { data: job, error: jobError } = await supabase
+    .from("generation_jobs")
+    .select(`
+      id,
+      submission_id,
+      store_id,
+      status,
+      style_preset,
+      prompt_text,
+      model_name,
+      image_size,
+      quality,
+      submissions (
+        id,
+        title,
+        caption,
+        store_type,
+        target_menu_name,
+        price_text,
+        appeal_point,
+        extra_message,
+        ai_metadata,
+        stores (
+          market_name,
+          store_name,
+          owner_name
+        )
+      )
+    `)
+    .eq("id", jobId)
+    .single();
+
+  if (jobError || !job) {
+    throw new Error("Generation job not found");
+  }
+
+  if (job.status === "processing") {
+    return {
+      jobId: job.id,
+      status: job.status,
+      alreadyProcessing: true,
+    };
+  }
+
+  if (job.status === "completed") {
+    return {
+      jobId: job.id,
+      status: job.status,
+      alreadyCompleted: true,
+    };
+  }
+
+  const normalizedSubmission = normalizeSubmissionRelation(job.submissions);
+
+  if (!normalizedSubmission) {
+    throw new Error("Generation job submission not found");
+  }
+
+  const promptText =
+    job.prompt_text ??
+    buildPromoPrompt(
+      {
+        ...normalizedSubmission,
+        stores: normalizeStoreRelation(normalizedSubmission.stores),
+      },
+      job.style_preset,
+    );
+
+  const processingTime = new Date().toISOString();
+
+  const { error: processingUpdateError } = await supabase
+    .from("generation_jobs")
+    .update({
+      status: "processing",
+      started_at: processingTime,
+      failure_reason: null,
+      prompt_text: promptText,
+    })
+    .eq("id", job.id);
+
+  if (processingUpdateError) {
+    throw new Error(processingUpdateError.message);
+  }
+
+  try {
+    const result = await generatePromoImage({
+      prompt: promptText,
+      model: job.model_name,
+      size: job.image_size,
+      quality: job.quality,
+    });
+
+    const filePath = `${job.store_id}/${job.submission_id}/generated/${job.id}.png`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("uploads")
+      .upload(filePath, result.bytes, {
+        contentType: "image/png",
+        upsert: true,
+      });
+
+    if (uploadError) {
+      throw new Error(uploadError.message);
+    }
+
+    const { data: asset, error: assetInsertError } = await supabase
+      .from("submission_assets")
+      .insert({
+        submission_id: job.submission_id,
+        asset_type: "generated_image",
+        storage_bucket: "uploads",
+        file_path: filePath,
+        file_name: `${job.id}.png`,
+        mime_type: "image/png",
+        file_size: result.bytes.byteLength,
+      })
+      .select("id")
+      .single();
+
+    if (assetInsertError || !asset) {
+      throw new Error(assetInsertError?.message ?? "Asset insert failed");
+    }
+
+    const completedAt = new Date().toISOString();
+
+    const { error: completeUpdateError } = await supabase
+      .from("generation_jobs")
+      .update({
+        status: "completed",
+        completed_at: completedAt,
+        failure_reason: null,
+        result_asset_id: asset.id,
+        result_storage_bucket: "uploads",
+        result_file_path: filePath,
+        result_payload: {
+          revisedPrompt: result.revisedPrompt,
+        },
+      })
+      .eq("id", job.id);
+
+    if (completeUpdateError) {
+      throw new Error(completeUpdateError.message);
+    }
+
+    const currentWorkflow = getSubmissionWorkflowMetadata(
+      normalizedSubmission.ai_metadata ?? null,
+    );
+
+    await supabase
+      .from("submissions")
+      .update({
+        ai_metadata: mergeSubmissionWorkflowMetadata(
+          normalizedSubmission.ai_metadata ?? null,
+          {
+            adType: currentWorkflow.adType ?? "photo",
+            publishRequestStatus: "generated",
+            currentJobId: job.id,
+            lastCompletedJobId: job.id,
+            generatedAt: completedAt,
+            lastFailureReason: null,
+          },
+        ),
+      })
+      .eq("id", job.submission_id);
+
+    return {
+      jobId: job.id,
+      status: "completed" as const,
+      resultAssetId: asset.id,
+      filePath,
+    };
+  } catch (error) {
+    const failureReason =
+      error instanceof Error ? error.message : "Unknown generation error";
+
+    await supabase
+      .from("generation_jobs")
+      .update({
+        status: "failed",
+        failure_reason: failureReason,
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", job.id);
+
+    await supabase
+      .from("submissions")
+      .update({
+        ai_metadata: mergeSubmissionWorkflowMetadata(
+          normalizedSubmission.ai_metadata ?? null,
+          {
+            currentJobId: job.id,
+            lastFailureReason: failureReason,
+            publishRequestStatus: "draft",
+          },
+        ),
+      })
+      .eq("id", job.submission_id);
+
+    throw new Error(failureReason);
+  }
+}

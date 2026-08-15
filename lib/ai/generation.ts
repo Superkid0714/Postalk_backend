@@ -36,6 +36,7 @@ export type GenerationJobRow = {
 
 export type SubmissionForGeneration = {
   id: string;
+  store_id?: string;
   title: string | null;
   caption: string | null;
   store_type: string;
@@ -43,6 +44,7 @@ export type SubmissionForGeneration = {
   price_text: string;
   appeal_point: string;
   extra_message: string | null;
+  ai_metadata?: Record<string, unknown> | null;
   stores: {
     market_name: string;
     store_name: string;

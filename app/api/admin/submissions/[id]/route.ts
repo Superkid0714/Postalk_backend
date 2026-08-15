@@ -1,6 +1,10 @@
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/response";
+import {
+  getSubmissionWorkflowMetadata,
+  mergeSubmissionWorkflowMetadata,
+} from "@/lib/ad-creation";
 import { requireAdminApiKey } from "@/lib/auth/admin";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isUuid } from "@/lib/validation";
@@ -100,6 +104,36 @@ export async function PATCH(
   }
 
   const supabase = getSupabaseAdminClient();
+  const { data: currentSubmission, error: currentSubmissionError } = await supabase
+    .from("submissions")
+    .select("id, ai_metadata")
+    .eq("id", id)
+    .single();
+
+  if (currentSubmissionError || !currentSubmission) {
+    return errorResponse("Submission not found", 404, {
+      code: "SUBMISSION_NOT_FOUND",
+    });
+  }
+
+  if (body.status) {
+    const workflow = getSubmissionWorkflowMetadata(currentSubmission.ai_metadata);
+    const publishRequestStatus =
+      body.status === "approved"
+        ? "approved"
+        : body.status === "rejected"
+          ? "rejected"
+          : workflow.publishRequestStatus ?? "requested_publish";
+
+    updates.ai_metadata = mergeSubmissionWorkflowMetadata(
+      currentSubmission.ai_metadata,
+      {
+        adType: workflow.adType ?? "photo",
+        publishRequestStatus,
+      },
+    );
+  }
+
   const { data, error } = await supabase
     .from("submissions")
     .update(updates)
@@ -118,7 +152,8 @@ export async function PATCH(
         admin_notes,
         reviewed_by,
         reviewed_at,
-        updated_at
+        updated_at,
+        ai_metadata
       `,
     )
     .single();
