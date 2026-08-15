@@ -3,10 +3,12 @@ import type { NextRequest } from "next/server";
 import { errorResponse, successResponse } from "@/lib/api/response";
 import {
   ARCHIVE_STATUSES,
+  attachArchiveSubmissionAssets,
   buildArchiveItem,
   isArchiveMediaType,
   isArchiveStatus,
   type ArchiveMediaType,
+  type ArchiveSubmissionAssetRow,
   type ArchiveStatus,
   type ArchiveSubmissionRecord,
 } from "@/lib/archive";
@@ -35,12 +37,6 @@ function buildArchiveQuery(params: {
           id,
           market_name,
           store_name
-        ),
-        submission_assets (
-          asset_type,
-          storage_bucket,
-          file_path,
-          sort_order
         )
       `,
     )
@@ -183,7 +179,38 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const items = await Promise.all((submissions ?? []).map(buildArchiveItem));
+  const submissionIds = (submissions ?? []).map((submission) => submission.id);
+  const { data: submissionAssets, error: submissionAssetsError } =
+    submissionIds.length === 0
+      ? { data: [] as ArchiveSubmissionAssetRow[], error: null }
+      : await supabase
+          .from("submission_assets")
+          .select(
+            `
+              submission_id,
+              asset_type,
+              storage_bucket,
+              file_path,
+              sort_order
+            `,
+          )
+          .in("submission_id", submissionIds)
+          .returns<ArchiveSubmissionAssetRow[]>();
+
+  if (submissionAssetsError) {
+    return errorResponse("Failed to load archive data", 500, {
+      code: "ARCHIVE_LOAD_FAILED",
+      details: {
+        submissionAssetsError: submissionAssetsError.message,
+      },
+    });
+  }
+
+  const submissionsWithAssets = attachArchiveSubmissionAssets(
+    submissions ?? [],
+    submissionAssets ?? [],
+  );
+  const items = await Promise.all(submissionsWithAssets.map(buildArchiveItem));
 
   return successResponse(
     {

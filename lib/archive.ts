@@ -24,6 +24,10 @@ export type ArchiveStoreRecord = {
   store_name: string;
 };
 
+export type ArchiveSubmissionAssetRow = SubmissionAssetRecord & {
+  submission_id: string;
+};
+
 export type ArchiveSubmissionRecord = SubmissionHomeRecord & {
   stores: ArchiveStoreRecord | ArchiveStoreRecord[] | null;
 };
@@ -44,6 +48,37 @@ export function normalizeArchiveStore(
   }
 
   return store;
+}
+
+export function attachArchiveSubmissionAssets<
+  T extends {
+    id: string;
+  },
+>(
+  submissions: T[] | null,
+  assets: ArchiveSubmissionAssetRow[] | null,
+) {
+  if (!submissions || submissions.length === 0) {
+    return [];
+  }
+
+  const assetsBySubmissionId = new Map<string, SubmissionAssetRecord[]>();
+
+  for (const asset of assets ?? []) {
+    const currentAssets = assetsBySubmissionId.get(asset.submission_id) ?? [];
+    currentAssets.push({
+      asset_type: asset.asset_type,
+      storage_bucket: asset.storage_bucket,
+      file_path: asset.file_path,
+      sort_order: asset.sort_order,
+    });
+    assetsBySubmissionId.set(asset.submission_id, currentAssets);
+  }
+
+  return submissions.map((submission) => ({
+    ...submission,
+    submission_assets: assetsBySubmissionId.get(submission.id) ?? [],
+  }));
 }
 
 export function getArchiveStatusLabel(status: ArchiveStatus | "approved") {
