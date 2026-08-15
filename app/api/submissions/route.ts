@@ -6,7 +6,12 @@ import { resolveStore } from "@/lib/stores";
 import { isUuid } from "@/lib/validation";
 
 type SubmissionAssetInput = {
-  assetType?: "menu_board" | "food_photo" | "generated_image";
+  assetType?:
+    | "menu_board"
+    | "food_photo"
+    | "generated_image"
+    | "generated_video"
+    | "video_thumbnail";
   bucket?: string;
   filePath?: string;
   fileName?: string;
@@ -26,6 +31,9 @@ type CreateSubmissionBody = {
   targetMenuName?: string;
   priceText?: string;
   appealPoint?: string;
+  targetCustomer?: string;
+  peakSalesTime?: string;
+  popularMenuNotes?: string;
   extraMessage?: string;
   title?: string;
   caption?: string | null;
@@ -77,13 +85,6 @@ function validateSubmissionBody(body: CreateSubmissionBody) {
     details.push({
       field: "targetMenuName",
       reason: "targetMenuName is required",
-    });
-  }
-
-  if (!body.priceText?.trim()) {
-    details.push({
-      field: "priceText",
-      reason: "priceText is required",
     });
   }
 
@@ -139,6 +140,20 @@ function validateSubmissionBody(body: CreateSubmissionBody) {
   return details;
 }
 
+function buildSubmissionAiMetadata(body: CreateSubmissionBody) {
+  const base =
+    body.aiMetadata && typeof body.aiMetadata === "object" ? body.aiMetadata : {};
+
+  return {
+    ...base,
+    merchantInsights: {
+      targetCustomer: body.targetCustomer?.trim() || null,
+      peakSalesTime: body.peakSalesTime?.trim() || null,
+      popularMenuNotes: body.popularMenuNotes?.trim() || null,
+    },
+  };
+}
+
 export async function POST(request: NextRequest) {
   let body: CreateSubmissionBody;
 
@@ -184,14 +199,14 @@ export async function POST(request: NextRequest) {
       qr_payload: body.qrPayload?.trim() || null,
       store_type: body.storeType!.trim(),
       target_menu_name: body.targetMenuName!.trim(),
-      price_text: body.priceText!.trim(),
+      price_text: body.priceText?.trim() || "",
       appeal_point: body.appealPoint!.trim(),
       extra_message: body.extraMessage?.trim() || null,
       title: body.title?.trim() || null,
       caption: body.caption?.trim() || null,
       hashtags: body.hashtags ?? [],
       transcript: body.transcript?.trim() || null,
-      ai_metadata: body.aiMetadata ?? {},
+      ai_metadata: buildSubmissionAiMetadata(body),
       status: "pending_review",
     })
     .select("id, status, created_at")

@@ -41,7 +41,7 @@ export type SubmissionForGeneration = {
   caption: string | null;
   store_type: string;
   target_menu_name: string;
-  price_text: string;
+  price_text: string | null;
   appeal_point: string;
   extra_message: string | null;
   ai_metadata?: Record<string, unknown> | null;
@@ -104,7 +104,7 @@ export function buildPromoPrompt(
     `Owner reference: ${ownerName}`,
     `Store type: ${submission.store_type}`,
     `Featured menu: ${submission.target_menu_name}`,
-    `Price text: ${submission.price_text}`,
+    submission.price_text ? `Price text: ${submission.price_text}` : null,
     `Appeal point: ${submission.appeal_point}`,
     submission.extra_message
       ? `Extra message from merchant: ${submission.extra_message}`

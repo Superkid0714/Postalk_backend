@@ -29,7 +29,7 @@ export type SubmissionForVideoPrompt = {
   marketName: string;
   storeType: string;
   targetMenuName: string;
-  priceText: string;
+  priceText: string | null;
   appealPoint: string;
   extraMessage: string | null;
 };
@@ -68,7 +68,7 @@ export function buildVideoPrompt(
     `Store: ${submission.storeName}`,
     `Store type: ${submission.storeType}`,
     `Featured menu: ${submission.targetMenuName}`,
-    `Price text: ${submission.priceText}`,
+    submission.priceText ? `Price text: ${submission.priceText}` : null,
     `Appeal point: ${submission.appealPoint}`,
     submission.extraMessage
       ? `Extra merchant note: ${submission.extraMessage}`
@@ -107,7 +107,9 @@ export function buildVideoScript(
       },
       {
         order: 3,
-        text: `${submission.targetMenuName} ${submission.priceText}`,
+        text: submission.priceText
+          ? `${submission.targetMenuName} ${submission.priceText}`
+          : submission.targetMenuName,
         focus: "price_cta",
       },
     ],
