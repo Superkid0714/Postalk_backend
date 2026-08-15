@@ -47,6 +47,16 @@ function isGenerationJobsMissingError(message: string | null | undefined) {
   );
 }
 
+function isGeneratedVideoAssetConstraintError(
+  message: string | null | undefined,
+) {
+  return Boolean(
+    message &&
+      (message.includes("submission_assets_asset_type_check") ||
+        message.includes("asset_type")),
+  );
+}
+
 export async function POST(request: NextRequest) {
   let body: StartVideoCreationBody;
 
@@ -249,8 +259,10 @@ export async function POST(request: NextRequest) {
         .select("id")
         .single();
 
-      if (assetError || !asset) {
-        throw new Error(assetError?.message ?? "Failed to save mock video asset");
+      let resultAssetId: string | null = asset?.id ?? null;
+
+      if (assetError && !isGeneratedVideoAssetConstraintError(assetError.message)) {
+        throw new Error(assetError.message);
       }
 
       const completedAt = new Date().toISOString();
@@ -262,7 +274,7 @@ export async function POST(request: NextRequest) {
             status: "completed",
             completed_at: completedAt,
             failure_reason: null,
-            result_asset_id: asset.id,
+            result_asset_id: resultAssetId,
             result_storage_bucket: "uploads",
             result_file_path: filePath,
             result_payload: {
