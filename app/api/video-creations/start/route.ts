@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/response";
@@ -24,6 +27,7 @@ type StartVideoCreationBody = {
   aspectRatio?: VideoAspectRatio;
   resolution?: VideoResolution;
   durationSeconds?: VideoDurationSeconds;
+  mockMode?: boolean;
 };
 
 const ALLOWED_STYLE_PRESETS: VideoStylePreset[] = [
@@ -161,6 +165,157 @@ export async function POST(request: NextRequest) {
   const imageBytes = Buffer.from(await imageData.arrayBuffer()).toString("base64");
   const promptText = buildSubmissionVideoPrompt(submission, stylePreset);
   const script = buildSubmissionVideoScript(submission, stylePreset);
+
+  if (body.mockMode === true) {
+    const createdAt = new Date().toISOString();
+    const { data: job, error: jobError } = await supabase
+      .from("generation_jobs")
+      .insert({
+        submission_id: submission.id,
+        store_id: submission.store_id,
+        status: "processing",
+        style_preset: stylePreset,
+        prompt_text: promptText,
+        model_name: "veo-mock",
+        image_size: aspectRatio,
+        quality: resolution,
+        started_at: createdAt,
+        request_payload: {
+          generationType: "video",
+          provider: "mock",
+          mockMode: true,
+          durationSeconds,
+          aspectRatio,
+          resolution,
+          stylePreset,
+          sourceAssetPath: primaryImage.file_path,
+        },
+        result_payload: {
+          script,
+        },
+      })
+      .select("id, status, created_at")
+      .single();
+
+    if (jobError || !job) {
+      return errorResponse("Failed to create mock video generation job", 500, {
+        code: "VIDEO_JOB_CREATE_FAILED",
+        details: jobError?.message,
+      });
+    }
+
+    try {
+      const sampleVideoPath = path.join(
+        process.cwd(),
+        "public",
+        "mock",
+        "postalk-sample-video.mp4",
+      );
+      const sampleVideoBytes = await readFile(sampleVideoPath);
+      const filePath = `${submission.store_id}/${submission.id}/generated/${job.id}.mp4`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("uploads")
+        .upload(filePath, sampleVideoBytes, {
+          contentType: "video/mp4",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        throw new Error(uploadError.message);
+      }
+
+      const { data: asset, error: assetError } = await supabase
+        .from("submission_assets")
+        .insert({
+          submission_id: submission.id,
+          asset_type: "generated_video",
+          storage_bucket: "uploads",
+          file_path: filePath,
+          file_name: `${job.id}.mp4`,
+          mime_type: "video/mp4",
+          file_size: sampleVideoBytes.byteLength,
+        })
+        .select("id")
+        .single();
+
+      if (assetError || !asset) {
+        throw new Error(assetError?.message ?? "Failed to save mock video asset");
+      }
+
+      const completedAt = new Date().toISOString();
+
+      await supabase
+        .from("generation_jobs")
+        .update({
+          status: "completed",
+          completed_at: completedAt,
+          failure_reason: null,
+          result_asset_id: asset.id,
+          result_storage_bucket: "uploads",
+          result_file_path: filePath,
+          result_payload: {
+            script,
+            provider: "mock",
+            sample: true,
+          },
+        })
+        .eq("id", job.id);
+
+      await supabase
+        .from("submissions")
+        .update({
+          ai_metadata: mergeSubmissionVideoWorkflowMetadata(submission.ai_metadata, {
+            currentJobId: job.id,
+            lastCompletedJobId: job.id,
+            providerOperationName: "mock-operation",
+            status: "generated",
+            durationSeconds,
+            aspectRatio,
+            resolution,
+            stylePreset,
+            generatedAt: completedAt,
+            lastFailureReason: null,
+            script,
+          }),
+        })
+        .eq("id", submission.id);
+
+      return successResponse(
+        {
+          jobId: job.id,
+          submissionId: submission.id,
+          status: "completed",
+          providerOperationName: "mock-operation",
+          durationSeconds,
+          aspectRatio,
+          resolution,
+          stylePreset,
+          mockMode: true,
+          createdAt: job.created_at,
+        },
+        "Mock video creation completed",
+        201,
+      );
+    } catch (error) {
+      const failureReason =
+        error instanceof Error ? error.message : "Failed to create mock video";
+
+      await supabase
+        .from("generation_jobs")
+        .update({
+          status: "failed",
+          completed_at: new Date().toISOString(),
+          failure_reason: failureReason,
+        })
+        .eq("id", job.id);
+
+      return errorResponse("Failed to create mock video generation", 500, {
+        code: "MOCK_VIDEO_GENERATION_FAILED",
+        details: failureReason,
+      });
+    }
+  }
 
   let operationName: string;
 

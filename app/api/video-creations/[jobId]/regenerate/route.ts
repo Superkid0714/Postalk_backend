@@ -10,6 +10,10 @@ type RouteContext = {
   }>;
 };
 
+type RegenerateVideoBody = {
+  mockMode?: boolean;
+};
+
 export async function POST(request: NextRequest, context: RouteContext) {
   const { jobId } = await context.params;
 
@@ -17,6 +21,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return errorResponse("Invalid video generation job id", 400, {
       code: "VALIDATION_ERROR",
     });
+  }
+
+  let body: RegenerateVideoBody = {};
+
+  try {
+    body = (await request.json()) as RegenerateVideoBody;
+  } catch {
+    body = {};
   }
 
   const supabase = getSupabaseAdminClient();
@@ -38,6 +50,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     aspectRatio: job.image_size ?? "9:16",
     resolution: job.quality ?? "720p",
     durationSeconds: 8,
+    mockMode: body.mockMode === true,
   };
 
   return fetch(new URL("/api/video-creations/start", request.url), {
