@@ -157,7 +157,7 @@ export async function startGeminiVideoOperation(params: {
         parameters: {
           aspectRatio: params.aspectRatio,
           resolution: params.resolution,
-          durationSeconds: String(params.durationSeconds),
+          durationSeconds: params.durationSeconds,
         },
       }),
     });
