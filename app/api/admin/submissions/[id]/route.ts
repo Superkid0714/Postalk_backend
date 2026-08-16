@@ -8,6 +8,11 @@ import {
 import { requireAdminApiKey } from "@/lib/auth/admin";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isUuid } from "@/lib/validation";
+import {
+  getSubmissionVideoWorkflowMetadata,
+  mergeSubmissionVideoWorkflowMetadata,
+  type VideoWorkflowStatus,
+} from "@/lib/video-creation";
 
 type UpdateSubmissionBody = {
   status?: "pending_review" | "approved" | "rejected";
@@ -118,6 +123,11 @@ export async function PATCH(
 
   if (body.status) {
     const workflow = getSubmissionWorkflowMetadata(currentSubmission.ai_metadata);
+    const videoWorkflow = getSubmissionVideoWorkflowMetadata(
+      currentSubmission.ai_metadata,
+    );
+    const hasPhotoWorkflow = Object.keys(workflow).length > 0;
+    const hasVideoWorkflow = Object.keys(videoWorkflow).length > 0;
     const publishRequestStatus =
       body.status === "approved"
         ? "approved"
@@ -125,13 +135,29 @@ export async function PATCH(
           ? "rejected"
           : workflow.publishRequestStatus ?? "requested_publish";
 
-    updates.ai_metadata = mergeSubmissionWorkflowMetadata(
-      currentSubmission.ai_metadata,
-      {
+    const videoWorkflowStatus: VideoWorkflowStatus =
+      body.status === "approved"
+        ? "approved"
+        : body.status === "rejected"
+          ? "rejected"
+          : "requested_publish";
+
+    let nextAiMetadata = currentSubmission.ai_metadata;
+
+    if (hasPhotoWorkflow || !hasVideoWorkflow) {
+      nextAiMetadata = mergeSubmissionWorkflowMetadata(nextAiMetadata, {
         adType: workflow.adType ?? "photo",
         publishRequestStatus,
-      },
-    );
+      });
+    }
+
+    if (hasVideoWorkflow) {
+      nextAiMetadata = mergeSubmissionVideoWorkflowMetadata(nextAiMetadata, {
+        status: videoWorkflowStatus,
+      });
+    }
+
+    updates.ai_metadata = nextAiMetadata;
   }
 
   const { data, error } = await supabase
