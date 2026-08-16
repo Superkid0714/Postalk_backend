@@ -99,7 +99,10 @@ async function getVideoSubmissionIds(storeId: string) {
 
 export async function GET(request: NextRequest) {
   const storeId = request.nextUrl.searchParams.get("storeId");
-  const mediaTypeValue = request.nextUrl.searchParams.get("mediaType") ?? "photo";
+  const mediaTypeValue =
+    request.nextUrl.searchParams.get("mediaType") ??
+    request.nextUrl.searchParams.get("type") ??
+    "photo";
   const statusValue = request.nextUrl.searchParams.get("status") ?? "all";
   const limitParam = request.nextUrl.searchParams.get("limit");
 
