@@ -138,15 +138,12 @@ export async function GET(request: NextRequest) {
     recentItemsQuery.eq("stores.market_name", marketName);
   }
 
-  const [
-    { count: pendingReviewCount, error: pendingCountError },
-    { data: pendingItemsData, error: pendingItemsError },
-    { data: recentItemsData, error: recentItemsError },
-  ] = await Promise.all([
-    pendingCountQuery,
-    pendingItemsQuery.returns<AdminSubmissionRecord[]>(),
-    recentItemsQuery.returns<AdminSubmissionRecord[]>(),
-  ]);
+  const { count: pendingReviewCount, error: pendingCountError } =
+    await pendingCountQuery;
+  const { data: pendingItemsData, error: pendingItemsError } =
+    await pendingItemsQuery.returns<AdminSubmissionRecord[]>();
+  const { data: recentItemsData, error: recentItemsError } =
+    await recentItemsQuery.returns<AdminSubmissionRecord[]>();
 
   if (pendingCountError || pendingItemsError || recentItemsError) {
     return errorResponse("Failed to load admin home data", 500, {
