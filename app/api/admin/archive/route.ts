@@ -117,10 +117,12 @@ export async function GET(request: NextRequest) {
   }
 
   const marketName = request.nextUrl.searchParams.get("marketName")?.trim() || null;
-  const mediaTypeValue =
+  const rawMediaTypeValue =
     request.nextUrl.searchParams.get("mediaType") ??
     request.nextUrl.searchParams.get("type") ??
     "photo";
+  const mediaTypeValue =
+    rawMediaTypeValue === "image" ? "photo" : rawMediaTypeValue;
   const statusValue = request.nextUrl.searchParams.get("status") ?? "all";
   const limitParam = request.nextUrl.searchParams.get("limit");
 
