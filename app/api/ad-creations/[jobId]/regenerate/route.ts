@@ -7,6 +7,7 @@ import {
   getSubmissionWorkflowMetadata,
   hasRequiredPhotoAssets,
   mergeSubmissionWorkflowMetadata,
+  validateSubmissionStylePreset,
 } from "@/lib/ad-creation";
 import { type GenerationStylePreset } from "@/lib/ai/generation";
 import { processGenerationJobById } from "@/lib/generation/process-job";
@@ -28,7 +29,12 @@ const ALLOWED_STYLE_PRESETS: GenerationStylePreset[] = [
   "menu_highlight",
   "clean_poster",
   "market_story",
+  "food_card_news",
 ];
+
+function resolveImageSize(stylePreset: GenerationStylePreset) {
+  return stylePreset === "food_card_news" ? "1024x1536" : "1536x1024";
+}
 
 export async function POST(request: NextRequest, context: RouteContext) {
   const { jobId } = await context.params;
@@ -112,6 +118,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const stylePreset = body.stylePreset ?? existingJob.style_preset;
+  const stylePresetValidation = validateSubmissionStylePreset(
+    submission,
+    stylePreset,
+  );
+
+  if (!stylePresetValidation.ok) {
+    return errorResponse(stylePresetValidation.reason, 400, {
+      code: "UNSUPPORTED_STYLE_PRESET_FOR_SUBMISSION",
+    });
+  }
+
   const promptText = buildSubmissionPrompt(submission, stylePreset);
   const workflow = getSubmissionWorkflowMetadata(submission.ai_metadata);
   const regenerateCount = (workflow.regenerateCount ?? 0) + 1;
@@ -126,7 +143,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       style_preset: stylePreset,
       prompt_text: promptText,
       model_name: body.mockMode === true ? "gpt-image-mock" : "gpt-image-2",
-      image_size: "1536x1024",
+      image_size: resolveImageSize(stylePreset),
       quality: "medium",
       request_payload: {
         source: "ad-creation-regenerate",

@@ -6,6 +6,7 @@ import {
   buildSubmissionPrompt,
   hasRequiredPhotoAssets,
   mergeSubmissionWorkflowMetadata,
+  validateSubmissionStylePreset,
   type AdType,
 } from "@/lib/ad-creation";
 import { type GenerationStylePreset } from "@/lib/ai/generation";
@@ -24,7 +25,12 @@ const ALLOWED_STYLE_PRESETS: GenerationStylePreset[] = [
   "menu_highlight",
   "clean_poster",
   "market_story",
+  "food_card_news",
 ];
+
+function resolveImageSize(stylePreset: GenerationStylePreset) {
+  return stylePreset === "food_card_news" ? "1024x1536" : "1536x1024";
+}
 
 export async function POST(request: NextRequest) {
   let body: StartAdCreationBody;
@@ -103,6 +109,17 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  const stylePresetValidation = validateSubmissionStylePreset(
+    submission,
+    stylePreset,
+  );
+
+  if (!stylePresetValidation.ok) {
+    return errorResponse(stylePresetValidation.reason, 400, {
+      code: "UNSUPPORTED_STYLE_PRESET_FOR_SUBMISSION",
+    });
+  }
+
   const { data: existingJob } = await supabase
     .from("generation_jobs")
     .select("id, status")
@@ -136,7 +153,7 @@ export async function POST(request: NextRequest) {
       style_preset: stylePreset,
       prompt_text: promptText,
       model_name: mockMode ? "gpt-image-mock" : "gpt-image-2",
-      image_size: "1536x1024",
+      image_size: resolveImageSize(stylePreset),
       quality: "medium",
       request_payload: {
         source: "ad-creation-start",

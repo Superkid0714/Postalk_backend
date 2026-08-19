@@ -1,5 +1,25 @@
 import { getOpenAiApiKey } from "@/lib/env";
+import {
+  buildDefaultFoodCardNewsPlan,
+  buildFoodCardNewsPrompts,
+  type FoodCardNewsCreativePlan,
+  isFoodCardNewsEligible,
+} from "@/lib/ai/food-card-news";
+import {
+  buildCaptionInputContext,
+  buildFestivalEvidenceItems,
+  buildKamisEvidenceItems,
+  buildMarketEvidenceItems,
+  buildMerchantEvidenceItems,
+  type CaptionInputContext,
+} from "@/lib/ai/context";
 import { fetchWithTimeout } from "@/lib/http";
+import type { KamisContext } from "@/lib/public-data/kamis";
+import type { FestivalContext } from "@/lib/public-data/tour-festival";
+import type {
+  CaptionEvidenceItem,
+  MarketContext,
+} from "@/lib/public-data/traditional-market";
 
 const DEFAULT_IMAGE_MODEL = "gpt-image-2";
 const DEFAULT_IMAGE_SIZE = "1536x1024";
@@ -14,7 +34,8 @@ export type ImageGenerationStatus =
 export type GenerationStylePreset =
   | "menu_highlight"
   | "clean_poster"
-  | "market_story";
+  | "market_story"
+  | "food_card_news";
 
 export type GenerationJobRow = {
   id: string;
@@ -103,6 +124,11 @@ type MerchantInsights = {
 export type GeneratedPromoCaption = {
   caption: string;
   hashtags: string[];
+  marketContext: MarketContext;
+  festivalContext: FestivalContext;
+  kamisContext: KamisContext;
+  captionInputContext: CaptionInputContext;
+  evidence: CaptionEvidenceItem[];
 };
 
 type PromoCarouselVariant = {
@@ -262,7 +288,7 @@ function buildShortCopyGuidance(
 function buildCaptionFallback(
   submission: SubmissionForGeneration,
   merchantInsights: MerchantInsights,
-): GeneratedPromoCaption {
+){
   const caption = [
     `${submission.target_menu_name} 어떠세요?`,
     submission.appeal_point,
@@ -290,15 +316,143 @@ function stripCodeFence(value: string) {
   return value.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
 }
 
+export async function generateFoodCardNewsPlan(
+  submission: SubmissionForGeneration,
+): Promise<FoodCardNewsCreativePlan> {
+  const fallbackPlan = buildDefaultFoodCardNewsPlan(submission);
+  const apiKey = getOpenAiApiKey();
+
+  if (!apiKey) {
+    return fallbackPlan;
+  }
+
+  const prompt = [
+    "You are the creative planning director for a Korean food advertising carousel.",
+    "Plan exactly 4 Instagram food-ad cards before image generation.",
+    "Return strict JSON only with keys: concept, tone, cards.",
+    "cards must be an array of 4 objects with keys: key, title, visualFocus, copyDirection, composition, forbidden.",
+    "Allowed keys only: hero_cover, signature_detail, action_shot, closing_cta.",
+    "The result must be food-advertising oriented, not informational brochure style.",
+    "Use short Korean-friendly creative directions but return JSON string values only.",
+    "Avoid long copy, flyer tone, template feel, and generic card-news filler.",
+    JSON.stringify({
+      store_name: submission.stores?.store_name ?? null,
+      market_name: submission.stores?.market_name ?? null,
+      owner_name: submission.stores?.owner_name ?? null,
+      store_type: submission.store_type,
+      target_menu_name: submission.target_menu_name,
+      price_text: submission.price_text,
+      appeal_point: submission.appeal_point,
+      extra_message: submission.extra_message,
+      caption: submission.caption,
+    }, null, 2),
+  ].join("\n");
+
+  try {
+    const response = await fetchWithTimeout("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4.1-mini",
+        input: prompt,
+      }),
+      timeoutMs: 30_000,
+    });
+
+    if (!response.ok) {
+      return fallbackPlan;
+    }
+
+    const json = (await response.json()) as OpenAiResponsesResponse;
+    const outputText =
+      typeof json.output_text === "string" ? stripCodeFence(json.output_text) : "";
+
+    if (!outputText) {
+      return fallbackPlan;
+    }
+
+    const parsed = JSON.parse(outputText) as Partial<FoodCardNewsCreativePlan>;
+
+    if (
+      typeof parsed.concept !== "string" ||
+      typeof parsed.tone !== "string" ||
+      !Array.isArray(parsed.cards) ||
+      parsed.cards.length !== 4
+    ) {
+      return fallbackPlan;
+    }
+
+    return {
+      concept: parsed.concept,
+      tone: parsed.tone,
+      cards: parsed.cards.map((card, index) => {
+        const fallbackCard = fallbackPlan.cards[index]!;
+        const record =
+          card && typeof card === "object" && !Array.isArray(card)
+            ? (card as Record<string, unknown>)
+            : {};
+
+        return {
+          key:
+            record.key === fallbackCard.key ? fallbackCard.key : fallbackCard.key,
+          title:
+            typeof record.title === "string" && record.title.trim()
+              ? record.title.trim()
+              : fallbackCard.title,
+          visualFocus:
+            typeof record.visualFocus === "string" && record.visualFocus.trim()
+              ? record.visualFocus.trim()
+              : fallbackCard.visualFocus,
+          copyDirection:
+            typeof record.copyDirection === "string" && record.copyDirection.trim()
+              ? record.copyDirection.trim()
+              : fallbackCard.copyDirection,
+          composition:
+            typeof record.composition === "string" && record.composition.trim()
+              ? record.composition.trim()
+              : fallbackCard.composition,
+          forbidden: Array.isArray(record.forbidden)
+            ? record.forbidden.filter((item): item is string => typeof item === "string")
+            : fallbackCard.forbidden,
+        };
+      }),
+    };
+  } catch {
+    return fallbackPlan;
+  }
+}
+
 export async function generatePromoCaption(
   submission: SubmissionForGeneration,
 ): Promise<GeneratedPromoCaption> {
   const apiKey = getOpenAiApiKey();
+  const captionInputContext = await buildCaptionInputContext(submission);
+  const marketContext = captionInputContext.market_context;
+  const festivalContext = captionInputContext.festival_context;
+  const kamisContext = captionInputContext.kamis_context;
+  const evidence = [
+    ...buildMerchantEvidenceItems(captionInputContext.merchant_context),
+    ...buildMarketEvidenceItems(marketContext),
+    ...buildFestivalEvidenceItems(festivalContext),
+    ...buildKamisEvidenceItems(kamisContext),
+  ];
   const merchantInsights = readMerchantInsights(submission.ai_metadata);
   const fallback = buildCaptionFallback(submission, merchantInsights);
+  const fallbackResult: GeneratedPromoCaption = {
+    caption: fallback.caption,
+    hashtags: fallback.hashtags,
+    marketContext,
+    festivalContext,
+    kamisContext,
+    captionInputContext,
+    evidence,
+  };
 
   if (!apiKey) {
-    return fallback;
+    return fallbackResult;
   }
 
   const prompt = [
@@ -311,29 +465,37 @@ export async function generatePromoCaption(
     "- Sound warm, trustworthy, and appetizing.",
     "- Do not invent facts that were not provided.",
     "- Reflect the merchant's target customer and peak sales timing naturally if useful.",
+    "- [MERCHANT FACT] is the source of truth for menu, price, appeal point, packaging, cooking, and current sales details.",
+    "- [MARKET PUBLIC DATA] may only be used for verified market name, region, road address, and facility facts when found=true.",
+    "- [FESTIVAL PUBLIC DATA] may only be used for verified festival title, event dates, event address, and distance when found=true and verified=true.",
+    "- [KAMIS PUBLIC DATA] may only be used as auxiliary price-market context when kamis_context.selected_for_prompt=true.",
+    "- If market_context.found is false, do not add any market public-data facts.",
+    "- If festival_context.found is false or festival_context.verified is not true, do not add any festival public-data facts.",
+    "- If kamis_context.selected_for_prompt is false, do not add any KAMIS public-data facts.",
+    "- If a facility value is false or null, do not mention that facility.",
+    "- Never infer popularity, rankings, tourism, reputation, or visitor volume from market_context.",
+    "- Never claim the merchant is officially linked to a festival, is the festival's official 맛집, or is popular because of the festival.",
+    "- Festival information should only be used as nearby timing/location context when it naturally helps the caption.",
+    "- KAMIS public data must never override the merchant's actual selling price.",
+    "- Do not claim cheaper than market, best price, lowest price, or value superiority from KAMIS data.",
+    "- KAMIS should only help decide whether explicit price exposure or freshness/current-price context is meaningful.",
     "- Do not use excessive emojis. At most 1 emoji.",
     "Hashtag rules:",
     "- Return 3 to 5 Korean hashtags.",
     "- Include menu/store/market-related tags when natural.",
     "- Each hashtag string must start with #.",
-    `Market: ${submission.stores?.market_name ?? "전통시장"}`,
-    `Store: ${submission.stores?.store_name ?? "가게"}`,
-    `Store type: ${submission.store_type}`,
-    `Menu: ${submission.target_menu_name}`,
-    submission.price_text ? `Price: ${submission.price_text}` : null,
-    `Appeal point: ${submission.appeal_point}`,
-    merchantInsights.targetCustomer
-      ? `Main customer group: ${merchantInsights.targetCustomer}`
-      : null,
-    merchantInsights.peakSalesTime
-      ? `Best-selling time: ${merchantInsights.peakSalesTime}`
-      : null,
-    merchantInsights.popularMenuNotes
-      ? `Popular customer demand: ${merchantInsights.popularMenuNotes}`
-      : null,
-    submission.extra_message
-      ? `Extra merchant message: ${submission.extra_message}`
-      : null,
+    "[MERCHANT FACT]",
+    JSON.stringify(captionInputContext.merchant_context, null, 2),
+    "[MARKET PUBLIC DATA]",
+    JSON.stringify(captionInputContext.market_context, null, 2),
+    "[FESTIVAL PUBLIC DATA]",
+    JSON.stringify(captionInputContext.festival_context, null, 2),
+    "[KAMIS PUBLIC DATA]",
+    JSON.stringify(captionInputContext.kamis_context, null, 2),
+    "[SELECTED CONTEXT]",
+    JSON.stringify(captionInputContext.selected_context, null, 2),
+    "[SELECTION REASON]",
+    JSON.stringify(captionInputContext.selection_reason, null, 2),
   ]
     .filter(Boolean)
     .join("\n");
@@ -353,7 +515,7 @@ export async function generatePromoCaption(
     });
 
     if (!response.ok) {
-      return fallback;
+      return fallbackResult;
     }
 
     const json = (await response.json()) as OpenAiResponsesResponse;
@@ -361,7 +523,7 @@ export async function generatePromoCaption(
       typeof json.output_text === "string" ? stripCodeFence(json.output_text) : "";
 
     if (!outputText) {
-      return fallback;
+      return fallbackResult;
     }
 
     const parsed = JSON.parse(outputText) as {
@@ -372,20 +534,25 @@ export async function generatePromoCaption(
     const caption =
       typeof parsed.caption === "string" && parsed.caption.trim().length > 0
         ? parsed.caption.trim()
-        : fallback.caption;
+        : fallbackResult.caption;
     const hashtags = Array.isArray(parsed.hashtags)
       ? parsed.hashtags
           .filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0)
           .map((tag) => (tag.startsWith("#") ? tag.trim() : `#${tag.trim()}`))
           .slice(0, 5)
-      : fallback.hashtags;
+      : fallbackResult.hashtags;
 
     return {
       caption,
-      hashtags: hashtags.length > 0 ? hashtags : fallback.hashtags,
+      hashtags: hashtags.length > 0 ? hashtags : fallbackResult.hashtags,
+      marketContext,
+      festivalContext,
+      kamisContext,
+      captionInputContext,
+      evidence,
     };
   } catch {
-    return fallback;
+    return fallbackResult;
   }
 }
 
@@ -467,6 +634,12 @@ Visual direction:
 - Keep the poster stylish and cinematic rather than documentary or messy.`;
   }
 
+  if (stylePreset === "food_card_news") {
+    const firstCard = buildFoodCardNewsPrompts(submission)[0];
+
+    return firstCard?.prompt ?? sharedContext;
+  }
+
   return `${sharedContext}
 
 Visual direction:
@@ -481,6 +654,10 @@ export function choosePromoImageCount(
   submission: SubmissionForGeneration,
   stylePreset: GenerationStylePreset,
 ) {
+  if (stylePreset === "food_card_news") {
+    return 4;
+  }
+
   const merchantInsights = readMerchantInsights(submission.ai_metadata);
 
   let count = 5;
@@ -499,7 +676,21 @@ export function choosePromoImageCount(
 export function buildPromoCarouselPrompts(
   submission: SubmissionForGeneration,
   stylePreset: GenerationStylePreset,
+  options?: {
+    foodCardNewsPlan?: FoodCardNewsCreativePlan | null;
+  },
 ) {
+  if (stylePreset === "food_card_news") {
+    return buildFoodCardNewsPrompts(
+      submission,
+      options?.foodCardNewsPlan ?? null,
+    ).map((card) => ({
+      index: card.index,
+      key: card.key,
+      prompt: card.prompt,
+    }));
+  }
+
   const merchantInsights = readMerchantInsights(submission.ai_metadata);
   const basePrompt = buildPromoPrompt(submission, stylePreset);
   const variants: PromoCarouselVariant[] = [
@@ -554,6 +745,29 @@ Carousel slide ${index + 1} of ${imageCount}.
 ${variant.instruction}
 Make this slide visually distinct from the others while keeping the same merchant, dish, and campaign identity.`,
   }));
+}
+
+export function validateStylePresetForSubmission(
+  submission: SubmissionForGeneration,
+  stylePreset: GenerationStylePreset,
+) {
+  if (stylePreset !== "food_card_news") {
+    return {
+      ok: true as const,
+    };
+  }
+
+  if (!isFoodCardNewsEligible(submission)) {
+    return {
+      ok: false as const,
+      reason:
+        "food_card_news style preset is only supported for food-related submissions",
+    };
+  }
+
+  return {
+    ok: true as const,
+  };
 }
 
 async function fetchImageBytesFromUrl(url: string) {

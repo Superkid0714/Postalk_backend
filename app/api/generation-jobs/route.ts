@@ -4,6 +4,7 @@ import { errorResponse, successResponse } from "@/lib/api/response";
 import {
   buildPromoPrompt,
   normalizeStoreRelation,
+  validateStylePresetForSubmission,
   type GenerationStylePreset,
 } from "@/lib/ai/generation";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -22,7 +23,12 @@ const ALLOWED_STYLE_PRESETS: GenerationStylePreset[] = [
   "menu_highlight",
   "clean_poster",
   "market_story",
+  "food_card_news",
 ];
+
+function resolveImageSize(stylePreset: GenerationStylePreset) {
+  return stylePreset === "food_card_news" ? "1024x1536" : "1536x1024";
+}
 
 function validateBody(body: CreateGenerationJobBody) {
   const details: Array<{ field: string; reason: string }> = [];
@@ -136,6 +142,19 @@ export async function POST(request: NextRequest) {
     },
     stylePreset,
   );
+  const stylePresetValidation = validateStylePresetForSubmission(
+    {
+      ...submission,
+      stores: normalizeStoreRelation(submission.stores),
+    },
+    stylePreset,
+  );
+
+  if (!stylePresetValidation.ok) {
+    return errorResponse(stylePresetValidation.reason, 400, {
+      code: "UNSUPPORTED_STYLE_PRESET_FOR_SUBMISSION",
+    });
+  }
 
   const { data: existingJob } = await supabase
     .from("generation_jobs")
@@ -167,7 +186,7 @@ export async function POST(request: NextRequest) {
       style_preset: stylePreset,
       prompt_text: promptText,
       model_name: "gpt-image-2",
-      image_size: "1536x1024",
+      image_size: resolveImageSize(stylePreset),
       quality: "medium",
       request_payload: {
         stylePreset,
