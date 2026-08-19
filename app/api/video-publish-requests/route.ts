@@ -69,6 +69,20 @@ export async function POST(request: NextRequest) {
 
   const workflow = getSubmissionVideoWorkflowMetadata(submission.ai_metadata);
 
+  if (workflow.status === "requested_publish") {
+    return successResponse(
+      {
+        submissionId: submission.id,
+        status: submission.status,
+        videoWorkflowStatus: "requested_publish",
+        jobId: workflow.lastCompletedJobId ?? workflow.currentJobId ?? null,
+        requestedPublishAt: workflow.requestedPublishAt ?? null,
+        reused: true,
+      },
+      "Video publish request already submitted",
+    );
+  }
+
   if (!latestCompletedJob && !workflow.lastCompletedJobId) {
     return errorResponse("No completed generated video is available", 400, {
       code: "GENERATED_VIDEO_NOT_READY",

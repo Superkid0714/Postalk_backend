@@ -1,4 +1,5 @@
 import { getInstagramEnv } from "@/lib/env";
+import { fetchWithTimeout } from "@/lib/http";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type InstagramMediaType = "photo" | "video";
@@ -200,7 +201,7 @@ async function postGraphForm<T>(
     access_token: config.accessToken!,
   });
 
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `https://graph.instagram.com/${config.graphApiVersion}${path}`,
     {
       method: "POST",
@@ -208,6 +209,7 @@ async function postGraphForm<T>(
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body,
+      timeoutMs: 30_000,
     },
   );
 
@@ -233,7 +235,9 @@ async function getGraphJson<T>(path: string, params: Record<string, string>) {
 
   url.searchParams.set("access_token", config.accessToken!);
 
-  const response = await fetch(url);
+  const response = await fetchWithTimeout(url, {
+    timeoutMs: 30_000,
+  });
 
   if (!response.ok) {
     throw new Error(await readGraphError(response));

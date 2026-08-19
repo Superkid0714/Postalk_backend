@@ -1,4 +1,5 @@
 import { getOpenAiApiKey } from "@/lib/env";
+import { fetchWithTimeout } from "@/lib/http";
 
 const DEFAULT_IMAGE_MODEL = "gpt-image-2";
 const DEFAULT_IMAGE_SIZE = "1536x1024";
@@ -338,7 +339,7 @@ export async function generatePromoCaption(
     .join("\n");
 
   try {
-    const response = await fetch("https://api.openai.com/v1/responses", {
+    const response = await fetchWithTimeout("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -348,6 +349,7 @@ export async function generatePromoCaption(
         model: "gpt-4.1-mini",
         input: prompt,
       }),
+      timeoutMs: 30_000,
     });
 
     if (!response.ok) {
@@ -555,7 +557,9 @@ Make this slide visually distinct from the others while keeping the same merchan
 }
 
 async function fetchImageBytesFromUrl(url: string) {
-  const response = await fetch(url);
+  const response = await fetchWithTimeout(url, {
+    timeoutMs: 60_000,
+  });
 
   if (!response.ok) {
     throw new Error(`Failed to download generated image: ${response.status}`);
@@ -578,7 +582,7 @@ export async function generatePromoImage(params: {
     throw new Error("OPENAI_API_KEY is not configured");
   }
 
-  const response = await fetch("https://api.openai.com/v1/images/generations", {
+  const response = await fetchWithTimeout("https://api.openai.com/v1/images/generations", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -592,6 +596,7 @@ export async function generatePromoImage(params: {
       background: "auto",
       output_format: "png",
     }),
+    timeoutMs: 120_000,
   });
 
   if (!response.ok) {

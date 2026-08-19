@@ -69,6 +69,21 @@ export async function POST(request: NextRequest) {
   }
 
   const workflow = getSubmissionWorkflowMetadata(submission.ai_metadata);
+
+  if (workflow.publishRequestStatus === "requested_publish") {
+    return successResponse(
+      {
+        submissionId: submission.id,
+        status: submission.status,
+        publishRequestStatus: "requested_publish",
+        jobId: workflow.lastCompletedJobId ?? workflow.currentJobId ?? null,
+        requestedPublishAt: workflow.requestedPublishAt ?? null,
+        reused: true,
+      },
+      "Publish request already submitted",
+    );
+  }
+
   const requestedPublishAt = new Date().toISOString();
 
   const { data, error } = await supabase

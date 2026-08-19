@@ -1,4 +1,5 @@
 import { getGeminiApiKey, getGeminiVideoModel } from "@/lib/env";
+import { fetchWithTimeout } from "@/lib/http";
 
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 const DEFAULT_VIDEO_MODEL = "veo-3.1-generate-preview";
@@ -251,7 +252,7 @@ export async function startGeminiVideoOperation(params: {
       };
     }
 
-    return fetch(`${GEMINI_BASE_URL}/models/${model}:predictLongRunning`, {
+    return fetchWithTimeout(`${GEMINI_BASE_URL}/models/${model}:predictLongRunning`, {
       method: "POST",
       headers: {
         "x-goog-api-key": apiKey,
@@ -265,6 +266,7 @@ export async function startGeminiVideoOperation(params: {
           durationSeconds: params.durationSeconds,
         },
       }),
+      timeoutMs: 60_000,
     });
   };
 
@@ -296,10 +298,11 @@ export async function startGeminiVideoOperation(params: {
 
 export async function getGeminiVideoOperation(operationName: string) {
   const apiKey = getRequiredGeminiApiKey();
-  const response = await fetch(`${GEMINI_BASE_URL}/${operationName}`, {
+  const response = await fetchWithTimeout(`${GEMINI_BASE_URL}/${operationName}`, {
     headers: {
       "x-goog-api-key": apiKey,
     },
+    timeoutMs: 30_000,
   });
 
   if (!response.ok) {
@@ -352,11 +355,12 @@ export function extractGeneratedVideoFile(operation: Awaited<
 
 export async function downloadGeminiVideoFile(fileUri: string) {
   const apiKey = getRequiredGeminiApiKey();
-  const response = await fetch(fileUri, {
+  const response = await fetchWithTimeout(fileUri, {
     headers: {
       "x-goog-api-key": apiKey,
     },
     redirect: "follow",
+    timeoutMs: 120_000,
   });
 
   if (!response.ok) {

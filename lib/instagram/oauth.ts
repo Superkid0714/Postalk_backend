@@ -1,4 +1,5 @@
 import { getInstagramEnv } from "@/lib/env";
+import { fetchWithTimeout } from "@/lib/http";
 
 type InstagramShortLivedTokenResponse = {
   access_token: string;
@@ -56,7 +57,7 @@ export async function exchangeInstagramCodeForLongLivedToken(params: {
 }) {
   const config = getOAuthConfig();
 
-  const shortLivedResponse = await fetch("https://api.instagram.com/oauth/access_token", {
+  const shortLivedResponse = await fetchWithTimeout("https://api.instagram.com/oauth/access_token", {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -68,6 +69,7 @@ export async function exchangeInstagramCodeForLongLivedToken(params: {
       redirect_uri: params.redirectUri,
       code: params.code,
     }),
+    timeoutMs: 30_000,
   });
 
   if (!shortLivedResponse.ok) {
@@ -82,7 +84,9 @@ export async function exchangeInstagramCodeForLongLivedToken(params: {
   longLivedUrl.searchParams.set("client_secret", config.appSecret);
   longLivedUrl.searchParams.set("access_token", shortLivedPayload.access_token);
 
-  const longLivedResponse = await fetch(longLivedUrl);
+  const longLivedResponse = await fetchWithTimeout(longLivedUrl, {
+    timeoutMs: 30_000,
+  });
 
   if (!longLivedResponse.ok) {
     throw new Error(await readErrorText(longLivedResponse));
@@ -95,7 +99,9 @@ export async function exchangeInstagramCodeForLongLivedToken(params: {
   meUrl.searchParams.set("fields", "user_id,username");
   meUrl.searchParams.set("access_token", longLivedPayload.access_token);
 
-  const meResponse = await fetch(meUrl);
+  const meResponse = await fetchWithTimeout(meUrl, {
+    timeoutMs: 30_000,
+  });
 
   if (!meResponse.ok) {
     throw new Error(await readErrorText(meResponse));
