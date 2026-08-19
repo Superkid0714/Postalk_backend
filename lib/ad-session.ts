@@ -92,7 +92,33 @@ export function inferPrimarySubjectFromIntro(introText: string) {
 
   const tokenMatches = normalized.match(/[가-힣A-Za-z0-9]{2,20}/gu) ?? [];
 
-  return tokenMatches[0] ?? "대표 메뉴";
+  return tokenMatches[0] ?? "주력 메뉴";
+}
+
+function inferPrimarySubject(options: {
+  introText: string;
+  menuIntro?: string | null;
+  storeSpecialty?: string | null;
+}) {
+  const prioritizedSources = [
+    options.storeSpecialty?.trim() || null,
+    options.menuIntro?.trim() || null,
+    options.introText.trim(),
+  ];
+
+  for (const source of prioritizedSources) {
+    if (!source) {
+      continue;
+    }
+
+    const inferred = inferPrimarySubjectFromIntro(source);
+
+    if (inferred.trim().length > 0 && inferred !== "주력 메뉴") {
+      return inferred;
+    }
+  }
+
+  return inferPrimarySubjectFromIntro(options.introText);
 }
 
 export function normalizeAdSessionWorkflow(value: unknown): AdSessionWorkflow {
@@ -172,7 +198,11 @@ export function buildSessionWorkflowSeed(
   return {
     currentShotIndex: 0,
     requestedShotKey: DEFAULT_FOOD_SHOT_PLAN[0],
-    primarySubject: inferPrimarySubjectFromIntro(introText),
+    primarySubject: inferPrimarySubject({
+      introText,
+      menuIntro: options?.menuIntro ?? null,
+      storeSpecialty: options?.storeSpecialty ?? null,
+    }),
     menuIntro: options?.menuIntro ?? null,
     storeSpecialty: options?.storeSpecialty ?? null,
     shotPlan: DEFAULT_FOOD_SHOT_PLAN,
@@ -201,7 +231,7 @@ export function getRequestedShot(
     return null;
   }
 
-  return buildPhotoRequest(category, shotKey, workflow.primarySubject ?? "대표 메뉴");
+  return buildPhotoRequest(category, shotKey, workflow.primarySubject ?? "주력 메뉴");
 }
 
 export function getNextShot(
@@ -219,7 +249,7 @@ export function getNextShot(
 
   return {
     nextIndex,
-    request: buildPhotoRequest(category, shotKey, workflow.primarySubject ?? "대표 메뉴"),
+    request: buildPhotoRequest(category, shotKey, workflow.primarySubject ?? "주력 메뉴"),
   };
 }
 
@@ -305,6 +335,6 @@ export function buildSessionSummary(store: AdSessionStore, workflow: AdSessionWo
     category: store.category,
     categoryLabel: getStoreCategoryLabel(store.category),
     locationAddress: store.location_address ?? store.description ?? null,
-    primarySubject: workflow.primarySubject ?? "대표 메뉴",
+    primarySubject: workflow.primarySubject ?? "주력 메뉴",
   };
 }
