@@ -25,7 +25,11 @@ function getOAuthConfig() {
     throw new Error("Instagram OAuth is not configured");
   }
 
-  return env;
+  return {
+    ...env,
+    appId: env.appId,
+    appSecret: env.appSecret,
+  };
 }
 
 async function readErrorText(response: Response) {
