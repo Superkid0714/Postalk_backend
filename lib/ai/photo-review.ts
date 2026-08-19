@@ -38,15 +38,57 @@ function hasCriticalMenuBoardFailure(checks: PhotoReviewCheckResult) {
   );
 }
 
+function hasCriticalFoodPhotoFailure(checks: PhotoReviewCheckResult) {
+  return (
+    checks.focus === "fail" ||
+    checks.subjectVisibility === "fail"
+  );
+}
+
 function applyAssetSpecificReviewHeuristics(
   assetType: "menu_board" | "food_photo",
   review: PhotoReviewResult,
 ): PhotoReviewResult {
-  if (assetType !== "menu_board") {
+  if (assetType === "menu_board") {
+    if (hasCriticalMenuBoardFailure(review.checks)) {
+      return {
+        ...review,
+        passed: false,
+        recommendedAction: "retake",
+      };
+    }
+
+    const softWarnings = [
+      review.checks.brightness,
+      review.checks.framing,
+      review.checks.guideMatch,
+      review.checks.textReadability,
+    ].filter((value) => value === "warning" || value === "fail").length;
+
+    const canProceed =
+      review.checks.focus !== "fail" &&
+      review.checks.subjectVisibility !== "fail" &&
+      review.score >= 35 &&
+      softWarnings <= 3;
+
+    if (!review.passed && canProceed) {
+      return {
+        ...review,
+        passed: true,
+        score: Math.max(review.score, 60),
+        recommendedAction: "proceed",
+        summary: "메뉴판이 전반적으로 보여 다음 단계로 진행합니다.",
+        feedback:
+          review.feedback.length > 0
+            ? review.feedback
+            : ["메뉴판이 전체적으로 보여서 다음 단계로 진행할 수 있습니다."],
+      };
+    }
+
     return review;
   }
 
-  if (hasCriticalMenuBoardFailure(review.checks)) {
+  if (hasCriticalFoodPhotoFailure(review.checks)) {
     return {
       ...review,
       passed: false,
@@ -58,13 +100,12 @@ function applyAssetSpecificReviewHeuristics(
     review.checks.brightness,
     review.checks.framing,
     review.checks.guideMatch,
-    review.checks.textReadability,
   ].filter((value) => value === "warning" || value === "fail").length;
 
   const canProceed =
     review.checks.focus !== "fail" &&
     review.checks.subjectVisibility !== "fail" &&
-    review.score >= 35 &&
+    review.score >= 40 &&
     softWarnings <= 3;
 
   if (!review.passed && canProceed) {
@@ -73,11 +114,11 @@ function applyAssetSpecificReviewHeuristics(
       passed: true,
       score: Math.max(review.score, 60),
       recommendedAction: "proceed",
-      summary: "메뉴판이 전반적으로 보여 다음 단계로 진행합니다.",
+      summary: "대표사진으로 활용 가능한 수준이라 다음 단계로 진행합니다.",
       feedback:
         review.feedback.length > 0
           ? review.feedback
-          : ["메뉴판이 전체적으로 보여서 다음 단계로 진행할 수 있습니다."],
+          : ["대표 메뉴가 잘 보여서 다음 단계로 진행할 수 있습니다."],
     };
   }
 
@@ -217,7 +258,7 @@ function buildPhotoReviewPrompt(params: {
     "Be strict but practical. Focus on whether the photo is usable for an ad-making workflow on mobile.",
     params.assetType === "menu_board"
       ? "For menu boards, do not require every tiny line to be perfectly readable. If the menu board itself is clearly captured and the overall menu sections are recognizable, it should usually pass."
-      : "For food photos, require a clearly visible subject and an appealing composition.",
+      : "For food photos, pass if the representative menu is clearly visible and usable for promotional content, even if composition is not perfect.",
     "Return JSON keys only: passed, score, recommendedAction, summary, feedback, checks.",
     "checks must include: focus, brightness, framing, subjectVisibility, guideMatch, textReadability.",
     "Each check value must be one of: pass, warning, fail, not_applicable.",
@@ -240,7 +281,7 @@ function buildPhotoReviewPrompt(params: {
     "- If menu text should be readable, can a user actually read the main menu names and prices well enough?",
     params.assetType === "menu_board"
       ? "- For menu boards, overall capture of the board matters more than perfect OCR-level clarity. Slight blur or small unreadable text alone should not cause rejection."
-      : "- For food photos, prioritize subject clarity and framing over text.",
+      : "- For food photos, prioritize whether the main dish is visible and usable. Slight issues in framing or lighting alone should not cause rejection.",
     "- Do not invent store facts. Only review image quality and guidance match.",
   ].join("\n");
 }
