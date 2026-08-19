@@ -124,14 +124,20 @@ function readInstagramPublish(aiMetadata: Record<string, unknown> | null | undef
       ? (instagramPublishRecord[key] as string)
       : null;
 
+  const publishedMediaId = readString("publishedMediaId");
+  const publishedAt = readString("publishedAt");
+  const rawStatus = readString("status");
+  const normalizedStatus =
+    publishedMediaId || publishedAt ? "published" : rawStatus;
+
   return {
     mediaType: readString("mediaType"),
-    status: readString("status"),
+    status: normalizedStatus,
     containerId: readString("containerId"),
-    publishedMediaId: readString("publishedMediaId"),
+    publishedMediaId,
     caption: readString("caption"),
     requestedAt: readString("requestedAt"),
-    publishedAt: readString("publishedAt"),
+    publishedAt,
     lastCheckedAt: readString("lastCheckedAt"),
     lastError: readString("lastError"),
   };
