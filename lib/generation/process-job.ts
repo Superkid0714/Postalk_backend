@@ -8,6 +8,7 @@ import {
   normalizeStoreRelation,
   normalizeSubmissionRelation,
 } from "@/lib/ai/generation";
+import type { FoodCardNewsCreativePlan } from "@/lib/ai/food-card-news";
 import {
   getSubmissionWorkflowMetadata,
   mergeSubmissionWorkflowMetadata,
@@ -18,12 +19,26 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isFoodCardNewsCreativePlan(
+  value: unknown,
+): value is FoodCardNewsCreativePlan {
+  if (!isObject(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.concept === "string" &&
+    typeof value.tone === "string" &&
+    Array.isArray(value.cards)
+  );
+}
+
 function readPrecomputedCaptionRequest(value: unknown) {
   if (!isObject(value)) {
     return {
       caption: null,
       hashtags: [] as string[],
-      foodCardNewsPlan: null as Record<string, unknown> | null,
+      foodCardNewsPlan: null as FoodCardNewsCreativePlan | null,
     };
   }
 
@@ -38,7 +53,9 @@ function readPrecomputedCaptionRequest(value: unknown) {
           typeof item === "string" && item.trim().length > 0,
       )
     : [];
-  const foodCardNewsPlan = isObject(value.precomputedFoodCardNewsPlan)
+  const foodCardNewsPlan = isFoodCardNewsCreativePlan(
+    value.precomputedFoodCardNewsPlan,
+  )
     ? value.precomputedFoodCardNewsPlan
     : null;
 
