@@ -3,8 +3,19 @@ import type { NextRequest } from "next/server";
 
 import { errorResponse } from "@/lib/api/response";
 import { loadMerchantQrByToken } from "@/lib/merchant-qr";
-import { type QrSlotRecord } from "@/lib/qr/slots";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+
+type LegacyQrSlotRecord = {
+  id: string;
+  store_id: string;
+  slot_number: number;
+  slot_key: string;
+  label: string | null;
+  is_active: boolean;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+};
 
 function buildRedirectTarget(
   request: NextRequest,
@@ -86,7 +97,7 @@ export async function GET(
       "id, store_id, slot_number, slot_key, label, is_active, metadata, created_at, updated_at",
     )
     .eq("slot_key", slotKey)
-    .single<QrSlotRecord>();
+    .single<LegacyQrSlotRecord>();
 
   if (slotError || !slot) {
     return errorResponse("QR slot not found", 404, {
