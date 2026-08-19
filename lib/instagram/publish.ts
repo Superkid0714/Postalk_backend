@@ -639,6 +639,19 @@ export async function syncInstagramPublishForSubmission(
     throw new Error("Instagram publish job not found");
   }
 
+  if (instagramPublish.publishedMediaId || instagramPublish.publishedAt) {
+    return {
+      ok: true,
+      submissionId,
+      mediaType: instagramPublish.mediaType,
+      status: "published",
+      containerId: instagramPublish.containerId,
+      publishedMediaId: instagramPublish.publishedMediaId ?? null,
+      caption: instagramPublish.caption ?? null,
+      lastError: null,
+    };
+  }
+
   return instagramPublish.mediaType === "photo"
     ? publishInstagramContainer(submissionId, instagramPublish.containerId, "photo")
     : publishInstagramContainer(submissionId, instagramPublish.containerId, "video");
