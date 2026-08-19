@@ -25,8 +25,8 @@ export type SubmissionHomeRecord = {
 
 const THUMBNAIL_PRIORITY: SubmissionAssetType[] = [
   "video_thumbnail",
-  "food_photo",
   "generated_image",
+  "food_photo",
   "menu_board",
   "generated_video",
 ];
