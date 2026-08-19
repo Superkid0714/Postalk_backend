@@ -131,9 +131,23 @@ create table if not exists public.ad_creation_session_assets (
   id uuid primary key default gen_random_uuid(),
   session_id uuid not null references public.ad_creation_sessions(id) on delete cascade,
   shot_key text not null
-    check (shot_key in ('menu_board', 'signature_menu', 'flatlay_menu', 'cooking_scene', 'detail_closeup')),
+    check (shot_key in (
+      'menu_board',
+      'signature_menu',
+      'flatlay_menu',
+      'cooking_scene',
+      'detail_closeup',
+      'video_storefront_sign',
+      'video_storefront_entry',
+      'video_menu_board',
+      'video_signature_menu',
+      'video_signature_interaction',
+      'video_cooking_scene',
+      'video_side_menu',
+      'video_side_menu_interaction'
+    )),
   asset_type text not null
-    check (asset_type in ('menu_board', 'food_photo')),
+    check (asset_type in ('menu_board', 'food_photo', 'video_clip')),
   storage_bucket text not null default 'uploads',
   file_path text not null,
   file_name text,

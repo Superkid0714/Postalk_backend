@@ -24,6 +24,17 @@ test("buildSessionWorkflowSeed initializes draft preparation fields", () => {
   assert.equal(workflow.draftAssetCount, 0);
 });
 
+test("buildSessionWorkflowSeed initializes video shot plan when adType is video", () => {
+  const workflow = buildSessionWorkflowSeed("대표 메뉴는 제육볶음입니다.", {
+    adType: "video",
+    menuIntro: "대표메뉴는 제육볶음 입니다.",
+  });
+
+  assert.equal(workflow.adType, "video");
+  assert.equal(workflow.requestedShotKey, "video_storefront_sign");
+  assert.equal(workflow.shotPlan?.length, 8);
+});
+
 test("normalizeAdSessionWorkflow preserves prepared draft fields", () => {
   const workflow = normalizeAdSessionWorkflow({
     currentShotIndex: 2,
@@ -99,4 +110,25 @@ test("buildPhotoRequest uses storefront, interior, and specialty-oriented prompt
   assert.equal(storefront.prompt, "사진요청 : 가게 간판이 함께 보이도록 찍은 외관 사진");
   assert.equal(interior.prompt, "사진요청 : 가게 내부 분위기가 보이도록 찍은 사진");
   assert.equal(specialty.prompt, "사진요청 : 가게의 특별함이 드러나는 사진");
+});
+
+test("normalizeAdSessionWorkflow keeps video shot plan values", () => {
+  const workflow = normalizeAdSessionWorkflow({
+    adType: "video",
+    currentShotIndex: 1,
+    requestedShotKey: "video_storefront_entry",
+    shotPlan: [
+      "video_storefront_sign",
+      "video_storefront_entry",
+      "video_menu_board",
+    ],
+  });
+
+  assert.equal(workflow.adType, "video");
+  assert.equal(workflow.requestedShotKey, "video_storefront_entry");
+  assert.deepEqual(workflow.shotPlan, [
+    "video_storefront_sign",
+    "video_storefront_entry",
+    "video_menu_board",
+  ]);
 });

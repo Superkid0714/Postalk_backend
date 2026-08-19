@@ -1,4 +1,3 @@
-import { after } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/response";
@@ -9,10 +8,6 @@ import {
   getRequestedShot,
   normalizeAdSessionWorkflow,
 } from "@/lib/ad-session";
-import { createSubmissionAndGenerationJobFromSession } from "@/lib/ad-session-generation";
-import { prepareAdSessionDrafts } from "@/lib/ad-session-preparation";
-import { reviewPhotoAsset } from "@/lib/ai/photo-review";
-import { processGenerationJobById } from "@/lib/generation/process-job";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isUuid } from "@/lib/validation";
 
@@ -22,13 +17,27 @@ type RouteContext = {
   }>;
 };
 
-type SubmitSessionPhotoBody = {
+type SubmitSessionVideoBody = {
   bucket?: string;
   filePath?: string;
   fileName?: string;
   mimeType?: string | null;
   fileSize?: number | null;
+  durationSeconds?: number | null;
+  durationMs?: number | null;
 };
+
+function resolveDurationSeconds(body: SubmitSessionVideoBody) {
+  if (typeof body.durationSeconds === "number" && Number.isFinite(body.durationSeconds)) {
+    return body.durationSeconds;
+  }
+
+  if (typeof body.durationMs === "number" && Number.isFinite(body.durationMs)) {
+    return body.durationMs / 1000;
+  }
+
+  return null;
+}
 
 export async function POST(request: NextRequest, context: RouteContext) {
   const { sessionId } = await context.params;
@@ -39,10 +48,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
   }
 
-  let body: SubmitSessionPhotoBody;
+  let body: SubmitSessionVideoBody;
 
   try {
-    body = (await request.json()) as SubmitSessionPhotoBody;
+    body = (await request.json()) as SubmitSessionVideoBody;
   } catch {
     return errorResponse("Invalid JSON body", 400, {
       code: "VALIDATION_ERROR",
@@ -50,6 +59,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const details: Array<{ field: string; reason: string }> = [];
+  const durationSeconds = resolveDurationSeconds(body);
 
   if (!body.bucket?.trim()) {
     details.push({
@@ -65,12 +75,21 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
   }
 
+  if (durationSeconds === null || durationSeconds <= 0) {
+    details.push({
+      field: "durationSeconds",
+      reason: "durationSeconds or durationMs must be provided",
+    });
+  }
+
   if (details.length > 0) {
     return errorResponse("Invalid request body", 400, {
       code: "VALIDATION_ERROR",
       details,
     });
   }
+
+  const validatedDurationSeconds = durationSeconds as number;
 
   const supabase = getSupabaseAdminClient();
   const { data: session, error } = await supabase
@@ -79,9 +98,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       id,
       store_id,
       ad_type,
-      intro_text,
       status,
-      style_preset,
       workflow,
       stores (
         id,
@@ -107,13 +124,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   if (session.status !== "collecting") {
-    return errorResponse("This session is no longer accepting photos", 400, {
+    return errorResponse("This session is no longer accepting videos", 400, {
       code: "SESSION_NOT_COLLECTING",
     });
   }
 
-  if (session.ad_type !== "photo") {
-    return errorResponse("This session only accepts video uploads", 400, {
+  if (session.ad_type !== "video") {
+    return errorResponse("This session only accepts photo uploads", 400, {
       code: "SESSION_MEDIA_TYPE_MISMATCH",
     });
   }
@@ -141,38 +158,23 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const category = getDefaultSessionCategory(store.category);
   const currentRequest = getRequestedShot(workflow, category);
 
-  if (!currentRequest) {
-    return errorResponse("No remaining photo request for this session", 400, {
+  if (!currentRequest || currentRequest.assetType !== "video_clip") {
+    return errorResponse("No remaining video request for this session", 400, {
       code: "SESSION_ALREADY_COMPLETE",
     });
   }
 
-  if (currentRequest.assetType === "video_clip") {
-    return errorResponse("This session only accepts video uploads", 400, {
-      code: "SESSION_MEDIA_TYPE_MISMATCH",
-    });
-  }
+  if (validatedDurationSeconds < 2) {
+    const review = {
+      passed: false,
+      score: 40,
+      summary: "영상 길이가 2초보다 짧습니다.",
+      feedback: ["영상이 2초보다 짧습니다. 2초 이상으로 다시 촬영해주세요."],
+      payload: {
+        durationSeconds: validatedDurationSeconds,
+      },
+    };
 
-  let review;
-
-  try {
-    review = await reviewPhotoAsset({
-      supabase,
-      bucket: body.bucket!.trim(),
-      filePath: body.filePath!.trim(),
-      assetType: currentRequest.assetType,
-      category,
-      shotOrder: currentRequest.reviewShotOrder,
-    });
-  } catch (reviewError) {
-    return errorResponse("Failed to review photo", 500, {
-      code: "PHOTO_REVIEW_FAILED",
-      details:
-        reviewError instanceof Error ? reviewError.message : "Unknown error",
-    });
-  }
-
-  if (!review.passed) {
     return successResponse(
       {
         sessionId: session.id,
@@ -185,39 +187,47 @@ export async function POST(request: NextRequest, context: RouteContext) {
           helperText: currentRequest.helperText,
         },
         review,
-        retryMessage:
-          review.feedback[0] ??
-          "사진이 기준에 맞지 않습니다. 다시 찍어주세요.",
+        retryMessage: review.feedback[0],
       },
-      "Photo needs retake",
+      "Video needs retake",
     );
   }
 
   const currentSortOrder = Array.isArray(session.ad_creation_session_assets)
     ? session.ad_creation_session_assets.length
     : 0;
+  const canonicalFileName = `${currentSortOrder + 1}.mp4`;
+  const review = {
+    passed: true,
+    score: 100,
+      summary: "영상 길이가 기준을 충족했습니다.",
+      feedback: [],
+      payload: {
+        durationSeconds: validatedDurationSeconds,
+      },
+    };
 
   const { error: assetInsertError } = await supabase
     .from("ad_creation_session_assets")
     .insert({
       session_id: session.id,
       shot_key: currentRequest.shotKey,
-      asset_type: currentRequest.assetType,
+      asset_type: "video_clip",
       storage_bucket: body.bucket!.trim(),
       file_path: body.filePath!.trim(),
-      file_name: body.fileName?.trim() || null,
-      mime_type: body.mimeType?.trim() || null,
+      file_name: canonicalFileName,
+      mime_type: body.mimeType?.trim() || "video/mp4",
       file_size: body.fileSize ?? null,
       sort_order: currentSortOrder,
       review_passed: true,
       review_score: review.score,
       review_summary: review.summary,
       review_feedback: review.feedback,
-      review_payload: review,
+      review_payload: review.payload,
     });
 
   if (assetInsertError) {
-    return errorResponse("Failed to store session photo", 500, {
+    return errorResponse("Failed to store session video", 500, {
       code: "SESSION_ASSET_CREATE_FAILED",
       details: assetInsertError.message,
     });
@@ -247,17 +257,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
       });
     }
 
-    after(async () => {
-      try {
-        await prepareAdSessionDrafts(session.id);
-      } catch (draftError) {
-        console.error("Ad session draft preparation failed", {
-          sessionId: session.id,
-          error: draftError,
-        });
-      }
-    });
-
     return successResponse(
       {
         sessionId: session.id,
@@ -272,30 +271,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
           helperText: nextShot.request.helperText,
         },
       },
-      "Photo accepted",
+      "Video accepted",
     );
-  }
-
-  const { data: sessionAssets, error: sessionAssetsError } = await supabase
-    .from("ad_creation_session_assets")
-    .select(`
-      shot_key,
-      asset_type,
-      storage_bucket,
-      file_path,
-      file_name,
-      mime_type,
-      file_size,
-      sort_order
-    `)
-    .eq("session_id", session.id)
-    .order("sort_order", { ascending: true });
-
-  if (sessionAssetsError || !sessionAssets) {
-    return errorResponse("Failed to load session assets", 500, {
-      code: "SESSION_ASSET_LOAD_FAILED",
-      details: sessionAssetsError?.message,
-    });
   }
 
   const readyWorkflow = {
@@ -306,108 +283,30 @@ export async function POST(request: NextRequest, context: RouteContext) {
     lastFailureReason: null,
   };
 
-  const sessionUpdate = await supabase
+  const { error: sessionUpdateError } = await supabase
     .from("ad_creation_sessions")
     .update({
-      status: "generating",
+      status: "ready_for_generation",
       workflow: readyWorkflow,
     })
     .eq("id", session.id);
 
-  if (sessionUpdate.error) {
+  if (sessionUpdateError) {
     return errorResponse("Failed to mark session ready", 500, {
       code: "SESSION_UPDATE_FAILED",
-      details: sessionUpdate.error.message,
+      details: sessionUpdateError.message,
     });
   }
-
-  let generation;
-
-  try {
-    generation = await createSubmissionAndGenerationJobFromSession({
-      supabase,
-      session: {
-        id: session.id,
-        store_id: session.store_id,
-        intro_text: session.intro_text,
-        ad_type: session.ad_type,
-        style_preset: session.style_preset,
-      },
-      store,
-      workflow: readyWorkflow,
-      assets: sessionAssets,
-    });
-  } catch (generationError) {
-    await supabase
-      .from("ad_creation_sessions")
-      .update({
-        status: "failed",
-        workflow: {
-          ...readyWorkflow,
-          lastFailureReason:
-            generationError instanceof Error
-              ? generationError.message
-              : "Unknown generation error",
-        },
-      })
-      .eq("id", session.id);
-
-    return errorResponse("Failed to start generation", 500, {
-      code: "GENERATION_BOOTSTRAP_FAILED",
-      details:
-        generationError instanceof Error ? generationError.message : "Unknown error",
-    });
-  }
-
-  await supabase
-    .from("ad_creation_sessions")
-    .update({
-      submission_id: generation.submissionId,
-      generation_job_id: generation.jobId,
-      workflow: {
-        ...readyWorkflow,
-        lastFailureReason: null,
-      },
-    })
-    .eq("id", session.id);
-
-  after(async () => {
-    try {
-      await processGenerationJobById(generation.jobId);
-      await supabase
-        .from("ad_creation_sessions")
-        .update({
-          status: "completed",
-        })
-        .eq("id", session.id);
-    } catch (backgroundError) {
-      await supabase
-        .from("ad_creation_sessions")
-        .update({
-          status: "failed",
-          workflow: {
-            ...readyWorkflow,
-            lastFailureReason:
-              backgroundError instanceof Error
-                ? backgroundError.message
-                : "Unknown generation error",
-          },
-        })
-        .eq("id", session.id);
-    }
-  });
 
   return successResponse(
     {
       sessionId: session.id,
       response: "success",
-      status: "generating",
+      status: "ready_for_generation",
       state: "끝",
       store: buildSessionSummary(store, readyWorkflow),
       review,
-      submissionId: generation.submissionId,
-      generationJobId: generation.jobId,
     },
-    "Photo accepted and generation started",
+    "Video accepted and collection completed",
   );
 }

@@ -13,7 +13,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type SessionPreparationAssetRow = {
   shot_key: string;
-  asset_type: "menu_board" | "food_photo";
+  asset_type: "menu_board" | "food_photo" | "video_clip";
   storage_bucket: string;
   file_path: string;
   sort_order: number;
@@ -68,12 +68,18 @@ function buildDraftSubmission(
   workflow: AdSessionWorkflow,
 ) {
   const store = normalizeStoreRelation(session.stores);
-  const assets = (session.ad_creation_session_assets ?? []).map((asset) => ({
-    asset_type: asset.asset_type,
-    storage_bucket: asset.storage_bucket,
-    file_path: asset.file_path,
-    sort_order: asset.sort_order,
-  }));
+  const assets = (session.ad_creation_session_assets ?? [])
+    .filter(
+      (asset): asset is SessionPreparationAssetRow & {
+        asset_type: "menu_board" | "food_photo";
+      } => asset.asset_type === "menu_board" || asset.asset_type === "food_photo",
+    )
+    .map((asset) => ({
+      asset_type: asset.asset_type,
+      storage_bucket: asset.storage_bucket,
+      file_path: asset.file_path,
+      sort_order: asset.sort_order,
+    }));
 
   return {
     id: session.id,

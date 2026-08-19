@@ -12,16 +12,27 @@ export type AdSessionStatus =
   | "completed"
   | "failed";
 
+export type AdSessionType = "photo" | "video";
+
 export type AdSessionShotKey =
   | "menu_board"
   | "signature_menu"
   | "flatlay_menu"
   | "cooking_scene"
-  | "detail_closeup";
+  | "detail_closeup"
+  | "video_storefront_sign"
+  | "video_storefront_entry"
+  | "video_menu_board"
+  | "video_signature_menu"
+  | "video_signature_interaction"
+  | "video_cooking_scene"
+  | "video_side_menu"
+  | "video_side_menu_interaction";
 
 export type AdSessionWorkflow = {
   currentShotIndex?: number;
   requestedShotKey?: AdSessionShotKey | null;
+  adType?: AdSessionType | null;
   primarySubject?: string | null;
   menuIntro?: string | null;
   storeSpecialty?: string | null;
@@ -53,7 +64,7 @@ export type AdSessionStore = {
 
 export type AdSessionPhotoRequest = {
   shotKey: AdSessionShotKey;
-  assetType: "menu_board" | "food_photo";
+  assetType: "menu_board" | "food_photo" | "video_clip";
   title: string;
   prompt: string;
   helperText: string;
@@ -67,6 +78,35 @@ const DEFAULT_FOOD_SHOT_PLAN: AdSessionShotKey[] = [
   "cooking_scene",
   "detail_closeup",
 ];
+
+const DEFAULT_VIDEO_SHOT_PLAN: AdSessionShotKey[] = [
+  "video_storefront_sign",
+  "video_storefront_entry",
+  "video_menu_board",
+  "video_signature_menu",
+  "video_signature_interaction",
+  "video_cooking_scene",
+  "video_side_menu",
+  "video_side_menu_interaction",
+];
+
+function isAdSessionShotKey(value: unknown): value is AdSessionShotKey {
+  return (
+    value === "menu_board" ||
+    value === "signature_menu" ||
+    value === "flatlay_menu" ||
+    value === "cooking_scene" ||
+    value === "detail_closeup" ||
+    value === "video_storefront_sign" ||
+    value === "video_storefront_entry" ||
+    value === "video_menu_board" ||
+    value === "video_signature_menu" ||
+    value === "video_signature_interaction" ||
+    value === "video_cooking_scene" ||
+    value === "video_side_menu" ||
+    value === "video_side_menu_interaction"
+  );
+}
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -134,29 +174,23 @@ export function normalizeAdSessionWorkflow(value: unknown): AdSessionWorkflow {
   return {
     currentShotIndex:
       typeof value.currentShotIndex === "number" ? value.currentShotIndex : 0,
-    requestedShotKey:
-      value.requestedShotKey === "menu_board" ||
-      value.requestedShotKey === "signature_menu" ||
-      value.requestedShotKey === "flatlay_menu" ||
-      value.requestedShotKey === "cooking_scene" ||
-      value.requestedShotKey === "detail_closeup"
-        ? value.requestedShotKey
-        : null,
+    requestedShotKey: isAdSessionShotKey(value.requestedShotKey)
+      ? value.requestedShotKey
+      : null,
+    adType:
+      value.adType === "photo" || value.adType === "video"
+        ? value.adType
+        : "photo",
     primarySubject:
       typeof value.primarySubject === "string" ? value.primarySubject : null,
     menuIntro: typeof value.menuIntro === "string" ? value.menuIntro : null,
     storeSpecialty:
       typeof value.storeSpecialty === "string" ? value.storeSpecialty : null,
     shotPlan: Array.isArray(value.shotPlan)
-      ? value.shotPlan.filter(
-          (item): item is AdSessionShotKey =>
-            item === "menu_board" ||
-            item === "signature_menu" ||
-            item === "flatlay_menu" ||
-            item === "cooking_scene" ||
-            item === "detail_closeup",
-        )
-      : DEFAULT_FOOD_SHOT_PLAN,
+      ? value.shotPlan.filter((item): item is AdSessionShotKey => isAdSessionShotKey(item))
+      : value.adType === "video"
+        ? DEFAULT_VIDEO_SHOT_PLAN
+        : DEFAULT_FOOD_SHOT_PLAN,
     caption: typeof value.caption === "string" ? value.caption : null,
     hashtags: Array.isArray(value.hashtags)
       ? value.hashtags.filter((item): item is string => typeof item === "string")
@@ -196,13 +230,18 @@ export function normalizeAdSessionWorkflow(value: unknown): AdSessionWorkflow {
 export function buildSessionWorkflowSeed(
   introText: string,
   options?: {
+    adType?: AdSessionType | null;
     menuIntro?: string | null;
     storeSpecialty?: string | null;
   },
 ): AdSessionWorkflow {
+  const adType = options?.adType === "video" ? "video" : "photo";
+  const shotPlan = adType === "video" ? DEFAULT_VIDEO_SHOT_PLAN : DEFAULT_FOOD_SHOT_PLAN;
+
   return {
     currentShotIndex: 0,
-    requestedShotKey: DEFAULT_FOOD_SHOT_PLAN[0],
+    requestedShotKey: shotPlan[0],
+    adType,
     primarySubject: inferPrimarySubject({
       introText,
       menuIntro: options?.menuIntro ?? null,
@@ -210,7 +249,7 @@ export function buildSessionWorkflowSeed(
     }),
     menuIntro: options?.menuIntro ?? null,
     storeSpecialty: options?.storeSpecialty ?? null,
-    shotPlan: DEFAULT_FOOD_SHOT_PLAN,
+    shotPlan,
     caption: null,
     hashtags: [],
     draftCaption: null,
@@ -227,7 +266,12 @@ export function getRequestedShot(
   workflow: AdSessionWorkflow,
   category: StoreCategoryCode,
 ) {
-  const shotPlan = workflow.shotPlan?.length ? workflow.shotPlan : DEFAULT_FOOD_SHOT_PLAN;
+  const adType = workflow.adType === "video" ? "video" : "photo";
+  const shotPlan = workflow.shotPlan?.length
+    ? workflow.shotPlan
+    : adType === "video"
+      ? DEFAULT_VIDEO_SHOT_PLAN
+      : DEFAULT_FOOD_SHOT_PLAN;
   const currentShotIndex =
     typeof workflow.currentShotIndex === "number" ? workflow.currentShotIndex : 0;
   const shotKey = shotPlan[currentShotIndex] ?? null;
@@ -236,7 +280,7 @@ export function getRequestedShot(
     return null;
   }
 
-  return buildPhotoRequest(category, shotKey, {
+  return buildCaptureRequest(adType, category, shotKey, {
     primarySubject: workflow.primarySubject ?? "주력 메뉴",
     storeSpecialty: workflow.storeSpecialty ?? null,
   });
@@ -246,7 +290,12 @@ export function getNextShot(
   workflow: AdSessionWorkflow,
   category: StoreCategoryCode,
 ) {
-  const shotPlan = workflow.shotPlan?.length ? workflow.shotPlan : DEFAULT_FOOD_SHOT_PLAN;
+  const adType = workflow.adType === "video" ? "video" : "photo";
+  const shotPlan = workflow.shotPlan?.length
+    ? workflow.shotPlan
+    : adType === "video"
+      ? DEFAULT_VIDEO_SHOT_PLAN
+      : DEFAULT_FOOD_SHOT_PLAN;
   const nextIndex =
     (typeof workflow.currentShotIndex === "number" ? workflow.currentShotIndex : 0) + 1;
   const shotKey = shotPlan[nextIndex] ?? null;
@@ -257,7 +306,7 @@ export function getNextShot(
 
   return {
     nextIndex,
-    request: buildPhotoRequest(category, shotKey, {
+    request: buildCaptureRequest(adType, category, shotKey, {
       primarySubject: workflow.primarySubject ?? "주력 메뉴",
       storeSpecialty: workflow.storeSpecialty ?? null,
     }),
@@ -374,6 +423,120 @@ export function buildPhotoRequest(
       ? null
       : findGuideOrderByTitle(category, ["건더기 들어 올리기", "한 입 포인트", "디테일 액션", "대표 추천 메뉴"]),
   };
+}
+
+function buildVideoRequest(
+  shotKey: AdSessionShotKey,
+  options: {
+    primarySubject: string;
+    storeSpecialty?: string | null;
+  },
+): AdSessionPhotoRequest {
+  const primarySubject = options.primarySubject;
+  const specialtyPrompt = normalizeSpecialtyPrompt(options.storeSpecialty ?? null);
+  const sideMenuSubject = specialtyPrompt
+    ? specialtyPrompt
+    : `${primarySubject} 외 다른 메뉴`;
+
+  switch (shotKey) {
+    case "video_storefront_sign":
+      return {
+        shotKey,
+        assetType: "video_clip",
+        title: "가게 간판",
+        prompt: "영상요청 : 가게 간판이 보이도록 2초 영상",
+        helperText: "가게 이름과 간판이 보이게 2초 이상 짧게 촬영해주세요.",
+        reviewShotOrder: null,
+      };
+    case "video_storefront_entry":
+      return {
+        shotKey,
+        assetType: "video_clip",
+        title: "가게 입구 진입",
+        prompt: "영상요청 : 가게 입구에서 들어가는 2초 영상",
+        helperText: "가게 앞에서 입구 안쪽으로 들어가는 느낌이 보이게 2초 이상 촬영해주세요.",
+        reviewShotOrder: null,
+      };
+    case "video_menu_board":
+      return {
+        shotKey,
+        assetType: "video_clip",
+        title: "메뉴판",
+        prompt: "영상요청 : 메뉴판이 보이도록 2초 영상",
+        helperText: "메뉴판이 화면 안에 보이도록 2초 이상 촬영해주세요.",
+        reviewShotOrder: null,
+      };
+    case "video_signature_menu":
+      return {
+        shotKey,
+        assetType: "video_clip",
+        title: primarySubject,
+        prompt: `영상요청 : ${primarySubject}이 보이도록 2초 영상`,
+        helperText: `${primarySubject}가 잘 보이도록 2초 이상 촬영해주세요.`,
+        reviewShotOrder: null,
+      };
+    case "video_signature_interaction":
+      return {
+        shotKey,
+        assetType: "video_clip",
+        title: `${primarySubject} 상호작용`,
+        prompt: `영상요청 : ${primarySubject}을 집거나 먹는 모습이 보이도록 2초 영상`,
+        helperText: `${primarySubject}과 상호작용하는 장면이 자연스럽게 보이도록 2초 이상 촬영해주세요.`,
+        reviewShotOrder: null,
+      };
+    case "video_cooking_scene":
+      return {
+        shotKey,
+        assetType: "video_clip",
+        title: "조리 장면",
+        prompt: `영상요청 : ${primarySubject}을 조리하는 모습이 보이도록 2초 영상`,
+        helperText: "조리 과정이나 불판, 손동작이 보이도록 2초 이상 촬영해주세요.",
+        reviewShotOrder: null,
+      };
+    case "video_side_menu":
+      return {
+        shotKey,
+        assetType: "video_clip",
+        title: "서브메뉴",
+        prompt: `영상요청 : ${sideMenuSubject}이 보이도록 2초 영상`,
+        helperText: "주력메뉴 외에 함께 보여주고 싶은 다른 메뉴가 보이도록 2초 이상 촬영해주세요.",
+        reviewShotOrder: null,
+      };
+    case "video_side_menu_interaction":
+      return {
+        shotKey,
+        assetType: "video_clip",
+        title: "서브메뉴 상호작용",
+        prompt: `영상요청 : ${sideMenuSubject}을 집거나 먹는 모습이 보이도록 2초 영상`,
+        helperText: "다른 메뉴와 상호작용하는 장면이 보이도록 2초 이상 촬영해주세요.",
+        reviewShotOrder: null,
+      };
+    default:
+      return {
+        shotKey,
+        assetType: "video_clip",
+        title: "영상",
+        prompt: "영상요청 : 2초 영상",
+        helperText: "2초 이상 촬영해주세요.",
+        reviewShotOrder: null,
+      };
+  }
+}
+
+function buildCaptureRequest(
+  adType: AdSessionType,
+  category: StoreCategoryCode,
+  shotKey: AdSessionShotKey,
+  options: {
+    primarySubject: string;
+    storeSpecialty?: string | null;
+  },
+) {
+  if (adType === "video") {
+    return buildVideoRequest(shotKey, options);
+  }
+
+  return buildPhotoRequest(category, shotKey, options);
 }
 
 export function buildSessionStoreType(store: AdSessionStore) {

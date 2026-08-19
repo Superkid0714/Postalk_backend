@@ -57,10 +57,10 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  if (body.adType !== "photo") {
+  if (body.adType !== "photo" && body.adType !== "video") {
     details.push({
       field: "adType",
-      reason: "Only photo ad sessions are supported right now",
+      reason: "adType must be either photo or video",
     });
   }
 
@@ -110,6 +110,7 @@ export async function POST(request: NextRequest) {
   }
 
   const workflow = buildSessionWorkflowSeed(combinedIntroText, {
+    adType: body.adType,
     menuIntro: body.menuIntro?.trim() ?? null,
     storeSpecialty: body.storeSpecialty?.trim() ?? null,
   });
@@ -126,7 +127,7 @@ export async function POST(request: NextRequest) {
     .from("ad_creation_sessions")
     .insert({
       store_id: store.id,
-      ad_type: "photo",
+      ad_type: body.adType,
       intro_text: combinedIntroText,
       status: "collecting",
       style_preset: "food_card_news",
@@ -142,21 +143,23 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  after(async () => {
-    try {
-      await prepareAdSessionDrafts(session.id);
-    } catch (draftError) {
-      console.error("Ad session draft preparation failed", {
-        sessionId: session.id,
-        error: draftError,
-      });
-    }
-  });
+  if (body.adType === "photo") {
+    after(async () => {
+      try {
+        await prepareAdSessionDrafts(session.id);
+      } catch (draftError) {
+        console.error("Ad session draft preparation failed", {
+          sessionId: session.id,
+          error: draftError,
+        });
+      }
+    });
+  }
 
   return successResponse(
     {
       sessionId: session.id,
-      adType: "photo",
+      adType: body.adType,
       status: session.status,
       stylePreset: session.style_preset,
       createdAt: session.created_at,
