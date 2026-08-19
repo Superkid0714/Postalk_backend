@@ -31,6 +31,60 @@ export type PhotoReviewResult = {
   checks: PhotoReviewCheckResult;
 };
 
+function hasCriticalMenuBoardFailure(checks: PhotoReviewCheckResult) {
+  return (
+    checks.focus === "fail" ||
+    checks.subjectVisibility === "fail" ||
+    checks.textReadability === "fail"
+  );
+}
+
+function applyAssetSpecificReviewHeuristics(
+  assetType: "menu_board" | "food_photo",
+  review: PhotoReviewResult,
+): PhotoReviewResult {
+  if (assetType !== "menu_board") {
+    return review;
+  }
+
+  if (hasCriticalMenuBoardFailure(review.checks)) {
+    return {
+      ...review,
+      passed: false,
+      recommendedAction: "retake",
+    };
+  }
+
+  const softWarnings = [
+    review.checks.brightness,
+    review.checks.framing,
+    review.checks.guideMatch,
+  ].filter((value) => value === "warning" || value === "fail").length;
+
+  const canProceed =
+    review.checks.focus !== "fail" &&
+    review.checks.subjectVisibility !== "fail" &&
+    review.checks.textReadability !== "fail" &&
+    review.score >= 55 &&
+    softWarnings <= 2;
+
+  if (!review.passed && canProceed) {
+    return {
+      ...review,
+      passed: true,
+      score: Math.max(review.score, 60),
+      recommendedAction: "proceed",
+      summary: "메뉴판으로 활용 가능한 수준이라 다음 단계로 진행합니다.",
+      feedback:
+        review.feedback.length > 0
+          ? review.feedback
+          : ["메뉴와 가격이 전반적으로 보여서 다음 단계로 진행할 수 있습니다."],
+    };
+  }
+
+  return review;
+}
+
 function buildFallbackReviewResult(reason: string): PhotoReviewResult {
   return {
     passed: false,
@@ -162,6 +216,9 @@ function buildPhotoReviewPrompt(params: {
     "Return strict JSON only.",
     "Judge whether this photo is good enough to keep or should be retaken.",
     "Be strict but practical. Focus on whether the photo is usable for an ad-making workflow on mobile.",
+    params.assetType === "menu_board"
+      ? "For menu boards, do not require every tiny line to be perfectly readable. Pass if representative menu names and prices are mostly readable and the board is clearly captured."
+      : "For food photos, require a clearly visible subject and an appealing composition.",
     "Return JSON keys only: passed, score, recommendedAction, summary, feedback, checks.",
     "checks must include: focus, brightness, framing, subjectVisibility, guideMatch, textReadability.",
     "Each check value must be one of: pass, warning, fail, not_applicable.",
@@ -181,7 +238,10 @@ function buildPhotoReviewPrompt(params: {
     "- Is the subject clearly visible and not cut awkwardly?",
     "- Is the image too dark or too blown out?",
     "- Does the image match the requested shot guidance?",
-    "- If menu text should be readable, can a user actually read it well enough?",
+    "- If menu text should be readable, can a user actually read the main menu names and prices well enough?",
+    params.assetType === "menu_board"
+      ? "- For menu boards, readability of the main sections and representative items matters more than perfect OCR-level clarity."
+      : "- For food photos, prioritize subject clarity and framing over text.",
     "- Do not invent store facts. Only review image quality and guidance match.",
   ].join("\n");
 }
@@ -261,7 +321,7 @@ export async function reviewPhotoAsset(
       );
     }
 
-    return parsed;
+    return applyAssetSpecificReviewHeuristics(params.assetType, parsed);
   } catch {
     return buildFallbackReviewResult("Photo review returned invalid JSON");
   }
