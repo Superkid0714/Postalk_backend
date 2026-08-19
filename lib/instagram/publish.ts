@@ -520,7 +520,15 @@ async function publishInstagramMedia(
   mediaType: InstagramMediaType,
   mediaUrls: string[],
   caption: string | null,
-) {
+): Promise<{
+  publishMode: "single" | "carousel";
+  carouselItemCount: number;
+  containerId: string;
+  publishedMediaId: string | null;
+  permalink: string | null;
+  status: "processing";
+  containerStatusCode: string;
+}> {
   const config = getInstagramConfig();
 
   if (!config) {
@@ -557,6 +565,7 @@ async function publishInstagramMedia(
         carouselItemCount: mediaUrls.length,
         containerId: carousel.id,
         publishedMediaId: null,
+        permalink: null,
         status: "processing" as const,
         containerStatusCode: "IN_PROGRESS",
       };
@@ -575,6 +584,7 @@ async function publishInstagramMedia(
       carouselItemCount: 1,
       containerId: container.id,
       publishedMediaId: null,
+      permalink: null,
       status: "processing" as const,
       containerStatusCode: "IN_PROGRESS",
     };
@@ -594,6 +604,7 @@ async function publishInstagramMedia(
     carouselItemCount: 1,
     containerId: container.id,
     publishedMediaId: null,
+    permalink: null,
     status: "processing" as const,
     containerStatusCode: "IN_PROGRESS",
   };

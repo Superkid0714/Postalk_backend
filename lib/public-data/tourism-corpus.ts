@@ -161,7 +161,9 @@ async function loadTourismCorpusEntries(
     return cached;
   }
 
-  const markdown = await (deps?.fileReader ?? readFile)(reportPath, "utf8");
+  const fileReader =
+    deps?.fileReader ?? ((path: string) => readFile(path, "utf8"));
+  const markdown = await fileReader(reportPath);
   const entries = parseTourismCorpusEntries(markdown);
   reportCache.set(reportPath, entries);
   return entries;
