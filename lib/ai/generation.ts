@@ -320,109 +320,7 @@ export async function generateFoodCardNewsPlan(
   submission: SubmissionForGeneration,
 ): Promise<FoodCardNewsCreativePlan> {
   const fallbackPlan = buildDefaultFoodCardNewsPlan(submission);
-  const apiKey = getOpenAiApiKey();
-
-  if (!apiKey) {
-    return fallbackPlan;
-  }
-
-  const prompt = [
-    "You are the creative planning director for a Korean food advertising carousel.",
-    "Plan exactly 4 Instagram food-ad cards before image generation.",
-    "Return strict JSON only with keys: concept, tone, cards.",
-    "cards must be an array of 4 objects with keys: key, title, visualFocus, copyDirection, composition, forbidden.",
-    "Allowed keys only: hero_cover, signature_detail, action_shot, closing_cta.",
-    "The result must be food-advertising oriented, not informational brochure style.",
-    "Use short Korean-friendly creative directions but return JSON string values only.",
-    "Avoid long copy, flyer tone, template feel, and generic card-news filler.",
-    JSON.stringify({
-      store_name: submission.stores?.store_name ?? null,
-      market_name: submission.stores?.market_name ?? null,
-      owner_name: submission.stores?.owner_name ?? null,
-      store_type: submission.store_type,
-      target_menu_name: submission.target_menu_name,
-      price_text: submission.price_text,
-      appeal_point: submission.appeal_point,
-      extra_message: submission.extra_message,
-      caption: submission.caption,
-    }, null, 2),
-  ].join("\n");
-
-  try {
-    const response = await fetchWithTimeout("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4.1-mini",
-        input: prompt,
-      }),
-      timeoutMs: 30_000,
-    });
-
-    if (!response.ok) {
-      return fallbackPlan;
-    }
-
-    const json = (await response.json()) as OpenAiResponsesResponse;
-    const outputText =
-      typeof json.output_text === "string" ? stripCodeFence(json.output_text) : "";
-
-    if (!outputText) {
-      return fallbackPlan;
-    }
-
-    const parsed = JSON.parse(outputText) as Partial<FoodCardNewsCreativePlan>;
-
-    if (
-      typeof parsed.concept !== "string" ||
-      typeof parsed.tone !== "string" ||
-      !Array.isArray(parsed.cards) ||
-      parsed.cards.length !== 4
-    ) {
-      return fallbackPlan;
-    }
-
-    return {
-      concept: parsed.concept,
-      tone: parsed.tone,
-      cards: parsed.cards.map((card, index) => {
-        const fallbackCard = fallbackPlan.cards[index]!;
-        const record =
-          card && typeof card === "object" && !Array.isArray(card)
-            ? (card as Record<string, unknown>)
-            : {};
-
-        return {
-          key:
-            record.key === fallbackCard.key ? fallbackCard.key : fallbackCard.key,
-          title:
-            typeof record.title === "string" && record.title.trim()
-              ? record.title.trim()
-              : fallbackCard.title,
-          visualFocus:
-            typeof record.visualFocus === "string" && record.visualFocus.trim()
-              ? record.visualFocus.trim()
-              : fallbackCard.visualFocus,
-          copyDirection:
-            typeof record.copyDirection === "string" && record.copyDirection.trim()
-              ? record.copyDirection.trim()
-              : fallbackCard.copyDirection,
-          composition:
-            typeof record.composition === "string" && record.composition.trim()
-              ? record.composition.trim()
-              : fallbackCard.composition,
-          forbidden: Array.isArray(record.forbidden)
-            ? record.forbidden.filter((item): item is string => typeof item === "string")
-            : fallbackCard.forbidden,
-        };
-      }),
-    };
-  } catch {
-    return fallbackPlan;
-  }
+  return fallbackPlan;
 }
 
 export async function generatePromoCaption(
@@ -655,7 +553,7 @@ export function choosePromoImageCount(
   stylePreset: GenerationStylePreset,
 ) {
   if (stylePreset === "food_card_news") {
-    return 4;
+    return 5;
   }
 
   const merchantInsights = readMerchantInsights(submission.ai_metadata);

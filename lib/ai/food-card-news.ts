@@ -1,7 +1,14 @@
 import type { SubmissionForGeneration } from "@/lib/ai/generation";
 
+export type FoodCardNewsCardKey =
+  | "cover_vertical_still_life"
+  | "dark_flatlay_editorial"
+  | "circular_editorial_layout"
+  | "vertical_quote_band"
+  | "closing_information";
+
 export type FoodCardNewsPlanCard = {
-  key: "hero_cover" | "signature_detail" | "action_shot" | "closing_cta";
+  key: FoodCardNewsCardKey;
   title: string;
   visualFocus: string;
   copyDirection: string;
@@ -17,7 +24,7 @@ export type FoodCardNewsCreativePlan = {
 
 export type FoodCardNewsCardPrompt = {
   index: number;
-  key: "hero_cover" | "signature_detail" | "action_shot" | "closing_cta";
+  key: FoodCardNewsCardKey;
   title: string;
   prompt: string;
 };
@@ -30,95 +37,152 @@ function compactText(value: string | null | undefined, fallback: string) {
   return value.trim();
 }
 
-function buildFoodCardNewsCommonSpec(submission: SubmissionForGeneration) {
+function sanitizeLabel(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function sanitizeHashTagLabel(value: string) {
+  return value.replace(/\s+/g, "");
+}
+
+function splitVerticalLabel(value: string, maxLength = 4) {
+  const cleaned = sanitizeLabel(value).replace(/\s+/g, "");
+
+  if (!cleaned) {
+    return "한 / 장";
+  }
+
+  return cleaned
+    .slice(0, maxLength)
+    .split("")
+    .join(" / ");
+}
+
+function buildFoodCardNewsContext(submission: SubmissionForGeneration) {
   const storeName = compactText(submission.stores?.store_name, "전통시장 음식점");
   const marketName = compactText(submission.stores?.market_name, "전통시장");
   const menuName = compactText(submission.target_menu_name, "대표 메뉴");
   const ownerName = compactText(submission.stores?.owner_name, "사장님");
   const priceText = compactText(submission.price_text, "가격 정보는 후처리로 표기");
-  const appealPoint = compactText(submission.appeal_point, "현장에서 바로 먹고 싶은 식감과 온도감");
+  const appealPoint = compactText(
+    submission.appeal_point,
+    "시장 현장에서 바로 먹고 싶어지는 식감과 온도감",
+  );
   const extraMessage = compactText(
     submission.extra_message,
-    "전통시장 현장의 온기와 정직한 음식의 무드를 유지",
+    "전통시장 현장의 온기와 정직한 손맛을 유지",
   );
-  const shortCaption = compactText(
+  const caption = compactText(
     submission.caption,
-    `${menuName} 어떠세요? ${appealPoint}`,
+    `${menuName}의 먹음직스러운 장면을 중심으로 카드뉴스 구성`,
   );
+
+  return {
+    storeName,
+    marketName,
+    menuName,
+    ownerName,
+    priceText,
+    appealPoint,
+    extraMessage,
+    caption,
+    menuVerticalLabel: splitVerticalLabel(menuName, 4),
+    marketVerticalLabel: splitVerticalLabel(marketName, 4),
+    storeHashLabel: sanitizeHashTagLabel(storeName),
+    marketHashLabel: sanitizeHashTagLabel(marketName),
+  };
+}
+
+function buildCommonSpec(submission: SubmissionForGeneration) {
+  const context = buildFoodCardNewsContext(submission);
 
   return `
-You are a world-class Korean food advertising art director creating one premium Instagram card image.
-Create exactly one card image for this turn. Never create a collage, grid, or multi-page sheet.
-This is FOOD ONLY. Do not reinterpret the subject as fashion, goods, or service content.
+You are a senior editorial designer specializing in Korean food magazines and cookbook spreads.
+Create exactly one Instagram card image for this turn. Never combine multiple cards into one sheet.
+This series is FOOD ONLY and must look like a refined Korean editorial food campaign.
 
-Merchant facts:
-- Store name: ${storeName}
-- Market: ${marketName}
-- Owner reference: ${ownerName}
-- Featured menu: ${menuName}
-- Price text reference: ${priceText}
-- Appeal point: ${appealPoint}
-- Extra note: ${extraMessage}
-- Suggested caption direction: ${shortCaption}
+Series source facts:
+- Store name: ${context.storeName}
+- Market location label: ${context.marketName}
+- Owner reference: ${context.ownerName}
+- Featured menu: ${context.menuName}
+- Price reference: ${context.priceText}
+- Appeal point from merchant: ${context.appealPoint}
+- Extra merchant note: ${context.extraMessage}
+- Caption direction reference: ${context.caption}
 
-Global design rules:
-- Canvas ratio: 1080x1350 vertical.
-- This must feel like a luxury food advertisement prepared for a real merchant, not a generic card template.
-- Focus on real-food photography quality, premium composition, believable texture, appetizing gloss, natural steam when appropriate, and strong subject separation.
-- The dish must look richer, more tempting, and more professionally lit than a casual phone snapshot, while staying realistic.
-- Use restrained Korean editorial styling with premium restaurant-poster energy.
-- Avoid bland beige layouts, empty filler space, generic brochure compositions, collage chaos, fake icons, fake UI, stock-template mood, or obvious AI poster cheapness.
-- If any text appears inside the image, keep it extremely minimal: at most one bold Korean headline plus one small price or store cue.
-- Korean text should be short, thick, high-contrast, and naturally integrated. Never place long paragraphs or many labels.
-- No unreadable tiny text. No distorted Hangul. No random English slogans unless naturally part of the design.
-- Food must be the hero. No illustrated food, no fake 3D, no surreal garnish, no duplicated pieces, no malformed chopsticks or hands.
-- Background and props should support the dish, not compete with it.
+Mandatory production rules:
+- Canvas: 1080 x 1350 vertical, one image only.
+- Use a premium editorial direction inspired by a luxury cookbook spread and Michelin-level menu design.
+- Respect this restrained palette only:
+  - light page background #F6F1E4
+  - dark page background #221D19
+  - body text ink #2A2620
+  - light-page secondary text #8B8175
+  - dark-page secondary text #B5AB9C
+  - photo overlay text #F0EADD
+  - thin rules #D8CDB6
+  - seal and color-band accent #7E2E24
+- Typography mood: Korean serif or Myeongjo only, light or regular only, never bold display fonts.
+- English, if any, must be Garamond-like serif and used sparingly.
+- Use Korean vertical editorial composition tastefully.
+- Only these Korean-aesthetic motifs are allowed: vertical typesetting, subtle cloud watermark line art, seal stamp.
+- Forbidden motifs: taeguk, hanbok, lanterns, knots, fans, calligraphy brush fonts, torn paper textures, glow, neon, stickers, speech bubbles, icons, emojis, thick outlines.
+- Food must remain realistic, delicious, and premium. No surreal food, no malformed utensils, no fake hands, no collage board.
+- Avoid generic ad-template look. This should feel like an art-directed editorial food card.
+- Keep on-image copy minimal and elegant. Never place long paragraphs everywhere.
+- If Korean text rendering quality becomes unreliable, prioritize layout fidelity, realistic food photography mood, and reserved placeholder-like short text treatment rather than broken text noise.
 `.trim();
 }
 
 export function buildDefaultFoodCardNewsPlan(
   submission: SubmissionForGeneration,
 ): FoodCardNewsCreativePlan {
-  const menuName = compactText(submission.target_menu_name, "대표 메뉴");
-  const storeName = compactText(submission.stores?.store_name, "전통시장 음식점");
-  const marketName = compactText(submission.stores?.market_name, "전통시장");
-  const appealPoint = compactText(submission.appeal_point, "정직한 맛");
+  const context = buildFoodCardNewsContext(submission);
 
   return {
-    concept: `${marketName}의 ${storeName}가 만드는 ${menuName}를 프리미엄 푸드 광고 카드뉴스로 표현`,
-    tone: "진하고 고급스럽고 실제 음식 광고 같은 톤",
+    concept: `${context.marketName}의 ${context.storeName}를 요리책 지면형 인스타그램 카드뉴스 5장으로 구성`,
+    tone: "전통시장 음식의 따뜻함 위에 고급 요리책 에디토리얼 무드를 덧입힌 톤",
     cards: [
       {
-        key: "hero_cover",
+        key: "cover_vertical_still_life",
         title: "표지",
-        visualFocus: `${menuName} 완성 접시의 히어로 컷, 강한 김, 윤기, 선명한 질감`,
-        copyDirection: "메뉴 이름 중심의 매우 짧은 강한 헤드라인",
-        composition: "세로형 풀블리드, 음식이 화면 대부분을 차지, 상단에 헤드라인 공간",
-        forbidden: ["밋밋한 템플릿", "정보과다", "잡다한 소품"],
+        visualFocus: `${context.menuName} 완성 접시를 전면 정물 히어로 컷으로 구성`,
+        copyDirection: "세로쓰기 중심의 짧고 상징적인 표지 카피",
+        composition: "풀블리드 음식 사진, 좌측 세로쓰기 3단, 우측 하단 낙관",
+        forbidden: ["복잡한 배경", "카드 합성", "잡다한 소품"],
       },
       {
-        key: "signature_detail",
-        title: "시그니처",
-        visualFocus: `${menuName}의 핵심 질감과 양념 디테일, ${appealPoint}`,
-        copyDirection: "먹고 싶게 만드는 한 줄",
-        composition: "타이트한 클로즈업, 음식 확대, 텍스트는 최소",
-        forbidden: ["여백만 많은 잡지 레이아웃", "불필요한 메뉴판 재현"],
+        key: "dark_flatlay_editorial",
+        title: "속지 A",
+        visualFocus: `${context.menuName}와 곁들임 요소를 어두운 플랫레이 지면으로 배치`,
+        copyDirection: "짧은 제목 클러스터와 설명 덩어리 중심",
+        composition: "짙은 상판 위 사물 55%, 빈 상판 45%, 텍스트는 빈 영역에만",
+        forbidden: ["중앙 몰림", "음식 위 텍스트", "밝은 배경"],
       },
       {
-        key: "action_shot",
-        title: "액션",
-        visualFocus: `젓가락이나 집게로 ${menuName}를 들어 올리는 순간`,
-        copyDirection: "행동을 유도하는 짧은 문장 또는 무카피",
-        composition: "손과 음식의 상호작용이 자연스럽게 보이는 역동적 구도",
-        forbidden: ["비정상적인 손", "어색한 젓가락", "비현실적 음식 구조"],
+        key: "circular_editorial_layout",
+        title: "속지 B",
+        visualFocus: `${context.menuName}의 클로즈업과 작업 장면을 원형 컷 2개로 편집`,
+        copyDirection: "짧은 제목과 소제목, 세로 라벨 중심",
+        composition: "밝은 지면, 원형 사진 2개, 좌측 세로 라벨, 넓은 여백",
+        forbidden: ["사각형 사진 배열", "과도한 장식", "무거운 레이아웃"],
       },
       {
-        key: "closing_cta",
+        key: "vertical_quote_band",
+        title: "속지 C",
+        visualFocus: `${context.ownerName}의 조리 철학을 세로 색띠 인용 지면으로 표현`,
+        copyDirection: "세로쓰기 인용문 한 덩어리",
+        composition: "우측 세로 색띠, 하단 직사각 사진, 좌측 상단 캡션 박스",
+        forbidden: ["구름무늬 남용", "헤드라인 추가", "전단지식 정보 나열"],
+      },
+      {
+        key: "closing_information",
         title: "마감",
-        visualFocus: `${storeName}와 ${marketName}의 정체성이 살아있는 마감 포스터`,
-        copyDirection: "저장하고 방문하고 싶게 만드는 마감형 카피",
-        composition: "조금 더 정돈된 포스터 구도, 음식과 짧은 브랜드 정보",
-        forbidden: ["정보 페이지 느낌", "단순 배경 카드", "전단지 느낌"],
+        visualFocus: `${context.storeName}와 ${context.marketName}의 인상을 남기는 정돈된 클로징`,
+        copyDirection: "가운데 정렬된 마무리 문구와 최소 정보",
+        composition: "밝은 배경, 구름무늬 워터마크, 중앙 정보 블록",
+        forbidden: ["아이콘", "과도한 정보", "복잡한 배경 사진"],
       },
     ],
   };
@@ -139,108 +203,147 @@ export function isFoodCardNewsEligible(submission: SubmissionForGeneration) {
   );
 }
 
+function buildPlanningLayer(
+  plan: FoodCardNewsCreativePlan,
+  cardKey: FoodCardNewsCardPrompt["key"],
+) {
+  const card = findPlanCard(plan, cardKey);
+
+  return `
+Creative planning layer:
+- Campaign concept: ${plan.concept}
+- Overall tone: ${plan.tone}
+- Card role: ${card?.title ?? ""}
+- Visual focus: ${card?.visualFocus ?? ""}
+- Copy direction: ${card?.copyDirection ?? ""}
+- Composition: ${card?.composition ?? ""}
+- Forbidden: ${(card?.forbidden ?? []).join(", ")}
+`.trim();
+}
+
 export function buildFoodCardNewsPrompts(
   submission: SubmissionForGeneration,
   plan?: FoodCardNewsCreativePlan | null,
 ): FoodCardNewsCardPrompt[] {
-  const common = buildFoodCardNewsCommonSpec(submission);
+  const common = buildCommonSpec(submission);
   const creativePlan = plan ?? buildDefaultFoodCardNewsPlan(submission);
-  const menuName = compactText(submission.target_menu_name, "대표 메뉴");
-  const storeName = compactText(submission.stores?.store_name, "전통시장 음식점");
-  const marketName = compactText(submission.stores?.market_name, "전통시장");
+  const context = buildFoodCardNewsContext(submission);
 
   return [
     {
       index: 0,
-      key: "hero_cover",
+      key: "cover_vertical_still_life",
       title: "표지",
       prompt: `${common}
 
-Creative planning layer:
-- Campaign concept: ${creativePlan.concept}
-- Overall tone: ${creativePlan.tone}
-- Card role: ${findPlanCard(creativePlan, "hero_cover")?.title ?? "표지"}
-- Visual focus: ${findPlanCard(creativePlan, "hero_cover")?.visualFocus ?? ""}
-- Copy direction: ${findPlanCard(creativePlan, "hero_cover")?.copyDirection ?? ""}
-- Composition: ${findPlanCard(creativePlan, "hero_cover")?.composition ?? ""}
-- Forbidden: ${(findPlanCard(creativePlan, "hero_cover")?.forbidden ?? []).join(", ")}
+${buildPlanningLayer(creativePlan, "cover_vertical_still_life")}
 
-Create card 1 only: hero cover card.
-- Full-bleed hero food advertisement image for ${menuName}.
-- The dish should dominate the frame with immediate craving appeal.
-- Show the food at its most delicious moment: rich sauce, steam, gloss, juicy texture, clear ingredient detail.
-- Lighting should feel premium and cinematic, like a restaurant campaign poster.
-- Use a darker or cleaner background so the food pops hard.
-- If text appears, allow only one short bold Korean headline such as the menu name and optionally one small price cue.
-- The result must feel high-end, premium, and instantly postable on Instagram.`,
+Create card 1 only: cover card with vertical still-life composition.
+- Full-bleed hero food photograph filling the entire 1080x1350 canvas.
+- The featured dish is ${context.menuName}. It must look like the signature finished plate from ${context.storeName}.
+- Place the dish around the lower third so the upper area feels visually calmer, like an editorial cover with breathing room.
+- Use a textured single-tone wall or restrained backdrop behind the dish. Keep it elegant, quiet, and uncluttered.
+- Add a soft dark veil from left to right to create legibility for vertical cover typography.
+- Use refined Korean vertical editorial text treatment on the left side only, inspired by the fixed prompt structure.
+- Include only very short cover text cues based on:
+  - main vertical title: ${context.menuName}
+  - market cue: ${context.marketName}
+  - short supporting cue: ${context.priceText}
+- Add a small traditional seal-like square accent at lower right in muted deep red.
+- Do not use cloud watermark on this card.
+- The overall result must feel like a premium Korean cookbook-meets-Instagram cover, not a cheap poster.`,
     },
     {
       index: 1,
-      key: "signature_detail",
-      title: "시그니처",
+      key: "dark_flatlay_editorial",
+      title: "속지 A",
       prompt: `${common}
 
-Creative planning layer:
-- Campaign concept: ${creativePlan.concept}
-- Overall tone: ${creativePlan.tone}
-- Card role: ${findPlanCard(creativePlan, "signature_detail")?.title ?? "시그니처"}
-- Visual focus: ${findPlanCard(creativePlan, "signature_detail")?.visualFocus ?? ""}
-- Copy direction: ${findPlanCard(creativePlan, "signature_detail")?.copyDirection ?? ""}
-- Composition: ${findPlanCard(creativePlan, "signature_detail")?.composition ?? ""}
-- Forbidden: ${(findPlanCard(creativePlan, "signature_detail")?.forbidden ?? []).join(", ")}
+${buildPlanningLayer(creativePlan, "dark_flatlay_editorial")}
 
-Create card 2 only: signature detail card.
-- Tighter composition focusing on the strongest selling detail of ${menuName}.
-- Emphasize texture, sauce, char, crispness, moisture, steam, or filling depending on the dish.
-- Make it feel like the shot that makes a customer stop scrolling immediately.
-- Use close-up food advertising photography, not a magazine spread with lots of empty space.
-- Show strong premium styling with a few restrained props only if they increase appetite.
-- If text appears, keep it to one short selling phrase only.`,
+Create card 2 only: dark flat-lay editorial page.
+- This card must be a dark page using an almost black-brown tabletop close to #221D19.
+- Top-down flat-lay composition across the full canvas.
+- Arrange the featured food, small side elements, and market-serving props diagonally from lower left to upper right.
+- The objects should occupy about 55 percent of the frame, leaving about 45 percent as empty dark tabletop for editorial text clusters.
+- Use only restrained short Korean text clusters placed in the empty tabletop area, never on top of food.
+- Use a small vertical label near upper left based on ${context.marketVerticalLabel}.
+- The text-cluster mood should communicate real selling points from merchant facts:
+  - appeal point: ${context.appealPoint}
+  - extra note: ${context.extraMessage}
+  - caption direction: ${context.caption}
+- Keep each text block short and elegant, like cookbook side notes.
+- Lighting should create crisp but short shadows, emphasizing premium editorial food styling.
+- No cloud watermark on this dark page.`,
     },
     {
       index: 2,
-      key: "action_shot",
-      title: "액션",
+      key: "circular_editorial_layout",
+      title: "속지 B",
       prompt: `${common}
 
-Creative planning layer:
-- Campaign concept: ${creativePlan.concept}
-- Overall tone: ${creativePlan.tone}
-- Card role: ${findPlanCard(creativePlan, "action_shot")?.title ?? "액션"}
-- Visual focus: ${findPlanCard(creativePlan, "action_shot")?.visualFocus ?? ""}
-- Copy direction: ${findPlanCard(creativePlan, "action_shot")?.copyDirection ?? ""}
-- Composition: ${findPlanCard(creativePlan, "action_shot")?.composition ?? ""}
-- Forbidden: ${(findPlanCard(creativePlan, "action_shot")?.forbidden ?? []).join(", ")}
+${buildPlanningLayer(creativePlan, "circular_editorial_layout")}
 
-Create card 3 only: action shot card.
-- Capture a dynamic serving or eating moment around ${menuName}: chopsticks lifting, spoon scooping, sauce pouring, slicing, plating, or steam rising.
-- The action must feel believable, clean, appetizing, and energetic.
-- Hands, utensils, and food proportions must look anatomically and physically correct.
-- Composition should still feel premium and controlled, not messy.
-- This card should feel alive and social-media strong, while still looking like a professional ad.
-- If text appears, use only a tiny cue or no text.`,
+Create card 3 only: bright editorial page with circular photo cutouts.
+- Use a clean light page background #F6F1E4 with abundant negative space.
+- Build the page around two circular photo windows placed diagonally, one large and one smaller.
+- The large circular cutout should focus on the most appetizing close-up of ${context.menuName}.
+- The smaller circular cutout should show a secondary action or preparation detail connected to the dish.
+- On the left, create restrained vertical label columns inspired by editorial Myeongjo layout using ${context.menuVerticalLabel}.
+- Add short title and note clusters only, in a calm high-end cookbook tone.
+- Suggested short copy source:
+  - menu: ${context.menuName}
+  - price cue: ${context.priceText}
+  - merchant appeal: ${context.appealPoint}
+- Include one subtle cloud watermark only in a corner, cropped off the edge, as thin line art.
+- The page must feel airy, balanced, and luxuriously sparse.`,
     },
     {
       index: 3,
-      key: "closing_cta",
+      key: "vertical_quote_band",
+      title: "속지 C",
+      prompt: `${common}
+
+${buildPlanningLayer(creativePlan, "vertical_quote_band")}
+
+Create card 4 only: bright page with a strong vertical quote band.
+- Use a light page background #F6F1E4.
+- Build a tall deep-red vertical band on the right using #7E2E24, cropped at the top edge, ending around the upper-middle area.
+- On that color band, place a short elegant vertical quote in Korean inspired by the merchant's real selling point.
+- Quote source material must only come from merchant facts such as:
+  - appeal point: ${context.appealPoint}
+  - extra note: ${context.extraMessage}
+  - caption direction: ${context.caption}
+- Include a small upper-left caption box with only minimal store and market identifiers:
+  - ${context.storeName}
+  - ${context.marketName}
+- Place one rectangular food or cooking-scene photo across the lower area, partially overlapping the lower end of the vertical band.
+- This card should feel like a sophisticated editorial pull-quote spread.
+- Do not add cloud motifs or extra headline blocks here.`,
+    },
+    {
+      index: 4,
+      key: "closing_information",
       title: "마감",
       prompt: `${common}
 
-Creative planning layer:
-- Campaign concept: ${creativePlan.concept}
-- Overall tone: ${creativePlan.tone}
-- Card role: ${findPlanCard(creativePlan, "closing_cta")?.title ?? "마감"}
-- Visual focus: ${findPlanCard(creativePlan, "closing_cta")?.visualFocus ?? ""}
-- Copy direction: ${findPlanCard(creativePlan, "closing_cta")?.copyDirection ?? ""}
-- Composition: ${findPlanCard(creativePlan, "closing_cta")?.composition ?? ""}
-- Forbidden: ${(findPlanCard(creativePlan, "closing_cta")?.forbidden ?? []).join(", ")}
+${buildPlanningLayer(creativePlan, "closing_information")}
 
-Create card 4 only: closing call-to-action card.
-- Make a cleaner poster-like closing image featuring ${menuName} with strong brand finish.
-- Include the feeling of a final memorable ad slide for ${storeName} in ${marketName}.
-- Allow one short bold headline and a subtle store or market cue if text appears.
-- Keep the image visually simpler than the hero card but still delicious and premium.
-- This should feel like the final save-worthy slide of a polished food campaign, not an information sheet.`,
+Create card 5 only: closing information page without a large photo.
+- Use a clean light page background #F6F1E4.
+- Add two subtle cloud watermark line-art motifs, one cropped into the top-left corner and one cropped into the bottom-right corner.
+- Build a centered editorial information stack.
+- The page should feel like the final closing slide of a premium cookbook-style campaign.
+- Use only concise centered information from verified merchant facts:
+  - store name: ${context.storeName}
+  - market name: ${context.marketName}
+  - featured menu: ${context.menuName}
+  - price cue: ${context.priceText}
+  - closing mood from caption: ${context.caption}
+- Add a refined short closing sentence in Korean based on the merchant's tone, but keep it minimal and elegant.
+- Add one small seal accent near the lower center in deep red.
+- No icons, no phone icons, no map pins, no UI elements, no fake QR.
+- Make it feel finished, save-worthy, and brand-consistent with the previous four cards.`,
     },
   ];
 }
