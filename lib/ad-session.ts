@@ -444,7 +444,7 @@ function buildVideoRequest(
         shotKey,
         assetType: "video_clip",
         title: "가게 간판",
-        prompt: "영상요청 : 가게 간판이 보이도록 2초 영상",
+        prompt: "가게 간판",
         helperText: "가게 이름과 간판이 보이게 2초 이상 짧게 촬영해주세요.",
         reviewShotOrder: null,
       };
@@ -453,7 +453,7 @@ function buildVideoRequest(
         shotKey,
         assetType: "video_clip",
         title: "가게 입구 진입",
-        prompt: "영상요청 : 가게 입구에서 들어가는 2초 영상",
+        prompt: "가게 입구에서 안으로 들어가는 모습",
         helperText: "가게 앞에서 입구 안쪽으로 들어가는 느낌이 보이게 2초 이상 촬영해주세요.",
         reviewShotOrder: null,
       };
@@ -462,7 +462,7 @@ function buildVideoRequest(
         shotKey,
         assetType: "video_clip",
         title: "메뉴판",
-        prompt: "영상요청 : 메뉴판이 보이도록 2초 영상",
+        prompt: "메뉴판",
         helperText: "메뉴판이 화면 안에 보이도록 2초 이상 촬영해주세요.",
         reviewShotOrder: null,
       };
@@ -471,7 +471,7 @@ function buildVideoRequest(
         shotKey,
         assetType: "video_clip",
         title: primarySubject,
-        prompt: `영상요청 : ${primarySubject}이 보이도록 2초 영상`,
+        prompt: primarySubject,
         helperText: `${primarySubject}가 잘 보이도록 2초 이상 촬영해주세요.`,
         reviewShotOrder: null,
       };
@@ -480,7 +480,7 @@ function buildVideoRequest(
         shotKey,
         assetType: "video_clip",
         title: `${primarySubject} 상호작용`,
-        prompt: `영상요청 : ${primarySubject}을 집거나 먹는 모습이 보이도록 2초 영상`,
+        prompt: `${primarySubject}을 집거나 먹는 모습`,
         helperText: `${primarySubject}과 상호작용하는 장면이 자연스럽게 보이도록 2초 이상 촬영해주세요.`,
         reviewShotOrder: null,
       };
@@ -489,7 +489,7 @@ function buildVideoRequest(
         shotKey,
         assetType: "video_clip",
         title: "조리 장면",
-        prompt: `영상요청 : ${primarySubject}을 조리하는 모습이 보이도록 2초 영상`,
+        prompt: `${primarySubject}을 조리하는 모습`,
         helperText: "조리 과정이나 불판, 손동작이 보이도록 2초 이상 촬영해주세요.",
         reviewShotOrder: null,
       };
@@ -498,7 +498,7 @@ function buildVideoRequest(
         shotKey,
         assetType: "video_clip",
         title: "서브메뉴",
-        prompt: `영상요청 : ${sideMenuSubject}이 보이도록 2초 영상`,
+        prompt: sideMenuSubject,
         helperText: "주력메뉴 외에 함께 보여주고 싶은 다른 메뉴가 보이도록 2초 이상 촬영해주세요.",
         reviewShotOrder: null,
       };
@@ -507,7 +507,7 @@ function buildVideoRequest(
         shotKey,
         assetType: "video_clip",
         title: "서브메뉴 상호작용",
-        prompt: `영상요청 : ${sideMenuSubject}을 집거나 먹는 모습이 보이도록 2초 영상`,
+        prompt: `${sideMenuSubject}을 집거나 먹는 모습`,
         helperText: "다른 메뉴와 상호작용하는 장면이 보이도록 2초 이상 촬영해주세요.",
         reviewShotOrder: null,
       };
@@ -516,7 +516,7 @@ function buildVideoRequest(
         shotKey,
         assetType: "video_clip",
         title: "영상",
-        prompt: "영상요청 : 2초 영상",
+        prompt: "영상",
         helperText: "2초 이상 촬영해주세요.",
         reviewShotOrder: null,
       };

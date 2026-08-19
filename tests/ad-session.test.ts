@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  getRequestedShot,
   buildPhotoRequest,
   buildSessionWorkflowSeed,
   inferPrimarySubjectFromIntro,
@@ -131,4 +132,49 @@ test("normalizeAdSessionWorkflow keeps video shot plan values", () => {
     "video_storefront_entry",
     "video_menu_board",
   ]);
+});
+
+test("video prompts are returned as noun phrases for frontend sentence templates", () => {
+  const workflow = buildSessionWorkflowSeed("대표 메뉴는 제육볶음입니다.", {
+    adType: "video",
+    menuIntro: "대표메뉴는 제육볶음 입니다.",
+    storeSpecialty: "60년 전통의 맛집입니다.",
+  });
+
+  const firstPrompt = getRequestedShot(workflow, "restaurant_food");
+
+  assert.equal(firstPrompt?.prompt, "가게 간판");
+
+  const entryPrompt = getRequestedShot(
+    {
+      ...workflow,
+      currentShotIndex: 1,
+      requestedShotKey: "video_storefront_entry",
+    },
+    "restaurant_food",
+  );
+
+  assert.equal(entryPrompt?.prompt, "가게 입구에서 안으로 들어가는 모습");
+
+  const menuPrompt = getRequestedShot(
+    {
+      ...workflow,
+      currentShotIndex: 3,
+      requestedShotKey: "video_signature_menu",
+    },
+    "restaurant_food",
+  );
+
+  assert.equal(menuPrompt?.prompt, "제육볶음");
+
+  const cookingPrompt = getRequestedShot(
+    {
+      ...workflow,
+      currentShotIndex: 5,
+      requestedShotKey: "video_cooking_scene",
+    },
+    "restaurant_food",
+  );
+
+  assert.equal(cookingPrompt?.prompt, "제육볶음을 조리하는 모습");
 });
