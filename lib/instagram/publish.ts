@@ -68,6 +68,11 @@ type InstagramContainerStatus = {
   status?: string;
 };
 
+type WaitForInstagramPublishCompletionOptions = {
+  maxAttempts?: number;
+  delayMs?: number;
+};
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -158,6 +163,12 @@ function getInstagramConfig() {
   }
 
   return env;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 async function readGraphError(response: Response) {
@@ -631,4 +642,28 @@ export async function syncInstagramPublishForSubmission(
   return instagramPublish.mediaType === "photo"
     ? publishInstagramContainer(submissionId, instagramPublish.containerId, "photo")
     : publishInstagramContainer(submissionId, instagramPublish.containerId, "video");
+}
+
+export async function waitForInstagramPublishCompletion(
+  submissionId: string,
+  options?: WaitForInstagramPublishCompletionOptions,
+): Promise<InstagramPublishResult> {
+  const maxAttempts = Math.max(1, options?.maxAttempts ?? 3);
+  const delayMs = Math.max(0, options?.delayMs ?? 2_000);
+
+  let latestResult = await syncInstagramPublishForSubmission(submissionId);
+
+  for (let attempt = 1; attempt < maxAttempts; attempt += 1) {
+    if (latestResult.status !== "processing") {
+      return latestResult;
+    }
+
+    if (delayMs > 0) {
+      await sleep(delayMs);
+    }
+
+    latestResult = await syncInstagramPublishForSubmission(submissionId);
+  }
+
+  return latestResult;
 }

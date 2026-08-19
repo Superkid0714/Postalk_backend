@@ -6,6 +6,7 @@ import {
   isInstagramConfigured,
   startInstagramPublishForSubmission,
   syncInstagramPublishForSubmission,
+  waitForInstagramPublishCompletion,
 } from "@/lib/instagram/publish";
 import { isUuid } from "@/lib/validation";
 
@@ -60,7 +61,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   try {
-    const result = await startInstagramPublishForSubmission(id, body);
+    const startResult = await startInstagramPublishForSubmission(id, body);
+    const result =
+      startResult.status === "processing" && startResult.containerId
+        ? await waitForInstagramPublishCompletion(id, {
+            maxAttempts: startResult.mediaType === "photo" ? 4 : 2,
+            delayMs: 2_000,
+          })
+        : startResult;
 
     return successResponse(
       result,

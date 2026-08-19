@@ -10,6 +10,7 @@ import {
   getInstagramPublishMetadata,
   isInstagramConfigured,
   startInstagramPublishForSubmission,
+  waitForInstagramPublishCompletion,
 } from "@/lib/instagram/publish";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isUuid } from "@/lib/validation";
@@ -227,7 +228,15 @@ export async function PATCH(
 
   if (shouldAutoPublishToInstagram) {
     try {
-      const publishResult = await startInstagramPublishForSubmission(id);
+      const publishStartResult = await startInstagramPublishForSubmission(id);
+      const publishResult =
+        publishStartResult.status === "processing" &&
+        publishStartResult.containerId
+          ? await waitForInstagramPublishCompletion(id, {
+              maxAttempts: publishStartResult.mediaType === "photo" ? 4 : 2,
+              delayMs: 2_000,
+            })
+          : publishStartResult;
 
       instagramAutoPublish = {
         attempted: true,
