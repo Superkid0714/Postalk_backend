@@ -288,14 +288,35 @@ function buildShortCopyGuidance(
 function buildCaptionFallback(
   submission: SubmissionForGeneration,
   merchantInsights: MerchantInsights,
+  marketContext?: MarketContext | null,
+  festivalContext?: FestivalContext | null,
+  kamisContext?: KamisContext | null,
 ){
+  const intro = `${submission.target_menu_name}${merchantInsights.peakSalesTime ? ` ${merchantInsights.peakSalesTime}` : ""}에 더 눈길이 가는 메뉴입니다.`;
+  const appealSentence = submission.appeal_point
+    ? `${submission.appeal_point} 매력이 분명해서 한 끼 메뉴로 가볍게 고르기 좋습니다.`
+    : null;
+  const contextSentence =
+    merchantInsights.targetCustomer
+      ? `${merchantInsights.targetCustomer} 손님들이 자주 찾는 흐름을 자연스럽게 담았습니다.`
+      : marketContext?.found && marketContext.market_name
+        ? `${marketContext.market_name}${marketContext.district ? ` ${marketContext.district}` : ""} 분위기 속에서 편하게 떠올리기 좋은 메뉴입니다.`
+        : festivalContext?.found && festivalContext.verified && festivalContext.title
+          ? `${festivalContext.title} 일정 전후로 근처에서 들르기 좋은 한 끼 흐름으로도 연결할 수 있습니다.`
+          : kamisContext?.selected_for_prompt && kamisContext.region
+            ? `${kamisContext.region} 기준 장바구니 물가 흐름을 참고해도 일상적으로 매력 있게 다가갈 수 있는 메뉴입니다.`
+            : null;
+  const closingSentence = submission.extra_message
+    ? submission.extra_message.endsWith(".")
+      ? submission.extra_message
+      : `${submission.extra_message}.`
+    : `${submission.target_menu_name} 생각날 때 부담 없이 찾을 수 있는 메뉴 톤으로 정리했습니다.`;
+
   const caption = [
-    `${submission.target_menu_name} 어떠세요?`,
-    submission.appeal_point,
-    merchantInsights.peakSalesTime
-      ? `${merchantInsights.peakSalesTime}에 특히 잘 나가요.`
-      : null,
-    submission.extra_message,
+    intro,
+    appealSentence,
+    contextSentence,
+    closingSentence,
   ]
     .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
     .join(" ");
@@ -338,7 +359,13 @@ export async function generatePromoCaption(
     ...buildKamisEvidenceItems(kamisContext),
   ];
   const merchantInsights = readMerchantInsights(submission.ai_metadata);
-  const fallback = buildCaptionFallback(submission, merchantInsights);
+  const fallback = buildCaptionFallback(
+    submission,
+    merchantInsights,
+    marketContext,
+    festivalContext,
+    kamisContext,
+  );
   const fallbackResult: GeneratedPromoCaption = {
     caption: fallback.caption,
     hashtags: fallback.hashtags,
@@ -353,14 +380,84 @@ export async function generatePromoCaption(
     return fallbackResult;
   }
 
+  const merchantSummary = [
+    `가게명: ${captionInputContext.merchant_context.store_name ?? "미입력"}`,
+    `시장명: ${captionInputContext.merchant_context.market_name ?? "미입력"}`,
+    `메뉴명: ${captionInputContext.merchant_context.product}`,
+    captionInputContext.merchant_context.price
+      ? `가격: ${captionInputContext.merchant_context.price}`
+      : null,
+    `핵심 매력: ${captionInputContext.merchant_context.appeal_point}`,
+    captionInputContext.merchant_context.target_customer
+      ? `주 고객층: ${captionInputContext.merchant_context.target_customer}`
+      : null,
+    captionInputContext.merchant_context.peak_sales_time
+      ? `잘 팔리는 시간: ${captionInputContext.merchant_context.peak_sales_time}`
+      : null,
+    captionInputContext.merchant_context.popular_menu_notes
+      ? `요즘 많이 찾는 메뉴 흐름: ${captionInputContext.merchant_context.popular_menu_notes}`
+      : null,
+    captionInputContext.merchant_context.extra_message
+      ? `추가 메모: ${captionInputContext.merchant_context.extra_message}`
+      : null,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join("\n- ");
+
+  const marketGuide = marketContext.found
+    ? [
+        `확인된 시장명: ${marketContext.market_name}`,
+        [marketContext.province, marketContext.district].filter(Boolean).length > 0
+          ? `확인된 지역: ${[marketContext.province, marketContext.district]
+              .filter(Boolean)
+              .join(" ")}`
+          : null,
+        marketContext.market_type
+          ? `확인된 시장 유형: ${marketContext.market_type}`
+          : null,
+      ]
+        .filter((value): value is string => Boolean(value))
+        .join("\n- ")
+    : "시장 공공데이터 미확인";
+
+  const festivalGuide =
+    festivalContext.found && festivalContext.verified
+      ? [
+          `행사명: ${festivalContext.title}`,
+          festivalContext.event_start_date && festivalContext.event_end_date
+            ? `행사 기간: ${festivalContext.event_start_date} ~ ${festivalContext.event_end_date}`
+            : null,
+          typeof festivalContext.distance_km === "number"
+            ? `시장 기준 거리: ${festivalContext.distance_km}km`
+            : null,
+        ]
+          .filter((value): value is string => Boolean(value))
+          .join("\n- ")
+      : "행사 데이터 미활용";
+
+  const kamisGuide = kamisContext.selected_for_prompt
+    ? [
+        kamisContext.matched_item ? `품목: ${kamisContext.matched_item}` : null,
+        kamisContext.region ? `지역: ${kamisContext.region}` : null,
+        kamisContext.latest_price !== null ? "최근 가격 흐름 참고 가능" : null,
+      ]
+        .filter((value): value is string => Boolean(value))
+        .join("\n- ")
+    : "가격 데이터 미활용";
+
   const prompt = [
     "You are writing a Korean Instagram caption for a traditional-market food merchant.",
-    "Use the merchant's real input and synthesize it into a natural, persuasive Korean post.",
+    "Your job is to turn merchant facts into a short, publishable Korean promotional caption, not a flat summary.",
     "Return strict JSON only with keys: caption, hashtags.",
     "Caption rules:",
     "- Write in Korean.",
-    "- 2 to 4 short sentences.",
+    "- Write 3 to 4 sentences.",
+    "- Sentence 1 should make the menu feel appetizing or immediately interesting.",
+    "- Sentence 2 should clearly reflect the merchant's direct selling point.",
+    "- Sentence 3 may reflect customer group, time-of-day demand, market context, or nearby festival context only when verified and useful.",
+    "- Final sentence should softly encourage a visit or make the store/menu feel easy to remember.",
     "- Sound warm, trustworthy, and appetizing.",
+    "- Avoid flat summary style and avoid mechanically repeating field labels.",
     "- Do not invent facts that were not provided.",
     "- Reflect the merchant's target customer and peak sales timing naturally if useful.",
     "- [MERCHANT FACT] is the source of truth for menu, price, appeal point, packaging, cooking, and current sales details.",
@@ -378,10 +475,24 @@ export async function generatePromoCaption(
     "- Do not claim cheaper than market, best price, lowest price, or value superiority from KAMIS data.",
     "- KAMIS should only help decide whether explicit price exposure or freshness/current-price context is meaningful.",
     "- Do not use excessive emojis. At most 1 emoji.",
+    "- Do not use empty ad clichés such as '깊은 풍미', '특별한 경험', '맛의 진수', '정성을 담아'.",
+    "- Prefer concrete everyday Korean wording that sounds like a good local 홍보 글.",
     "Hashtag rules:",
     "- Return 3 to 5 Korean hashtags.",
     "- Include menu/store/market-related tags when natural.",
     "- Each hashtag string must start with #.",
+    "[WRITING PRIORITY]",
+    "- Merchant facts come first.",
+    "- Public data only strengthens location or timing context after merchant facts are already reflected.",
+    "- If no public data is usable, still write a strong caption from merchant facts alone.",
+    "[MERCHANT SUMMARY]",
+    `- ${merchantSummary}`,
+    "[MARKET USAGE GUIDE]",
+    `- ${marketGuide}`,
+    "[FESTIVAL USAGE GUIDE]",
+    `- ${festivalGuide}`,
+    "[KAMIS USAGE GUIDE]",
+    `- ${kamisGuide}`,
     "[MERCHANT FACT]",
     JSON.stringify(captionInputContext.merchant_context, null, 2),
     "[MARKET PUBLIC DATA]",
