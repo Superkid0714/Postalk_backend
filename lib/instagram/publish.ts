@@ -395,18 +395,11 @@ async function publishInstagramMedia(
       },
     );
 
-    const published = await postGraphForm<{ id: string }>(
-      `/${config.igUserId}/media_publish`,
-      {
-        creation_id: container.id,
-      },
-    );
-
     return {
       containerId: container.id,
-      publishedMediaId: published.id,
-      status: "published" as const,
-      containerStatusCode: "FINISHED",
+      publishedMediaId: null,
+      status: "processing" as const,
+      containerStatusCode: "IN_PROGRESS",
     };
   }
 
@@ -427,7 +420,11 @@ async function publishInstagramMedia(
   };
 }
 
-async function publishInstagramVideoContainer(submissionId: string, containerId: string) {
+async function publishInstagramContainer(
+  submissionId: string,
+  containerId: string,
+  mediaType: InstagramMediaType,
+) {
   const config = getInstagramConfig();
 
   if (!config) {
@@ -464,7 +461,7 @@ async function publishInstagramVideoContainer(submissionId: string, containerId:
     return {
       ok: true,
       submissionId,
-      mediaType: "video" as const,
+      mediaType,
       status: "published" as const,
       containerId,
       publishedMediaId: published.id,
@@ -474,7 +471,7 @@ async function publishInstagramVideoContainer(submissionId: string, containerId:
   }
 
   if (statusCode === "ERROR" || statusCode === "EXPIRED") {
-    const message = `Instagram video container ended with status ${statusCode}`;
+    const message = `Instagram ${mediaType} container ended with status ${statusCode}`;
 
     await updateInstagramMetadata(submissionId, {
       status: "failed",
@@ -486,7 +483,7 @@ async function publishInstagramVideoContainer(submissionId: string, containerId:
     return {
       ok: false,
       submissionId,
-      mediaType: "video" as const,
+      mediaType,
       status: "failed" as const,
       containerId,
       publishedMediaId: null,
@@ -505,7 +502,7 @@ async function publishInstagramVideoContainer(submissionId: string, containerId:
   return {
     ok: true,
     submissionId,
-    mediaType: "video" as const,
+    mediaType,
     status: "processing" as const,
     containerId,
     publishedMediaId: null,
@@ -573,8 +570,8 @@ export async function startInstagramPublishForSubmission(
       assetId: asset.id,
       assetPath: asset.file_path,
       requestedAt,
-      publishedAt: result.status === "published" ? new Date().toISOString() : null,
-      lastCheckedAt: result.status === "processing" ? new Date().toISOString() : null,
+      publishedAt: null,
+      lastCheckedAt: new Date().toISOString(),
       lastError: null,
       containerStatusCode: result.containerStatusCode,
     });
@@ -631,18 +628,7 @@ export async function syncInstagramPublishForSubmission(
     throw new Error("Instagram publish job not found");
   }
 
-  if (instagramPublish.mediaType === "photo") {
-    return {
-      ok: instagramPublish.status !== "failed",
-      submissionId,
-      mediaType: "photo",
-      status: instagramPublish.status === "published" ? "published" : "failed",
-      containerId: instagramPublish.containerId,
-      publishedMediaId: instagramPublish.publishedMediaId ?? null,
-      caption: instagramPublish.caption ?? null,
-      lastError: instagramPublish.lastError ?? null,
-    };
-  }
-
-  return publishInstagramVideoContainer(submissionId, instagramPublish.containerId);
+  return instagramPublish.mediaType === "photo"
+    ? publishInstagramContainer(submissionId, instagramPublish.containerId, "photo")
+    : publishInstagramContainer(submissionId, instagramPublish.containerId, "video");
 }
