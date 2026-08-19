@@ -23,7 +23,6 @@ type MerchantQrStoreRecord = {
   owner_name: string | null;
   category: string | null;
   description: string | null;
-  location_address: string | null;
 };
 
 export function buildMerchantQrToken() {
@@ -57,7 +56,7 @@ export async function loadMerchantQrStore(
 
   return supabase
     .from("stores")
-    .select("id, market_name, store_name, owner_name, category, description, location_address")
+    .select("id, market_name, store_name, owner_name, category, description")
     .eq("id", assignedStoreId)
     .maybeSingle<MerchantQrStoreRecord>();
 }
@@ -112,7 +111,7 @@ export function mapMerchantQrResponse(
           category: store.category,
           categoryLabel: getStoreCategoryLabel(store.category),
           description: store.description,
-          locationAddress: store.location_address,
+          locationAddress: store.description,
         }
       : null,
   };

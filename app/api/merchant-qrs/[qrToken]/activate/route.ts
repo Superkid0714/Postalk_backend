@@ -110,7 +110,7 @@ export async function POST(
         .from("stores")
         .update({
           category,
-          location_address: body.locationAddress?.trim() || null,
+          description: body.locationAddress?.trim() || null,
         })
         .eq("id", store.id);
 
@@ -127,12 +127,12 @@ export async function POST(
     if (
       store &&
       store.category === category &&
-      (store.location_address ?? null) !== (body.locationAddress?.trim() || null)
+      (store.description ?? null) !== (body.locationAddress?.trim() || null)
     ) {
       const { error: updateLocationError } = await supabase
         .from("stores")
         .update({
-          location_address: body.locationAddress?.trim() || null,
+          description: body.locationAddress?.trim() || null,
         })
         .eq("id", store.id);
 
@@ -162,7 +162,7 @@ export async function POST(
           store_name: body.storeName.trim(),
           owner_name: body.ownerName?.trim() || null,
           category,
-          location_address: body.locationAddress?.trim() || null,
+          description: body.locationAddress?.trim() || null,
         })
         .select("id")
         .single<{ id: string }>();
@@ -180,7 +180,7 @@ export async function POST(
         .from("stores")
         .update({
           category,
-          location_address: body.locationAddress?.trim() || null,
+          description: body.locationAddress?.trim() || null,
         })
         .eq("id", assignedStoreId);
 
