@@ -1,5 +1,6 @@
 import {
   buildPromoPrompt,
+  generatePromoCaption,
   generatePromoImage,
   normalizeStoreRelation,
   normalizeSubmissionRelation,
@@ -202,6 +203,10 @@ export async function processGenerationJobById(jobId: string) {
     }
 
     const completedAt = new Date().toISOString();
+    const captionResult = await generatePromoCaption({
+      ...normalizedSubmission,
+      stores: normalizeStoreRelation(normalizedSubmission.stores),
+    });
 
     const { error: completeUpdateError } = await supabase
       .from("generation_jobs")
@@ -230,6 +235,8 @@ export async function processGenerationJobById(jobId: string) {
     await supabase
       .from("submissions")
       .update({
+        caption: captionResult.caption,
+        hashtags: captionResult.hashtags,
         ai_metadata: mergeSubmissionWorkflowMetadata(
           normalizedSubmission.ai_metadata ?? null,
           {

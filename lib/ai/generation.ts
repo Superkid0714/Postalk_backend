@@ -89,10 +89,19 @@ type OpenAiImageResponse = {
   }>;
 };
 
+type OpenAiResponsesResponse = {
+  output_text?: string;
+};
+
 type MerchantInsights = {
   targetCustomer: string | null;
   peakSalesTime: string | null;
   popularMenuNotes: string | null;
+};
+
+export type GeneratedPromoCaption = {
+  caption: string;
+  hashtags: string[];
 };
 
 type FoodVisualProfile = {
@@ -235,6 +244,135 @@ function buildShortCopyGuidance(
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function buildCaptionFallback(
+  submission: SubmissionForGeneration,
+  merchantInsights: MerchantInsights,
+): GeneratedPromoCaption {
+  const caption = [
+    `${submission.target_menu_name} 어떠세요?`,
+    submission.appeal_point,
+    merchantInsights.peakSalesTime
+      ? `${merchantInsights.peakSalesTime}에 특히 잘 나가요.`
+      : null,
+    submission.extra_message,
+  ]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" ");
+
+  const hashtags = [
+    submission.stores?.market_name ? `#${submission.stores.market_name.replace(/\s+/g, "")}` : null,
+    submission.stores?.store_name ? `#${submission.stores.store_name.replace(/\s+/g, "")}` : null,
+    `#${submission.target_menu_name.replace(/\s+/g, "")}`,
+  ].filter((value): value is string => Boolean(value));
+
+  return {
+    caption,
+    hashtags,
+  };
+}
+
+function stripCodeFence(value: string) {
+  return value.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+}
+
+export async function generatePromoCaption(
+  submission: SubmissionForGeneration,
+): Promise<GeneratedPromoCaption> {
+  const apiKey = getOpenAiApiKey();
+  const merchantInsights = readMerchantInsights(submission.ai_metadata);
+  const fallback = buildCaptionFallback(submission, merchantInsights);
+
+  if (!apiKey) {
+    return fallback;
+  }
+
+  const prompt = [
+    "You are writing a Korean Instagram caption for a traditional-market food merchant.",
+    "Use the merchant's real input and synthesize it into a natural, persuasive Korean post.",
+    "Return strict JSON only with keys: caption, hashtags.",
+    "Caption rules:",
+    "- Write in Korean.",
+    "- 2 to 4 short sentences.",
+    "- Sound warm, trustworthy, and appetizing.",
+    "- Do not invent facts that were not provided.",
+    "- Reflect the merchant's target customer and peak sales timing naturally if useful.",
+    "- Do not use excessive emojis. At most 1 emoji.",
+    "Hashtag rules:",
+    "- Return 3 to 5 Korean hashtags.",
+    "- Include menu/store/market-related tags when natural.",
+    "- Each hashtag string must start with #.",
+    `Market: ${submission.stores?.market_name ?? "전통시장"}`,
+    `Store: ${submission.stores?.store_name ?? "가게"}`,
+    `Store type: ${submission.store_type}`,
+    `Menu: ${submission.target_menu_name}`,
+    submission.price_text ? `Price: ${submission.price_text}` : null,
+    `Appeal point: ${submission.appeal_point}`,
+    merchantInsights.targetCustomer
+      ? `Main customer group: ${merchantInsights.targetCustomer}`
+      : null,
+    merchantInsights.peakSalesTime
+      ? `Best-selling time: ${merchantInsights.peakSalesTime}`
+      : null,
+    merchantInsights.popularMenuNotes
+      ? `Popular customer demand: ${merchantInsights.popularMenuNotes}`
+      : null,
+    submission.extra_message
+      ? `Extra merchant message: ${submission.extra_message}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4.1-mini",
+        input: prompt,
+      }),
+    });
+
+    if (!response.ok) {
+      return fallback;
+    }
+
+    const json = (await response.json()) as OpenAiResponsesResponse;
+    const outputText =
+      typeof json.output_text === "string" ? stripCodeFence(json.output_text) : "";
+
+    if (!outputText) {
+      return fallback;
+    }
+
+    const parsed = JSON.parse(outputText) as {
+      caption?: unknown;
+      hashtags?: unknown;
+    };
+
+    const caption =
+      typeof parsed.caption === "string" && parsed.caption.trim().length > 0
+        ? parsed.caption.trim()
+        : fallback.caption;
+    const hashtags = Array.isArray(parsed.hashtags)
+      ? parsed.hashtags
+          .filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0)
+          .map((tag) => (tag.startsWith("#") ? tag.trim() : `#${tag.trim()}`))
+          .slice(0, 5)
+      : fallback.hashtags;
+
+    return {
+      caption,
+      hashtags: hashtags.length > 0 ? hashtags : fallback.hashtags,
+    };
+  } catch {
+    return fallback;
+  }
 }
 
 export function buildPromoPrompt(
