@@ -113,6 +113,41 @@ create table if not exists public.insight_snapshots (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.merchant_qr_tokens (
+  id uuid primary key default gen_random_uuid(),
+  qr_token text not null unique,
+  status text not null default 'ready'
+    check (status in ('ready', 'activated', 'disabled')),
+  assigned_store_id uuid references public.stores(id) on delete set null,
+  assigned_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists merchant_qr_tokens_status_idx
+  on public.merchant_qr_tokens (status);
+
+create index if not exists merchant_qr_tokens_assigned_store_id_idx
+  on public.merchant_qr_tokens (assigned_store_id);
+
+create table if not exists public.qr_entry_slots (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references public.stores(id) on delete cascade,
+  slot_number integer not null default 1 check (slot_number = 1),
+  slot_key text not null unique,
+  label text,
+  is_active boolean not null default true,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists qr_entry_slots_store_id_key
+  on public.qr_entry_slots (store_id);
+
+create index if not exists qr_entry_slots_store_id_idx
+  on public.qr_entry_slots (store_id);
+
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
@@ -144,5 +179,17 @@ execute function public.set_updated_at();
 drop trigger if exists generation_jobs_set_updated_at on public.generation_jobs;
 create trigger generation_jobs_set_updated_at
 before update on public.generation_jobs
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists qr_entry_slots_set_updated_at on public.qr_entry_slots;
+create trigger qr_entry_slots_set_updated_at
+before update on public.qr_entry_slots
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists merchant_qr_tokens_set_updated_at on public.merchant_qr_tokens;
+create trigger merchant_qr_tokens_set_updated_at
+before update on public.merchant_qr_tokens
 for each row
 execute function public.set_updated_at();

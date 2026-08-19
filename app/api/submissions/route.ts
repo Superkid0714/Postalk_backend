@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/response";
+import { resolveActivatedStoreFromQrToken } from "@/lib/merchant-qr";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { resolveStore } from "@/lib/stores";
 import { isUuid } from "@/lib/validation";
@@ -21,6 +22,7 @@ type SubmissionAssetInput = {
 };
 
 type CreateSubmissionBody = {
+  qrToken?: string;
   storeId?: string;
   marketName?: string;
   storeName?: string;
@@ -46,6 +48,7 @@ type CreateSubmissionBody = {
 function validateSubmissionBody(body: CreateSubmissionBody) {
   const details: Array<{ field: string; reason: string }> = [];
 
+  const hasQrToken = typeof body.qrToken === "string" && body.qrToken.trim();
   const hasStoreId = typeof body.storeId === "string" && body.storeId.trim();
   const hasStoreNames =
     typeof body.marketName === "string" &&
@@ -53,10 +56,10 @@ function validateSubmissionBody(body: CreateSubmissionBody) {
     typeof body.storeName === "string" &&
     body.storeName.trim();
 
-  if (!hasStoreId && !hasStoreNames) {
+  if (!hasQrToken && !hasStoreId && !hasStoreNames) {
     details.push({
       field: "store",
-      reason: "Provide storeId or both marketName and storeName",
+      reason: "Provide qrToken, storeId, or both marketName and storeName",
     });
   }
 
@@ -176,7 +179,22 @@ export async function POST(request: NextRequest) {
 
   const supabase = getSupabaseAdminClient();
 
+  const activatedQrStoreLookup =
+    body.qrToken?.trim()
+      ? await resolveActivatedStoreFromQrToken(supabase, body.qrToken.trim())
+      : null;
+
   const storeLookup =
+    activatedQrStoreLookup?.store
+      ? {
+          data: {
+            id: activatedQrStoreLookup.store.id,
+            market_name: activatedQrStoreLookup.store.market_name,
+            store_name: activatedQrStoreLookup.store.store_name,
+          },
+          error: null,
+        }
+      :
     body.storeId && isUuid(body.storeId)
       ? await resolveStore(supabase, { storeId: body.storeId })
       : await resolveStore(supabase, {

@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/response";
 import { sanitizeFileName } from "@/lib/files";
+import { resolveActivatedStoreFromQrToken } from "@/lib/merchant-qr";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { resolveStore } from "@/lib/stores";
 import { isUuid } from "@/lib/validation";
@@ -28,6 +29,7 @@ export async function POST(request: NextRequest) {
   const formData = await request.formData();
 
   const assetTypeValue = formData.get("assetType");
+  const qrTokenValue = formData.get("qrToken");
   const storeIdValue = formData.get("storeId");
   const marketNameValue = formData.get("marketName");
   const storeNameValue = formData.get("storeName");
@@ -82,7 +84,22 @@ export async function POST(request: NextRequest) {
 
   const supabase = getSupabaseAdminClient();
 
+  const activatedQrStoreLookup =
+    typeof qrTokenValue === "string" && qrTokenValue.trim()
+      ? await resolveActivatedStoreFromQrToken(supabase, qrTokenValue.trim())
+      : null;
+
   const storeLookup =
+    activatedQrStoreLookup?.store
+      ? {
+          data: {
+            id: activatedQrStoreLookup.store.id,
+            market_name: activatedQrStoreLookup.store.market_name,
+            store_name: activatedQrStoreLookup.store.store_name,
+          },
+          error: null,
+        }
+      :
     typeof storeIdValue === "string" && isUuid(storeIdValue)
       ? await resolveStore(supabase, { storeId: storeIdValue })
       : typeof marketNameValue === "string" &&
@@ -101,7 +118,7 @@ export async function POST(request: NextRequest) {
       details: [
         {
           field: "store",
-          reason: "Provide storeId or both marketName and storeName",
+          reason: "Provide qrToken, storeId, or both marketName and storeName",
         },
       ],
     });
