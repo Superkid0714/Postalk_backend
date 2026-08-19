@@ -29,7 +29,7 @@ function buildCombinedIntroText(body: StartAdSessionBody) {
   const storeSpecialty = body.storeSpecialty?.trim();
 
   return [
-    menuIntro ? `대표 메뉴 소개: ${menuIntro}` : null,
+    menuIntro ? `주력 메뉴를 포함한 대표 메뉴 소개: ${menuIntro}` : null,
     storeSpecialty ? `가게만의 특별함: ${storeSpecialty}` : null,
   ]
     .filter((value): value is string => Boolean(value))

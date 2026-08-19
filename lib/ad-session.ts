@@ -81,7 +81,12 @@ export function getDefaultSessionCategory(category: string | null | undefined) {
 }
 
 export function inferPrimarySubjectFromIntro(introText: string) {
-  const normalized = introText.replace(/\s+/g, " ").trim();
+  const normalized = introText
+    .replace(/주력 메뉴를 포함한 대표 메뉴 소개\s*:\s*/g, "")
+    .replace(/가게만의 특별함\s*:\s*/g, "")
+    .replace(/대표\s*메뉴(?:는|가)?\s*/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
   const preferredMatches = normalized.match(
     /([가-힣A-Za-z0-9]{2,20}(?:찌개|볶음|국밥|칼국수|수육|비빔밥|통닭|치킨|만두|전|튀김|국수|탕|라떼|커피|빵|케이크))/u,
   );
@@ -101,8 +106,8 @@ function inferPrimarySubject(options: {
   storeSpecialty?: string | null;
 }) {
   const prioritizedSources = [
-    options.storeSpecialty?.trim() || null,
     options.menuIntro?.trim() || null,
+    options.storeSpecialty?.trim() || null,
     options.introText.trim(),
   ];
 

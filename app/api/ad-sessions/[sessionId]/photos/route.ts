@@ -11,7 +11,6 @@ import {
 } from "@/lib/ad-session";
 import { createSubmissionAndGenerationJobFromSession } from "@/lib/ad-session-generation";
 import { prepareAdSessionDrafts } from "@/lib/ad-session-preparation";
-import { reviewPhotoAsset } from "@/lib/ai/photo-review";
 import { processGenerationJobById } from "@/lib/generation/process-job";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isUuid } from "@/lib/validation";
@@ -30,13 +29,20 @@ type SubmitSessionPhotoBody = {
   fileSize?: number | null;
 };
 
-function buildMenuBoardAutoPassReview() {
+function buildAutoPassReview(assetType: "menu_board" | "food_photo") {
   return {
     passed: true,
     score: 100,
     recommendedAction: "proceed" as const,
-    summary: "메뉴판 사진은 자동 승인되었습니다.",
-    feedback: ["메뉴판 사진은 검수 없이 다음 단계로 진행합니다."],
+    summary:
+      assetType === "menu_board"
+        ? "메뉴판 사진은 자동 승인되었습니다."
+        : "음식 사진은 자동 승인되었습니다.",
+    feedback: [
+      assetType === "menu_board"
+        ? "메뉴판 사진은 추가 지시 전까지 검수 없이 다음 단계로 진행합니다."
+        : "음식 사진은 추가 지시 전까지 검수 없이 다음 단계로 진행합니다.",
+    ],
     checks: {
       focus: "pass" as const,
       brightness: "pass" as const,
@@ -159,28 +165,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
   }
 
-  let review;
-
-  if (currentRequest.assetType === "menu_board") {
-    review = buildMenuBoardAutoPassReview();
-  } else {
-    try {
-      review = await reviewPhotoAsset({
-        supabase,
-        bucket: body.bucket!.trim(),
-        filePath: body.filePath!.trim(),
-        assetType: currentRequest.assetType,
-        category,
-        shotOrder: currentRequest.reviewShotOrder,
-      });
-    } catch (reviewError) {
-      return errorResponse("Failed to review photo", 500, {
-        code: "PHOTO_REVIEW_FAILED",
-        details:
-          reviewError instanceof Error ? reviewError.message : "Unknown error",
-      });
-    }
-  }
+  const review = buildAutoPassReview(currentRequest.assetType);
 
   if (!review.passed) {
     return successResponse(

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildSessionWorkflowSeed,
+  inferPrimarySubjectFromIntro,
   normalizeAdSessionWorkflow,
 } from "../lib/ad-session.ts";
 
@@ -62,4 +63,20 @@ test("normalizeAdSessionWorkflow preserves prepared draft fields", () => {
   ]);
   assert.equal(workflow.draftPreparedAt, "2026-08-19T12:00:00.000Z");
   assert.equal(workflow.draftAssetCount, 3);
+});
+
+test("buildSessionWorkflowSeed prefers menuIntro over storeSpecialty for primary subject", () => {
+  const workflow = buildSessionWorkflowSeed("combined intro", {
+    menuIntro: "대표메뉴는 제육볶음 입니다.",
+    storeSpecialty: "60년 전통의 맛집입니다.",
+  });
+
+  assert.equal(workflow.primarySubject, "제육볶음");
+});
+
+test("inferPrimarySubjectFromIntro ignores label text before extracting menu", () => {
+  assert.equal(
+    inferPrimarySubjectFromIntro("주력 메뉴를 포함한 대표 메뉴 소개: 대표메뉴는 제육볶음 입니다."),
+    "제육볶음",
+  );
 });

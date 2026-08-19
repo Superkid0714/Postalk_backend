@@ -45,6 +45,30 @@ function hasCriticalFoodPhotoFailure(checks: PhotoReviewCheckResult) {
   );
 }
 
+function hasConcreteRetakeGuidance(feedback: string[]) {
+  if (feedback.length === 0) {
+    return false;
+  }
+
+  const genericPatterns = [
+    "다시 찍어",
+    "재촬영",
+    "흐리",
+    "어둡",
+    "밝기",
+    "잘 안 보",
+    "가려",
+    "중앙",
+    "구도",
+    "잘리",
+    "초점",
+  ];
+
+  return feedback.some((item) =>
+    genericPatterns.some((pattern) => item.includes(pattern)),
+  );
+}
+
 function applyAssetSpecificReviewHeuristics(
   assetType: "menu_board" | "food_photo",
   review: PhotoReviewResult,
@@ -96,17 +120,9 @@ function applyAssetSpecificReviewHeuristics(
     };
   }
 
-  const softWarnings = [
-    review.checks.brightness,
-    review.checks.framing,
-    review.checks.guideMatch,
-  ].filter((value) => value === "warning" || value === "fail").length;
-
   const canProceed =
     review.checks.focus !== "fail" &&
-    review.checks.subjectVisibility !== "fail" &&
-    review.score >= 40 &&
-    softWarnings <= 3;
+    review.checks.subjectVisibility !== "fail";
 
   if (!review.passed && canProceed) {
     return {
@@ -114,18 +130,44 @@ function applyAssetSpecificReviewHeuristics(
       passed: true,
       score: Math.max(review.score, 60),
       recommendedAction: "proceed",
-      summary: "대표사진으로 활용 가능한 수준이라 다음 단계로 진행합니다.",
+      summary: hasConcreteRetakeGuidance(review.feedback)
+        ? "대표 메뉴가 식별되어 다음 단계로 진행합니다."
+        : "음식이 식별 가능해 다음 단계로 진행합니다.",
       feedback:
-        review.feedback.length > 0
+        hasConcreteRetakeGuidance(review.feedback)
           ? review.feedback
-          : ["대표 메뉴가 잘 보여서 다음 단계로 진행할 수 있습니다."],
+          : ["음식이 식별 가능하여 다음 단계로 진행합니다."],
     };
   }
 
   return review;
 }
 
-function buildFallbackReviewResult(reason: string): PhotoReviewResult {
+function buildFallbackReviewResult(
+  reason: string,
+  assetType: "menu_board" | "food_photo",
+): PhotoReviewResult {
+  if (assetType === "food_photo") {
+    return {
+      passed: true,
+      score: 60,
+      recommendedAction: "proceed",
+      summary: "사진 판독이 불안정했지만 음식이 보이는 사진으로 간주해 진행합니다.",
+      feedback: [
+        "AI 판독이 불안정했지만 음식 사진으로 보고 다음 단계로 진행합니다.",
+        `검수 참고: ${reason}`,
+      ],
+      checks: {
+        focus: "warning",
+        brightness: "warning",
+        framing: "warning",
+        subjectVisibility: "pass",
+        guideMatch: "warning",
+        textReadability: "not_applicable",
+      },
+    };
+  }
+
   return {
     passed: false,
     score: 0,
@@ -258,7 +300,7 @@ function buildPhotoReviewPrompt(params: {
     "Be strict but practical. Focus on whether the photo is usable for an ad-making workflow on mobile.",
     params.assetType === "menu_board"
       ? "For menu boards, do not require every tiny line to be perfectly readable. If the menu board itself is clearly captured and the overall menu sections are recognizable, it should usually pass."
-      : "For food photos, pass if the representative menu is clearly visible and usable for promotional content, even if composition is not perfect.",
+      : "For food photos, pass if you can recognize what food it is. Only fail when the food is genuinely hard to identify or missing from the frame.",
     "Return JSON keys only: passed, score, recommendedAction, summary, feedback, checks.",
     "checks must include: focus, brightness, framing, subjectVisibility, guideMatch, textReadability.",
     "Each check value must be one of: pass, warning, fail, not_applicable.",
@@ -281,7 +323,10 @@ function buildPhotoReviewPrompt(params: {
     "- If menu text should be readable, can a user actually read the main menu names and prices well enough?",
     params.assetType === "menu_board"
       ? "- For menu boards, overall capture of the board matters more than perfect OCR-level clarity. Slight blur or small unreadable text alone should not cause rejection."
-      : "- For food photos, prioritize whether the main dish is visible and usable. Slight issues in framing or lighting alone should not cause rejection.",
+      : "- For food photos, prioritize whether the main dish is identifiable. If you can tell what food it is, it should usually pass.",
+    params.assetType === "food_photo"
+      ? "- Only reject a food photo if you can provide specific, actionable retake advice such as the food being out of frame, too blurry to recognize, or fully blocked."
+      : "- If you reject, the reason should be concrete and actionable.",
     "- Do not invent store facts. Only review image quality and guidance match.",
   ].join("\n");
 }
@@ -349,7 +394,10 @@ export async function reviewPhotoAsset(
     typeof json.output_text === "string" ? stripCodeFence(json.output_text) : "";
 
   if (!outputText) {
-    return buildFallbackReviewResult("Photo review returned empty output");
+    return buildFallbackReviewResult(
+      "Photo review returned empty output",
+      params.assetType,
+    );
   }
 
   try {
@@ -358,11 +406,15 @@ export async function reviewPhotoAsset(
     if (!parsed) {
       return buildFallbackReviewResult(
         "Photo review returned invalid JSON structure",
+        params.assetType,
       );
     }
 
     return applyAssetSpecificReviewHeuristics(params.assetType, parsed);
   } catch {
-    return buildFallbackReviewResult("Photo review returned invalid JSON");
+    return buildFallbackReviewResult(
+      "Photo review returned invalid JSON",
+      params.assetType,
+    );
   }
 }
