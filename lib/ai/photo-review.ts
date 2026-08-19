@@ -31,6 +31,28 @@ export type PhotoReviewResult = {
   checks: PhotoReviewCheckResult;
 };
 
+function buildFallbackReviewResult(reason: string): PhotoReviewResult {
+  return {
+    passed: false,
+    score: 0,
+    recommendedAction: "retake",
+    summary: "사진 판독이 불안정해 재촬영을 권장합니다.",
+    feedback: [
+      "사진을 다시 한 번 또렷하게 촬영해주세요.",
+      "피사체가 화면 중앙에 잘 보이도록 맞춰주세요.",
+      `검수 참고: ${reason}`,
+    ],
+    checks: {
+      focus: "warning",
+      brightness: "warning",
+      framing: "warning",
+      subjectVisibility: "warning",
+      guideMatch: "warning",
+      textReadability: "not_applicable",
+    },
+  };
+}
+
 type ReviewPhotoAssetParams = {
   supabase: SupabaseClient;
   bucket: string;
@@ -227,14 +249,20 @@ export async function reviewPhotoAsset(
     typeof json.output_text === "string" ? stripCodeFence(json.output_text) : "";
 
   if (!outputText) {
-    throw new Error("Photo review returned empty output");
+    return buildFallbackReviewResult("Photo review returned empty output");
   }
 
-  const parsed = normalizeReviewResult(JSON.parse(outputText));
+  try {
+    const parsed = normalizeReviewResult(JSON.parse(outputText));
 
-  if (!parsed) {
-    throw new Error("Photo review returned invalid JSON structure");
+    if (!parsed) {
+      return buildFallbackReviewResult(
+        "Photo review returned invalid JSON structure",
+      );
+    }
+
+    return parsed;
+  } catch {
+    return buildFallbackReviewResult("Photo review returned invalid JSON");
   }
-
-  return parsed;
 }
