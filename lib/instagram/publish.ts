@@ -190,7 +190,7 @@ async function postGraphForm<T>(
   });
 
   const response = await fetch(
-    `https://graph.facebook.com/${config.graphApiVersion}${path}`,
+    `https://graph.instagram.com/${config.graphApiVersion}${path}`,
     {
       method: "POST",
       headers: {
@@ -214,7 +214,7 @@ async function getGraphJson<T>(path: string, params: Record<string, string>) {
     throw new Error("Instagram publishing is not configured");
   }
 
-  const url = new URL(`https://graph.facebook.com/${config.graphApiVersion}${path}`);
+  const url = new URL(`https://graph.instagram.com/${config.graphApiVersion}${path}`);
 
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
