@@ -34,6 +34,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       image_size,
       quality,
       failure_reason,
+      result_payload,
       result_asset_id,
       result_storage_bucket,
       result_file_path,
@@ -51,6 +52,13 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   }
 
   let resultUrl: string | null = null;
+  let generatedAssets: Array<{
+    assetId: string | null;
+    filePath: string | null;
+    promptKey: string | null;
+    url: string | null;
+  }> = [];
+  let imageCount = 1;
 
   if (job.result_storage_bucket && job.result_file_path) {
     const { data: signedUrlData } = await supabase.storage
@@ -58,6 +66,50 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       .createSignedUrl(job.result_file_path, 60 * 60);
 
     resultUrl = signedUrlData?.signedUrl ?? null;
+  }
+
+  if (job.result_payload && typeof job.result_payload === "object") {
+    const resultPayload = job.result_payload as {
+      imageCount?: unknown;
+      generatedImages?: Array<{
+        assetId?: unknown;
+        filePath?: unknown;
+        promptKey?: unknown;
+      }>;
+    };
+
+    imageCount =
+      typeof resultPayload.imageCount === "number" ? resultPayload.imageCount : 1;
+
+    if (Array.isArray(resultPayload.generatedImages)) {
+      generatedAssets = await Promise.all(
+        resultPayload.generatedImages.map(async (item) => {
+          const filePath = typeof item.filePath === "string" ? item.filePath : null;
+          const assetId = typeof item.assetId === "string" ? item.assetId : null;
+          const promptKey = typeof item.promptKey === "string" ? item.promptKey : null;
+
+          if (!filePath || !job.result_storage_bucket) {
+            return {
+              assetId,
+              filePath,
+              promptKey,
+              url: null,
+            };
+          }
+
+          const { data: signedUrlData } = await supabase.storage
+            .from(job.result_storage_bucket)
+            .createSignedUrl(filePath, 60 * 60);
+
+          return {
+            assetId,
+            filePath,
+            promptKey,
+            url: signedUrlData?.signedUrl ?? null,
+          };
+        }),
+      );
+    }
   }
 
   return successResponse(
@@ -76,6 +128,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       resultStorageBucket: job.result_storage_bucket,
       resultFilePath: job.result_file_path,
       resultUrl,
+      imageCount,
+      generatedAssets,
       startedAt: job.started_at,
       completedAt: job.completed_at,
       createdAt: job.created_at,

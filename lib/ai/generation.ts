@@ -104,6 +104,18 @@ export type GeneratedPromoCaption = {
   hashtags: string[];
 };
 
+type PromoCarouselVariant = {
+  key:
+    | "hero"
+    | "detail"
+    | "price"
+    | "audience"
+    | "market_story"
+    | "popular_demand"
+    | "cta";
+  instruction: string;
+};
+
 type FoodVisualProfile = {
   category: string;
   heroFocus: string;
@@ -461,6 +473,85 @@ Visual direction:
 - Bright but tasteful palette, balanced contrast, and premium food-photography finish.
 - Suitable for a merchant-facing ad preview that already feels close to publishable.
 - Make the composition feel intentional, contemporary, and brand-safe.`;
+}
+
+export function choosePromoImageCount(
+  submission: SubmissionForGeneration,
+  stylePreset: GenerationStylePreset,
+) {
+  const merchantInsights = readMerchantInsights(submission.ai_metadata);
+
+  let count = 5;
+
+  if (stylePreset === "market_story") {
+    count += 1;
+  }
+
+  if (submission.extra_message || merchantInsights.popularMenuNotes) {
+    count += 1;
+  }
+
+  return Math.min(7, Math.max(5, count));
+}
+
+export function buildPromoCarouselPrompts(
+  submission: SubmissionForGeneration,
+  stylePreset: GenerationStylePreset,
+) {
+  const merchantInsights = readMerchantInsights(submission.ai_metadata);
+  const basePrompt = buildPromoPrompt(submission, stylePreset);
+  const variants: PromoCarouselVariant[] = [
+    {
+      key: "hero",
+      instruction:
+        "Slide focus: create the strongest hero image for the featured menu. Make the dish immediately craveable and premium.",
+    },
+    {
+      key: "detail",
+      instruction:
+        "Slide focus: a tighter macro-style composition emphasizing texture, steam, gloss, and ingredient detail.",
+    },
+    {
+      key: "price",
+      instruction: submission.price_text
+        ? `Slide focus: naturally support price/value communication for ${submission.price_text} without making the image look like a cheap flyer.`
+        : "Slide focus: emphasize value and satisfaction without inventing or displaying a price.",
+    },
+    {
+      key: "audience",
+      instruction: merchantInsights.targetCustomer || merchantInsights.peakSalesTime
+        ? `Slide focus: subtly reflect the real customer context and buying timing. Audience: ${merchantInsights.targetCustomer ?? "손님"}. Timing: ${merchantInsights.peakSalesTime ?? "방문 시간대"}.`
+        : "Slide focus: make the dish feel broadly appealing to everyday local customers.",
+    },
+    {
+      key: "market_story",
+      instruction:
+        "Slide focus: blend the food with tasteful traditional-market atmosphere and authentic neighborhood warmth.",
+    },
+    {
+      key: "popular_demand",
+      instruction: merchantInsights.popularMenuNotes
+        ? `Slide focus: visually reinforce why customers keep choosing it. Popular demand hint: ${merchantInsights.popularMenuNotes}.`
+        : "Slide focus: present the menu as a proven favorite and trustworthy best-seller.",
+    },
+    {
+      key: "cta",
+      instruction:
+        "Slide focus: clean closing image suitable for the final carousel card, with confident whitespace and a subtle call-to-action mood.",
+    },
+  ];
+
+  const imageCount = choosePromoImageCount(submission, stylePreset);
+
+  return variants.slice(0, imageCount).map((variant, index) => ({
+    index,
+    key: variant.key,
+    prompt: `${basePrompt}
+
+Carousel slide ${index + 1} of ${imageCount}.
+${variant.instruction}
+Make this slide visually distinct from the others while keeping the same merchant, dish, and campaign identity.`,
+  }));
 }
 
 async function fetchImageBytesFromUrl(url: string) {

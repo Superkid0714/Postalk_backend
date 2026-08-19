@@ -1,5 +1,7 @@
 import {
+  buildPromoCarouselPrompts,
   buildPromoPrompt,
+  choosePromoImageCount,
   generatePromoCaption,
   generatePromoImage,
   normalizeStoreRelation,
@@ -105,15 +107,22 @@ export async function processGenerationJobById(jobId: string) {
     throw new Error("Generation job submission not found");
   }
 
+  const normalizedGenerationSubmission = {
+    ...normalizedSubmission,
+    stores: normalizeStoreRelation(normalizedSubmission.stores),
+  };
+
   const promptText =
     job.prompt_text ??
-    buildPromoPrompt(
-      {
-        ...normalizedSubmission,
-        stores: normalizeStoreRelation(normalizedSubmission.stores),
-      },
-      job.style_preset,
-    );
+    buildPromoPrompt(normalizedGenerationSubmission, job.style_preset);
+  const carouselPrompts = buildPromoCarouselPrompts(
+    normalizedGenerationSubmission,
+    job.style_preset,
+  );
+  const imageCount = choosePromoImageCount(
+    normalizedGenerationSubmission,
+    job.style_preset,
+  );
 
   const processingTime = new Date().toISOString();
 
@@ -141,72 +150,86 @@ export async function processGenerationJobById(jobId: string) {
           job.request_payload.mockMode === true,
       );
 
-    const result = isMockMode
-      ? await (async () => {
-          const sourceAsset = pickMockSourceAsset(
-            normalizedSubmission.submission_assets,
-          );
+    const sourceAsset = isMockMode
+      ? pickMockSourceAsset(normalizedSubmission.submission_assets)
+      : null;
 
-          if (!sourceAsset) {
-            throw new Error("Mock generation source asset not found");
-          }
+    let mockBytes: Buffer | null = null;
 
-          const { data, error } = await supabase.storage
-            .from(sourceAsset.storage_bucket)
-            .download(sourceAsset.file_path);
+    if (isMockMode) {
+      if (!sourceAsset) {
+        throw new Error("Mock generation source asset not found");
+      }
 
-          if (error || !data) {
-            throw new Error(error?.message ?? "Mock source image download failed");
-          }
+      const { data, error } = await supabase.storage
+        .from(sourceAsset.storage_bucket)
+        .download(sourceAsset.file_path);
 
-          return {
-            bytes: Buffer.from(await data.arrayBuffer()),
-            revisedPrompt: "mock-image-generated",
-          };
-        })()
-      : await generatePromoImage({
-          prompt: promptText,
-          model: job.model_name,
-          size: job.image_size,
-          quality: job.quality,
-        });
+      if (error || !data) {
+        throw new Error(error?.message ?? "Mock source image download failed");
+      }
 
-    const filePath = `${job.store_id}/${job.submission_id}/generated/${job.id}.png`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("uploads")
-      .upload(filePath, result.bytes, {
-        contentType: "image/png",
-        upsert: true,
-      });
-
-    if (uploadError) {
-      throw new Error(uploadError.message);
+      mockBytes = Buffer.from(await data.arrayBuffer());
     }
 
-    const { data: asset, error: assetInsertError } = await supabase
-      .from("submission_assets")
-      .insert({
-        submission_id: job.submission_id,
-        asset_type: "generated_image",
-        storage_bucket: "uploads",
-        file_path: filePath,
-        file_name: `${job.id}.png`,
-        mime_type: "image/png",
-        file_size: result.bytes.byteLength,
-      })
-      .select("id")
-      .single();
+    const generatedImages = [];
 
-    if (assetInsertError || !asset) {
-      throw new Error(assetInsertError?.message ?? "Asset insert failed");
+    for (const carouselPrompt of carouselPrompts) {
+      const result = isMockMode
+        ? {
+            bytes: mockBytes!,
+            revisedPrompt: `mock-image-generated-${carouselPrompt.key}`,
+          }
+        : await generatePromoImage({
+            prompt: carouselPrompt.prompt,
+            model: job.model_name,
+            size: job.image_size,
+            quality: job.quality,
+          });
+
+      const filePath = `${job.store_id}/${job.submission_id}/generated/${job.id}-${carouselPrompt.index + 1}.png`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("uploads")
+        .upload(filePath, result.bytes, {
+          contentType: "image/png",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        throw new Error(uploadError.message);
+      }
+
+      const { data: asset, error: assetInsertError } = await supabase
+        .from("submission_assets")
+        .insert({
+          submission_id: job.submission_id,
+          asset_type: "generated_image",
+          storage_bucket: "uploads",
+          file_path: filePath,
+          file_name: `${job.id}-${carouselPrompt.index + 1}.png`,
+          mime_type: "image/png",
+          file_size: result.bytes.byteLength,
+          sort_order: carouselPrompt.index,
+        })
+        .select("id, file_path")
+        .single();
+
+      if (assetInsertError || !asset) {
+        throw new Error(assetInsertError?.message ?? "Asset insert failed");
+      }
+
+      generatedImages.push({
+        assetId: asset.id,
+        filePath: asset.file_path,
+        promptKey: carouselPrompt.key,
+        promptText: carouselPrompt.prompt,
+        revisedPrompt: result.revisedPrompt,
+      });
     }
 
     const completedAt = new Date().toISOString();
-    const captionResult = await generatePromoCaption({
-      ...normalizedSubmission,
-      stores: normalizeStoreRelation(normalizedSubmission.stores),
-    });
+    const captionResult = await generatePromoCaption(normalizedGenerationSubmission);
 
     const { error: completeUpdateError } = await supabase
       .from("generation_jobs")
@@ -214,11 +237,12 @@ export async function processGenerationJobById(jobId: string) {
         status: "completed",
         completed_at: completedAt,
         failure_reason: null,
-        result_asset_id: asset.id,
+        result_asset_id: generatedImages[0]?.assetId ?? null,
         result_storage_bucket: "uploads",
-        result_file_path: filePath,
+        result_file_path: generatedImages[0]?.filePath ?? null,
         result_payload: {
-          revisedPrompt: result.revisedPrompt,
+          imageCount,
+          generatedImages,
           mockMode: isMockMode,
         },
       })
@@ -254,8 +278,9 @@ export async function processGenerationJobById(jobId: string) {
     return {
       jobId: job.id,
       status: "completed" as const,
-      resultAssetId: asset.id,
-      filePath,
+      resultAssetId: generatedImages[0]?.assetId ?? null,
+      filePath: generatedImages[0]?.filePath ?? null,
+      imageCount,
     };
   } catch (error) {
     const failureReason =
