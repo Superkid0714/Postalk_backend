@@ -25,7 +25,15 @@ function readEnv(key: EnvKey) {
 }
 
 function readOptionalEnv(key: OptionalEnvKey) {
-  return process.env[key] ?? null;
+  const value = process.env[key];
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+
+  return normalized.length > 0 ? normalized : null;
 }
 
 export function getSupabaseEnv() {
