@@ -39,6 +39,23 @@ export async function GET(
     qr.assigned_store_id,
   );
 
+  if (
+    qr.assigned_store_id &&
+    (!store ||
+      !store.id?.trim() ||
+      !store.market_name?.trim() ||
+      !store.store_name?.trim())
+  ) {
+    return errorResponse("Assigned store details not found", 500, {
+      code: "MERCHANT_QR_STORE_LOAD_FAILED",
+      details: {
+        assignedStoreId: qr.assigned_store_id,
+        message:
+          "Connected QR must include store id, marketName, and storeName",
+      },
+    });
+  }
+
   return successResponse(
     {
       qr: mapMerchantQrResponse(qr, request.nextUrl.origin, store),
