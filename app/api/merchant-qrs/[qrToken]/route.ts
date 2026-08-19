@@ -47,8 +47,7 @@ export async function GET(
           qr.status === "ready" || !store?.category?.trim(),
         needsLocationCapture:
           qr.status === "ready" ||
-          typeof store?.latitude !== "number" ||
-          typeof store?.longitude !== "number",
+          !store?.location_address?.trim(),
         categoryOptions: STORE_CATEGORY_OPTIONS,
         selectedCategory: store?.category ?? null,
         photoGuide: isStoreCategoryCode(store?.category)

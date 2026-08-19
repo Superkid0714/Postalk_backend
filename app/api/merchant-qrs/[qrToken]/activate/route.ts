@@ -21,18 +21,8 @@ type ActivateMerchantQrBody = {
   storeName?: string;
   ownerName?: string;
   category?: string;
-  latitude?: number;
-  longitude?: number;
   locationAddress?: string;
 };
-
-function parseCoordinate(value: unknown) {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return null;
-  }
-
-  return value;
-}
 
 export async function POST(
   request: NextRequest,
@@ -86,20 +76,10 @@ export async function POST(
 
   const category = body.category.trim() as StoreCategoryCode;
 
-  const latitude = parseCoordinate(body.latitude);
-  const longitude = parseCoordinate(body.longitude);
-
-  if (latitude === null) {
-    return errorResponse("latitude is required", 400, {
+  if (!body.locationAddress?.trim()) {
+    return errorResponse("locationAddress is required", 400, {
       code: "VALIDATION_ERROR",
-      details: [{ field: "latitude", reason: "latitude must be a valid number" }],
-    });
-  }
-
-  if (longitude === null) {
-    return errorResponse("longitude is required", 400, {
-      code: "VALIDATION_ERROR",
-      details: [{ field: "longitude", reason: "longitude must be a valid number" }],
+      details: [{ field: "locationAddress", reason: "locationAddress is required" }],
     });
   }
 
@@ -130,8 +110,6 @@ export async function POST(
         .from("stores")
         .update({
           category,
-          latitude,
-          longitude,
           location_address: body.locationAddress?.trim() || null,
         })
         .eq("id", store.id);
@@ -149,15 +127,11 @@ export async function POST(
     if (
       store &&
       store.category === category &&
-      (store.latitude !== latitude ||
-        store.longitude !== longitude ||
-        (store.location_address ?? null) !== (body.locationAddress?.trim() || null))
+      (store.location_address ?? null) !== (body.locationAddress?.trim() || null)
     ) {
       const { error: updateLocationError } = await supabase
         .from("stores")
         .update({
-          latitude,
-          longitude,
           location_address: body.locationAddress?.trim() || null,
         })
         .eq("id", store.id);
@@ -188,8 +162,8 @@ export async function POST(
           store_name: body.storeName.trim(),
           owner_name: body.ownerName?.trim() || null,
           category,
-          latitude,
-          longitude,
+          latitude: null,
+          longitude: null,
           location_address: body.locationAddress?.trim() || null,
         })
         .select("id")
@@ -208,8 +182,6 @@ export async function POST(
         .from("stores")
         .update({
           category,
-          latitude,
-          longitude,
           location_address: body.locationAddress?.trim() || null,
         })
         .eq("id", assignedStoreId);
