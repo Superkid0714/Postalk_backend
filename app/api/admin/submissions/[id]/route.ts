@@ -128,6 +128,8 @@ export async function PATCH(
     );
     const hasPhotoWorkflow = Object.keys(workflow).length > 0;
     const hasVideoWorkflow = Object.keys(videoWorkflow).length > 0;
+    const isPhotoPublishFlow = workflow.publishRequestStatus === "requested_publish";
+    const isVideoPublishFlow = videoWorkflow.status === "requested_publish";
     const publishRequestStatus =
       body.status === "approved"
         ? "approved"
@@ -144,14 +146,14 @@ export async function PATCH(
 
     let nextAiMetadata = currentSubmission.ai_metadata;
 
-    if (hasPhotoWorkflow || !hasVideoWorkflow) {
+    if (isPhotoPublishFlow || (hasPhotoWorkflow && !hasVideoWorkflow)) {
       nextAiMetadata = mergeSubmissionWorkflowMetadata(nextAiMetadata, {
         adType: workflow.adType ?? "photo",
         publishRequestStatus,
       });
     }
 
-    if (hasVideoWorkflow) {
+    if (isVideoPublishFlow || (hasVideoWorkflow && !hasPhotoWorkflow)) {
       nextAiMetadata = mergeSubmissionVideoWorkflowMetadata(nextAiMetadata, {
         status: videoWorkflowStatus,
       });

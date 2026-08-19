@@ -105,6 +105,49 @@ export type VideoSubmissionRow = {
   submission_assets?: VideoSubmissionAsset[] | null;
 };
 
+type MerchantInsights = {
+  targetCustomer: string | null;
+  peakSalesTime: string | null;
+  popularMenuNotes: string | null;
+};
+
+function readMerchantInsights(
+  aiMetadata: Record<string, unknown> | null | undefined,
+): MerchantInsights {
+  if (!aiMetadata || typeof aiMetadata !== "object" || Array.isArray(aiMetadata)) {
+    return {
+      targetCustomer: null,
+      peakSalesTime: null,
+      popularMenuNotes: null,
+    };
+  }
+
+  const merchantInsights = aiMetadata.merchantInsights;
+
+  if (
+    !merchantInsights ||
+    typeof merchantInsights !== "object" ||
+    Array.isArray(merchantInsights)
+  ) {
+    return {
+      targetCustomer: null,
+      peakSalesTime: null,
+      popularMenuNotes: null,
+    };
+  }
+
+  const record = merchantInsights as Record<string, unknown>;
+
+  return {
+    targetCustomer:
+      typeof record.targetCustomer === "string" ? record.targetCustomer : null,
+    peakSalesTime:
+      typeof record.peakSalesTime === "string" ? record.peakSalesTime : null,
+    popularMenuNotes:
+      typeof record.popularMenuNotes === "string" ? record.popularMenuNotes : null,
+  };
+}
+
 export function normalizeVideoStore(
   stores: VideoSubmissionRow["stores"],
 ) {
@@ -120,6 +163,7 @@ export function buildSubmissionVideoPrompt(
   stylePreset: VideoStylePreset,
 ) {
   const store = normalizeVideoStore(submission.stores);
+  const merchantInsights = readMerchantInsights(submission.ai_metadata);
 
   return buildVideoPrompt(
     {
@@ -130,6 +174,9 @@ export function buildSubmissionVideoPrompt(
       priceText: submission.price_text,
       appealPoint: submission.appeal_point,
       extraMessage: submission.extra_message,
+      targetCustomer: merchantInsights.targetCustomer,
+      peakSalesTime: merchantInsights.peakSalesTime,
+      popularMenuNotes: merchantInsights.popularMenuNotes,
     },
     stylePreset,
   );
@@ -140,6 +187,7 @@ export function buildSubmissionVideoScript(
   stylePreset: VideoStylePreset,
 ) {
   const store = normalizeVideoStore(submission.stores);
+  const merchantInsights = readMerchantInsights(submission.ai_metadata);
 
   return buildVideoScript(
     {
@@ -150,6 +198,9 @@ export function buildSubmissionVideoScript(
       priceText: submission.price_text,
       appealPoint: submission.appeal_point,
       extraMessage: submission.extra_message,
+      targetCustomer: merchantInsights.targetCustomer,
+      peakSalesTime: merchantInsights.peakSalesTime,
+      popularMenuNotes: merchantInsights.popularMenuNotes,
     },
     stylePreset,
   );

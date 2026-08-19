@@ -7,7 +7,12 @@ type OptionalEnvKey =
   | "ADMIN_API_KEY"
   | "OPENAI_API_KEY"
   | "GEMINI_API_KEY"
-  | "GEMINI_VIDEO_MODEL";
+  | "GEMINI_VIDEO_MODEL"
+  | "INSTAGRAM_APP_ID"
+  | "INSTAGRAM_APP_SECRET"
+  | "INSTAGRAM_ACCESS_TOKEN"
+  | "INSTAGRAM_IG_USER_ID"
+  | "INSTAGRAM_GRAPH_API_VERSION";
 
 function readEnv(key: EnvKey) {
   const value = process.env[key];
@@ -52,4 +57,14 @@ export function getGeminiApiKey() {
 
 export function getGeminiVideoModel() {
   return readOptionalEnv("GEMINI_VIDEO_MODEL");
+}
+
+export function getInstagramEnv() {
+  return {
+    appId: readOptionalEnv("INSTAGRAM_APP_ID"),
+    appSecret: readOptionalEnv("INSTAGRAM_APP_SECRET"),
+    accessToken: readOptionalEnv("INSTAGRAM_ACCESS_TOKEN"),
+    igUserId: readOptionalEnv("INSTAGRAM_IG_USER_ID"),
+    graphApiVersion: readOptionalEnv("INSTAGRAM_GRAPH_API_VERSION") ?? "v24.0",
+  };
 }

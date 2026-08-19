@@ -82,6 +82,61 @@ function readMerchantInsights(aiMetadata: Record<string, unknown> | null | undef
   };
 }
 
+function readInstagramPublish(aiMetadata: Record<string, unknown> | null | undefined) {
+  if (!aiMetadata || typeof aiMetadata !== "object" || Array.isArray(aiMetadata)) {
+    return {
+      mediaType: null,
+      status: null,
+      containerId: null,
+      publishedMediaId: null,
+      caption: null,
+      requestedAt: null,
+      publishedAt: null,
+      lastCheckedAt: null,
+      lastError: null,
+    };
+  }
+
+  const instagramPublish = aiMetadata.instagramPublish;
+
+  if (
+    !instagramPublish ||
+    typeof instagramPublish !== "object" ||
+    Array.isArray(instagramPublish)
+  ) {
+    return {
+      mediaType: null,
+      status: null,
+      containerId: null,
+      publishedMediaId: null,
+      caption: null,
+      requestedAt: null,
+      publishedAt: null,
+      lastCheckedAt: null,
+      lastError: null,
+    };
+  }
+
+  const instagramPublishRecord = instagramPublish as Record<string, unknown>;
+
+  const readString = (key: string) =>
+    typeof instagramPublishRecord[key] === "string"
+      ? (instagramPublishRecord[key] as string)
+      : null;
+
+  return {
+    mediaType: readString("mediaType"),
+    status: readString("status"),
+    containerId: readString("containerId"),
+    publishedMediaId: readString("publishedMediaId"),
+    caption: readString("caption"),
+    requestedAt: readString("requestedAt"),
+    publishedAt: readString("publishedAt"),
+    lastCheckedAt: readString("lastCheckedAt"),
+    lastError: readString("lastError"),
+  };
+}
+
 export function normalizeReviewStore(
   store: ReviewStoreRecord | ReviewStoreRecord[] | null,
 ) {
@@ -132,6 +187,7 @@ export async function buildReviewListItem(submission: ReviewSubmissionRecord) {
 export async function buildReviewDetail(submission: ReviewSubmissionRecord) {
   const store = normalizeReviewStore(submission.stores);
   const merchantInsights = readMerchantInsights(submission.ai_metadata);
+  const instagramPublish = readInstagramPublish(submission.ai_metadata);
 
   const assets = await Promise.all(
     (submission.submission_assets ?? []).map(async (asset) => ({
@@ -184,6 +240,7 @@ export async function buildReviewDetail(submission: ReviewSubmissionRecord) {
       reviewedBy: submission.reviewed_by ?? null,
       reviewedAt: submission.reviewed_at ?? null,
     },
+    instagramPublish,
     primaryAssetUrl: primaryAsset ? await getReviewSignedUrl(primaryAsset) : null,
     assets,
   };
