@@ -30,6 +30,11 @@ export type ArchiveSubmissionAssetRow = SubmissionAssetRecord & {
 };
 
 export type ArchiveSubmissionRecord = SubmissionHomeRecord & {
+  appeal_point?: string | null;
+  extra_message?: string | null;
+  caption?: string | null;
+  hashtags?: string[] | null;
+  ai_metadata?: Record<string, unknown> | null;
   stores: ArchiveStoreRecord | ArchiveStoreRecord[] | null;
 };
 
@@ -116,18 +121,91 @@ export async function getArchiveThumbnailUrl(
   return data.signedUrl;
 }
 
+function getVideoScriptCaption(aiMetadata: Record<string, unknown> | null | undefined) {
+  if (
+    !aiMetadata ||
+    typeof aiMetadata !== "object" ||
+    Array.isArray(aiMetadata) ||
+    !("videoWorkflow" in aiMetadata)
+  ) {
+    return null;
+  }
+
+  const videoWorkflow = aiMetadata.videoWorkflow;
+
+  if (
+    !videoWorkflow ||
+    typeof videoWorkflow !== "object" ||
+    Array.isArray(videoWorkflow) ||
+    !("script" in videoWorkflow)
+  ) {
+    return null;
+  }
+
+  const script = videoWorkflow.script;
+
+  if (!script || typeof script !== "object" || Array.isArray(script)) {
+    return null;
+  }
+
+  const scriptRecord = script as Record<string, unknown>;
+
+  return typeof scriptRecord.caption === "string" ? scriptRecord.caption : null;
+}
+
+function buildArchiveCaption(submission: ArchiveSubmissionRecord) {
+  const baseCaption =
+    submission.caption?.trim() ||
+    getVideoScriptCaption(submission.ai_metadata)?.trim() ||
+    [submission.target_menu_name, submission.appeal_point, submission.extra_message]
+      .filter((value) => typeof value === "string" && value.trim().length > 0)
+      .join(" ");
+
+  const hashtags = (submission.hashtags ?? [])
+    .filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0)
+    .join(" ");
+
+  return [baseCaption, hashtags].filter(Boolean).join("\n\n") || null;
+}
+
+function pickGeneratedAsset(
+  assets: SubmissionAssetRecord[] | null | undefined,
+  mediaType: ArchiveMediaType,
+) {
+  if (!assets || assets.length === 0) {
+    return null;
+  }
+
+  const sortedAssets = [...assets].sort((left, right) => left.sort_order - right.sort_order);
+
+  if (mediaType === "video") {
+    return (
+      sortedAssets.find((asset) => asset.asset_type === "video_thumbnail") ??
+      sortedAssets.find((asset) => asset.asset_type === "generated_video") ??
+      null
+    );
+  }
+
+  return sortedAssets.find((asset) => asset.asset_type === "generated_image") ?? null;
+}
+
 export async function buildArchiveItem(
   submission: ArchiveSubmissionRecord,
   mediaType: ArchiveMediaType = "photo",
 ) {
   const store = normalizeArchiveStore(submission.stores);
-  const thumbnailUrl = await getArchiveThumbnailUrl(
-    pickThumbnailAsset(submission.submission_assets),
-  );
+  const thumbnailAsset = pickThumbnailAsset(submission.submission_assets);
+  const generatedAsset = pickGeneratedAsset(submission.submission_assets, mediaType);
+  const [thumbnailUrl, generatedAssetUrl] = await Promise.all([
+    getArchiveThumbnailUrl(thumbnailAsset),
+    getArchiveThumbnailUrl(generatedAsset),
+  ]);
+  const publishCaption = buildArchiveCaption(submission);
 
   return {
     submissionId: submission.id,
     thumbnailUrl,
+    generatedAssetUrl,
     title: getSubmissionTitle(submission, store?.store_name ?? "광고"),
     storeName: store?.store_name ?? null,
     marketName: store?.market_name ?? null,
@@ -136,5 +214,6 @@ export async function buildArchiveItem(
     createdAt: submission.created_at,
     updatedAt: submission.updated_at,
     mediaType,
+    publishCaption,
   };
 }
