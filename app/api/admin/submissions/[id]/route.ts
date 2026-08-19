@@ -6,6 +6,11 @@ import {
   mergeSubmissionWorkflowMetadata,
 } from "@/lib/ad-creation";
 import { requireAdminApiKey } from "@/lib/auth/admin";
+import {
+  getInstagramPublishMetadata,
+  isInstagramConfigured,
+  startInstagramPublishForSubmission,
+} from "@/lib/instagram/publish";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isUuid } from "@/lib/validation";
 import {
@@ -126,10 +131,18 @@ export async function PATCH(
     const videoWorkflow = getSubmissionVideoWorkflowMetadata(
       currentSubmission.ai_metadata,
     );
+    const instagramPublish = getInstagramPublishMetadata(
+      currentSubmission.ai_metadata,
+    );
     const hasPhotoWorkflow = Object.keys(workflow).length > 0;
     const hasVideoWorkflow = Object.keys(videoWorkflow).length > 0;
     const isPhotoPublishFlow = workflow.publishRequestStatus === "requested_publish";
     const isVideoPublishFlow = videoWorkflow.status === "requested_publish";
+    const canAutoPublishToInstagram =
+      body.status === "approved" &&
+      (isPhotoPublishFlow || isVideoPublishFlow) &&
+      instagramPublish.status !== "processing" &&
+      instagramPublish.status !== "published";
     const publishRequestStatus =
       body.status === "approved"
         ? "approved"
@@ -160,7 +173,14 @@ export async function PATCH(
     }
 
     updates.ai_metadata = nextAiMetadata;
+
+    updates._instagram_auto_publish = canAutoPublishToInstagram;
   }
+
+  const shouldAutoPublishToInstagram =
+    updates._instagram_auto_publish === true && isInstagramConfigured();
+
+  delete updates._instagram_auto_publish;
 
   const { data, error } = await supabase
     .from("submissions")
@@ -193,5 +213,52 @@ export async function PATCH(
     });
   }
 
-  return successResponse(data, "Submission updated");
+  let instagramAutoPublish:
+    | {
+        attempted: boolean;
+        ok: boolean;
+        status: string;
+        mediaType: string | null;
+        containerId: string | null;
+        publishedMediaId: string | null;
+        lastError: string | null;
+      }
+    | null = null;
+
+  if (shouldAutoPublishToInstagram) {
+    try {
+      const publishResult = await startInstagramPublishForSubmission(id);
+
+      instagramAutoPublish = {
+        attempted: true,
+        ok: publishResult.ok,
+        status: publishResult.status,
+        mediaType: publishResult.mediaType,
+        containerId: publishResult.containerId,
+        publishedMediaId: publishResult.publishedMediaId,
+        lastError: publishResult.lastError,
+      };
+    } catch (publishError) {
+      instagramAutoPublish = {
+        attempted: true,
+        ok: false,
+        status: "failed",
+        mediaType: null,
+        containerId: null,
+        publishedMediaId: null,
+        lastError:
+          publishError instanceof Error
+            ? publishError.message
+            : "Instagram auto publish failed",
+      };
+    }
+  }
+
+  return successResponse(
+    {
+      ...data,
+      instagramAutoPublish,
+    },
+    "Submission updated",
+  );
 }
