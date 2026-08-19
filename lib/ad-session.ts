@@ -47,7 +47,8 @@ export type AdSessionStore = {
   store_name: string;
   owner_name: string | null;
   category: string | null;
-  location_address: string | null;
+  location_address?: string | null;
+  description?: string | null;
 };
 
 export type AdSessionPhotoRequest = {
@@ -303,7 +304,7 @@ export function buildSessionSummary(store: AdSessionStore, workflow: AdSessionWo
     ownerName: store.owner_name,
     category: store.category,
     categoryLabel: getStoreCategoryLabel(store.category),
-    locationAddress: store.location_address,
+    locationAddress: store.location_address ?? store.description ?? null,
     primarySubject: workflow.primarySubject ?? "대표 메뉴",
   };
 }
