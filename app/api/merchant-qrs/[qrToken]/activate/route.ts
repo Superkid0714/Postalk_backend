@@ -162,8 +162,6 @@ export async function POST(
           store_name: body.storeName.trim(),
           owner_name: body.ownerName?.trim() || null,
           category,
-          latitude: null,
-          longitude: null,
           location_address: body.locationAddress?.trim() || null,
         })
         .select("id")
