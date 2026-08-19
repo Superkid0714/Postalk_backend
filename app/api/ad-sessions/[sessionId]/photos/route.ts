@@ -30,6 +30,24 @@ type SubmitSessionPhotoBody = {
   fileSize?: number | null;
 };
 
+function buildMenuBoardAutoPassReview() {
+  return {
+    passed: true,
+    score: 100,
+    recommendedAction: "proceed" as const,
+    summary: "메뉴판 사진은 자동 승인되었습니다.",
+    feedback: ["메뉴판 사진은 검수 없이 다음 단계로 진행합니다."],
+    checks: {
+      focus: "pass" as const,
+      brightness: "pass" as const,
+      framing: "pass" as const,
+      subjectVisibility: "pass" as const,
+      guideMatch: "pass" as const,
+      textReadability: "pass" as const,
+    },
+  };
+}
+
 export async function POST(request: NextRequest, context: RouteContext) {
   const { sessionId } = await context.params;
 
@@ -143,20 +161,25 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   let review;
 
-  try {
-    review = await reviewPhotoAsset({
-      supabase,
-      bucket: body.bucket!.trim(),
-      filePath: body.filePath!.trim(),
-      assetType: currentRequest.assetType,
-      category,
-      shotOrder: currentRequest.reviewShotOrder,
-    });
-  } catch (reviewError) {
-    return errorResponse("Failed to review photo", 500, {
-      code: "PHOTO_REVIEW_FAILED",
-      details: reviewError instanceof Error ? reviewError.message : "Unknown error",
-    });
+  if (currentRequest.assetType === "menu_board") {
+    review = buildMenuBoardAutoPassReview();
+  } else {
+    try {
+      review = await reviewPhotoAsset({
+        supabase,
+        bucket: body.bucket!.trim(),
+        filePath: body.filePath!.trim(),
+        assetType: currentRequest.assetType,
+        category,
+        shotOrder: currentRequest.reviewShotOrder,
+      });
+    } catch (reviewError) {
+      return errorResponse("Failed to review photo", 500, {
+        code: "PHOTO_REVIEW_FAILED",
+        details:
+          reviewError instanceof Error ? reviewError.message : "Unknown error",
+      });
+    }
   }
 
   if (!review.passed) {
