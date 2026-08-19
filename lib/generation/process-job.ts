@@ -7,11 +7,16 @@ import {
   normalizeStoreRelation,
   normalizeSubmissionRelation,
 } from "@/lib/ai/generation";
+import { renderFoodCardNewsCards } from "@/lib/ai/food-card-news-render";
 import {
   getSubmissionWorkflowMetadata,
   mergeSubmissionWorkflowMetadata,
 } from "@/lib/ad-creation";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 function pickMockSourceAsset(
   assets:
@@ -37,6 +42,27 @@ function pickMockSourceAsset(
     sortedAssets.find((asset) => asset.asset_type === "menu_board") ??
     null
   );
+}
+
+function pickPrimaryAssetByType(
+  assets:
+    | Array<{
+        asset_type: string;
+        storage_bucket: string;
+        file_path: string;
+        sort_order: number;
+      }>
+    | null
+    | undefined,
+  assetType: "food_photo" | "menu_board",
+) {
+  if (!assets || assets.length === 0) {
+    return null;
+  }
+
+  return [...assets]
+    .filter((asset) => asset.asset_type === assetType)
+    .sort((left, right) => left.sort_order - right.sort_order)[0] ?? null;
 }
 
 export async function processGenerationJobById(jobId: string) {
@@ -173,63 +199,152 @@ export async function processGenerationJobById(jobId: string) {
     }
 
     const generatedImages = [];
+    const captionResult = await generatePromoCaption(normalizedGenerationSubmission);
 
-    for (const carouselPrompt of carouselPrompts) {
-      const result = isMockMode
-        ? {
-            bytes: mockBytes!,
-            revisedPrompt: `mock-image-generated-${carouselPrompt.key}`,
-          }
-        : await generatePromoImage({
-            prompt: carouselPrompt.prompt,
-            model: job.model_name,
-            size: job.image_size,
-            quality: job.quality,
+    if (job.style_preset === "food_card_news") {
+      const foodPhotoAsset = pickPrimaryAssetByType(
+        normalizedSubmission.submission_assets,
+        "food_photo",
+      );
+      const menuBoardAsset = pickPrimaryAssetByType(
+        normalizedSubmission.submission_assets,
+        "menu_board",
+      );
+
+      if (!foodPhotoAsset || !menuBoardAsset) {
+        throw new Error("food_card_news requires both food_photo and menu_board assets");
+      }
+
+      const [foodPhotoDownload, menuBoardDownload] = await Promise.all([
+        supabase.storage
+          .from(foodPhotoAsset.storage_bucket)
+          .download(foodPhotoAsset.file_path),
+        supabase.storage
+          .from(menuBoardAsset.storage_bucket)
+          .download(menuBoardAsset.file_path),
+      ]);
+
+      if (foodPhotoDownload.error || !foodPhotoDownload.data) {
+        throw new Error(
+          foodPhotoDownload.error?.message ?? "Failed to load food photo asset",
+        );
+      }
+
+      if (menuBoardDownload.error || !menuBoardDownload.data) {
+        throw new Error(
+          menuBoardDownload.error?.message ?? "Failed to load menu board asset",
+        );
+      }
+
+      const renderedCards = await renderFoodCardNewsCards(
+        {
+          ...normalizedGenerationSubmission,
+          caption: captionResult.caption,
+        },
+        {
+          foodPhoto: Buffer.from(await foodPhotoDownload.data.arrayBuffer()),
+          menuBoard: Buffer.from(await menuBoardDownload.data.arrayBuffer()),
+        },
+      );
+
+      for (const card of renderedCards) {
+        const filePath = `${job.store_id}/${job.submission_id}/generated/${job.id}-${card.index + 1}.png`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("uploads")
+          .upload(filePath, card.bytes, {
+            contentType: "image/png",
+            upsert: true,
           });
 
-      const filePath = `${job.store_id}/${job.submission_id}/generated/${job.id}-${carouselPrompt.index + 1}.png`;
+        if (uploadError) {
+          throw new Error(uploadError.message);
+        }
 
-      const { error: uploadError } = await supabase.storage
-        .from("uploads")
-        .upload(filePath, result.bytes, {
-          contentType: "image/png",
-          upsert: true,
+        const { data: asset, error: assetInsertError } = await supabase
+          .from("submission_assets")
+          .insert({
+            submission_id: job.submission_id,
+            asset_type: "generated_image",
+            storage_bucket: "uploads",
+            file_path: filePath,
+            file_name: `${job.id}-${card.index + 1}.png`,
+            mime_type: "image/png",
+            file_size: card.bytes.byteLength,
+            sort_order: card.index,
+          })
+          .select("id, file_path")
+          .single();
+
+        if (assetInsertError || !asset) {
+          throw new Error(assetInsertError?.message ?? "Asset insert failed");
+        }
+
+        generatedImages.push({
+          assetId: asset.id,
+          filePath: asset.file_path,
+          promptKey: card.key,
+          promptText: card.promptText,
+          revisedPrompt: "template-rendered",
         });
-
-      if (uploadError) {
-        throw new Error(uploadError.message);
       }
+    } else {
+      for (const carouselPrompt of carouselPrompts) {
+        const result = isMockMode
+          ? {
+              bytes: mockBytes!,
+              revisedPrompt: `mock-image-generated-${carouselPrompt.key}`,
+            }
+          : await generatePromoImage({
+              prompt: carouselPrompt.prompt,
+              model: job.model_name,
+              size: job.image_size,
+              quality: job.quality,
+            });
 
-      const { data: asset, error: assetInsertError } = await supabase
-        .from("submission_assets")
-        .insert({
-          submission_id: job.submission_id,
-          asset_type: "generated_image",
-          storage_bucket: "uploads",
-          file_path: filePath,
-          file_name: `${job.id}-${carouselPrompt.index + 1}.png`,
-          mime_type: "image/png",
-          file_size: result.bytes.byteLength,
-          sort_order: carouselPrompt.index,
-        })
-        .select("id, file_path")
-        .single();
+        const filePath = `${job.store_id}/${job.submission_id}/generated/${job.id}-${carouselPrompt.index + 1}.png`;
 
-      if (assetInsertError || !asset) {
-        throw new Error(assetInsertError?.message ?? "Asset insert failed");
+        const { error: uploadError } = await supabase.storage
+          .from("uploads")
+          .upload(filePath, result.bytes, {
+            contentType: "image/png",
+            upsert: true,
+          });
+
+        if (uploadError) {
+          throw new Error(uploadError.message);
+        }
+
+        const { data: asset, error: assetInsertError } = await supabase
+          .from("submission_assets")
+          .insert({
+            submission_id: job.submission_id,
+            asset_type: "generated_image",
+            storage_bucket: "uploads",
+            file_path: filePath,
+            file_name: `${job.id}-${carouselPrompt.index + 1}.png`,
+            mime_type: "image/png",
+            file_size: result.bytes.byteLength,
+            sort_order: carouselPrompt.index,
+          })
+          .select("id, file_path")
+          .single();
+
+        if (assetInsertError || !asset) {
+          throw new Error(assetInsertError?.message ?? "Asset insert failed");
+        }
+
+        generatedImages.push({
+          assetId: asset.id,
+          filePath: asset.file_path,
+          promptKey: carouselPrompt.key,
+          promptText: carouselPrompt.prompt,
+          revisedPrompt: result.revisedPrompt,
+        });
       }
-
-      generatedImages.push({
-        assetId: asset.id,
-        filePath: asset.file_path,
-        promptKey: carouselPrompt.key,
-        promptText: carouselPrompt.prompt,
-        revisedPrompt: result.revisedPrompt,
-      });
     }
 
     const completedAt = new Date().toISOString();
-    const captionResult = await generatePromoCaption(normalizedGenerationSubmission);
 
     const { error: completeUpdateError } = await supabase
       .from("generation_jobs")
@@ -262,7 +377,16 @@ export async function processGenerationJobById(jobId: string) {
         caption: captionResult.caption,
         hashtags: captionResult.hashtags,
         ai_metadata: mergeSubmissionWorkflowMetadata(
-          normalizedSubmission.ai_metadata ?? null,
+          {
+            ...(isObject(normalizedSubmission.ai_metadata)
+              ? normalizedSubmission.ai_metadata
+              : {}),
+            marketContext: captionResult.marketContext,
+            festivalContext: captionResult.festivalContext,
+            kamisContext: captionResult.kamisContext,
+            captionInputContext: captionResult.captionInputContext,
+            captionEvidence: captionResult.evidence,
+          },
           {
             adType: currentWorkflow.adType ?? "photo",
             publishRequestStatus: "generated",

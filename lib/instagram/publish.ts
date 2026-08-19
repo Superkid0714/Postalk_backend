@@ -14,6 +14,10 @@ export type InstagramPublishMetadata = {
   caption?: string | null;
   assetId?: string | null;
   assetPath?: string | null;
+  assetIds?: string[] | null;
+  assetPaths?: string[] | null;
+  publishMode?: "single" | "carousel" | null;
+  carouselItemCount?: number | null;
   containerStatusCode?: string | null;
   requestedAt?: string | null;
   publishedAt?: string | null;
@@ -35,7 +39,11 @@ type InstagramSubmissionRow = {
         id: string;
         status: string;
         model_name: string;
+        style_preset: string;
         result_asset_id: string | null;
+        result_storage_bucket: string | null;
+        result_file_path: string | null;
+        result_payload: Record<string, unknown> | null;
         created_at: string;
       }>
     | null;
@@ -57,6 +65,8 @@ type InstagramPublishResult = {
   submissionId: string;
   mediaType: InstagramMediaType;
   status: InstagramPublishStatus;
+  publishMode?: "single" | "carousel";
+  carouselItemCount?: number;
   containerId: string | null;
   publishedMediaId: string | null;
   caption: string | null;
@@ -76,6 +86,20 @@ type WaitForInstagramPublishCompletionOptions = {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizePublishMode(
+  value: unknown,
+): "single" | "carousel" | undefined {
+  if (value === "carousel") {
+    return "carousel";
+  }
+
+  if (value === "single") {
+    return "single";
+  }
+
+  return undefined;
 }
 
 export function getInstagramPublishMetadata(
@@ -294,7 +318,11 @@ async function loadSubmission(submissionId: string) {
           id,
           status,
           model_name,
+          style_preset,
           result_asset_id,
+          result_storage_bucket,
+          result_file_path,
+          result_payload,
           created_at
         ),
         submission_assets (
@@ -344,10 +372,65 @@ function resolveInstagramMediaType(
   return hasVideoAsset ? "video" : "photo";
 }
 
-function pickAssetForInstagram(
+type InstagramPublishAsset = {
+  id: string;
+  asset_type: string;
+  storage_bucket: string;
+  file_path: string;
+  file_name: string | null;
+  mime_type: string | null;
+  created_at: string;
+};
+
+type InstagramPublishAssetSelection = {
+  publishMode: "single" | "carousel";
+  assets: InstagramPublishAsset[];
+  sourceJobId: string | null;
+};
+
+function resolveCarouselAssetsFromJob(
+  submission: InstagramSubmissionRow,
+  relevantJob: NonNullable<InstagramSubmissionRow["generation_jobs"]>[number] | undefined,
+) {
+  const assets = submission.submission_assets ?? [];
+
+  if (!relevantJob || !relevantJob.result_payload || typeof relevantJob.result_payload !== "object") {
+    return null;
+  }
+
+  const generatedImages = Array.isArray(relevantJob.result_payload.generatedImages)
+    ? relevantJob.result_payload.generatedImages
+    : null;
+
+  if (!generatedImages || generatedImages.length <= 1) {
+    return null;
+  }
+
+  const resolvedAssets = generatedImages
+    .map((item) => {
+      if (!item || typeof item !== "object") {
+        return null;
+      }
+
+      const record = item as Record<string, unknown>;
+      const assetId = typeof record.assetId === "string" ? record.assetId : null;
+      const filePath = typeof record.filePath === "string" ? record.filePath : null;
+
+      return (
+        assets.find((asset) => assetId && asset.id === assetId) ??
+        assets.find((asset) => filePath && asset.file_path === filePath) ??
+        null
+      );
+    })
+    .filter((asset): asset is InstagramPublishAsset => Boolean(asset));
+
+  return resolvedAssets.length > 1 ? resolvedAssets : null;
+}
+
+function pickAssetsForInstagram(
   submission: InstagramSubmissionRow,
   mediaType: InstagramMediaType,
-) {
+): InstagramPublishAssetSelection | null {
   const jobs = [...(submission.generation_jobs ?? [])].sort((left, right) =>
     right.created_at.localeCompare(left.created_at),
   );
@@ -363,18 +446,43 @@ function pickAssetForInstagram(
       : !job.model_name.startsWith("veo");
   });
 
+  if (mediaType === "photo") {
+    const carouselAssets = resolveCarouselAssetsFromJob(submission, relevantJob);
+
+    if (carouselAssets) {
+      return {
+        publishMode: "carousel",
+        assets: carouselAssets,
+        sourceJobId: relevantJob?.id ?? null,
+      };
+    }
+  }
+
   if (relevantJob?.result_asset_id) {
     const matchedAsset = assets.find((asset) => asset.id === relevantJob.result_asset_id);
     if (matchedAsset) {
-      return matchedAsset;
+      return {
+        publishMode: "single",
+        assets: [matchedAsset],
+        sourceJobId: relevantJob.id,
+      };
     }
   }
 
   const targetAssetType = mediaType === "video" ? "generated_video" : "generated_image";
-
-  return [...assets]
+  const fallbackAsset = [...assets]
     .filter((asset) => asset.asset_type === targetAssetType)
     .sort((left, right) => right.created_at.localeCompare(left.created_at))[0] ?? null;
+
+  if (!fallbackAsset) {
+    return null;
+  }
+
+  return {
+    publishMode: "single",
+    assets: [fallbackAsset],
+    sourceJobId: null,
+  };
 }
 
 async function createSignedAssetUrl(bucket: string, filePath: string) {
@@ -392,7 +500,7 @@ async function createSignedAssetUrl(bucket: string, filePath: string) {
 
 async function publishInstagramMedia(
   mediaType: InstagramMediaType,
-  mediaUrl: string,
+  mediaUrls: string[],
   caption: string | null,
 ) {
   const config = getInstagramConfig();
@@ -402,15 +510,51 @@ async function publishInstagramMedia(
   }
 
   if (mediaType === "photo") {
+    if (mediaUrls.length > 1) {
+      const childContainerIds: string[] = [];
+
+      for (const mediaUrl of mediaUrls) {
+        const child = await postGraphForm<{ id: string }>(
+          `/${config.igUserId}/media`,
+          {
+            image_url: mediaUrl,
+            is_carousel_item: "true",
+          },
+        );
+
+        childContainerIds.push(child.id);
+      }
+
+      const carousel = await postGraphForm<{ id: string }>(
+        `/${config.igUserId}/media`,
+        {
+          media_type: "CAROUSEL",
+          children: childContainerIds.join(","),
+          ...(caption ? { caption } : {}),
+        },
+      );
+
+      return {
+        publishMode: "carousel" as const,
+        carouselItemCount: mediaUrls.length,
+        containerId: carousel.id,
+        publishedMediaId: null,
+        status: "processing" as const,
+        containerStatusCode: "IN_PROGRESS",
+      };
+    }
+
     const container = await postGraphForm<{ id: string }>(
       `/${config.igUserId}/media`,
       {
-        image_url: mediaUrl,
+        image_url: mediaUrls[0]!,
         ...(caption ? { caption } : {}),
       },
     );
 
     return {
+      publishMode: "single" as const,
+      carouselItemCount: 1,
       containerId: container.id,
       publishedMediaId: null,
       status: "processing" as const,
@@ -422,12 +566,14 @@ async function publishInstagramMedia(
     `/${config.igUserId}/media`,
     {
       media_type: "REELS",
-      video_url: mediaUrl,
+      video_url: mediaUrls[0]!,
       ...(caption ? { caption } : {}),
     },
   );
 
   return {
+    publishMode: "single" as const,
+    carouselItemCount: 1,
     containerId: container.id,
     publishedMediaId: null,
     status: "processing" as const,
@@ -439,6 +585,7 @@ async function publishInstagramContainer(
   submissionId: string,
   containerId: string,
   mediaType: InstagramMediaType,
+  instagramPublish: InstagramPublishMetadata,
 ) {
   const config = getInstagramConfig();
 
@@ -478,6 +625,11 @@ async function publishInstagramContainer(
       submissionId,
       mediaType,
       status: "published" as const,
+      publishMode: normalizePublishMode(instagramPublish.publishMode) ?? "single",
+      carouselItemCount:
+        typeof instagramPublish.carouselItemCount === "number"
+          ? instagramPublish.carouselItemCount
+          : undefined,
       containerId,
       publishedMediaId: published.id,
       caption: null,
@@ -500,6 +652,11 @@ async function publishInstagramContainer(
       submissionId,
       mediaType,
       status: "failed" as const,
+      publishMode: normalizePublishMode(instagramPublish.publishMode) ?? "single",
+      carouselItemCount:
+        typeof instagramPublish.carouselItemCount === "number"
+          ? instagramPublish.carouselItemCount
+          : undefined,
       containerId,
       publishedMediaId: null,
       caption: null,
@@ -519,6 +676,11 @@ async function publishInstagramContainer(
     submissionId,
     mediaType,
     status: "processing" as const,
+    publishMode: normalizePublishMode(instagramPublish.publishMode) ?? "single",
+    carouselItemCount:
+      typeof instagramPublish.carouselItemCount === "number"
+        ? instagramPublish.carouselItemCount
+        : undefined,
     containerId,
     publishedMediaId: null,
     caption: null,
@@ -548,15 +710,19 @@ export async function startInstagramPublishForSubmission(
   }
 
   const mediaType = resolveInstagramMediaType(submission, options?.mediaType);
-  const asset = pickAssetForInstagram(submission, mediaType);
+  const assetSelection = pickAssetsForInstagram(submission, mediaType);
 
-  if (!asset) {
+  if (!assetSelection || assetSelection.assets.length === 0) {
     throw new Error(`No generated ${mediaType} asset is available`);
   }
 
   const requestedAt = new Date().toISOString();
   const caption = options?.captionOverride?.trim() || buildInstagramCaption(submission);
-  const mediaUrl = await createSignedAssetUrl(asset.storage_bucket, asset.file_path);
+  const mediaUrls = await Promise.all(
+    assetSelection.assets.map((asset) =>
+      createSignedAssetUrl(asset.storage_bucket, asset.file_path),
+    ),
+  );
 
   await updateInstagramMetadata(submissionId, {
     mediaType,
@@ -564,8 +730,12 @@ export async function startInstagramPublishForSubmission(
     containerId: null,
     publishedMediaId: null,
     caption,
-    assetId: asset.id,
-    assetPath: asset.file_path,
+    assetId: assetSelection.assets[0]?.id ?? null,
+    assetPath: assetSelection.assets[0]?.file_path ?? null,
+    assetIds: assetSelection.assets.map((asset) => asset.id),
+    assetPaths: assetSelection.assets.map((asset) => asset.file_path),
+    publishMode: assetSelection.publishMode,
+    carouselItemCount: assetSelection.assets.length,
     requestedAt,
     publishedAt: null,
     lastCheckedAt: null,
@@ -574,7 +744,7 @@ export async function startInstagramPublishForSubmission(
   });
 
   try {
-    const result = await publishInstagramMedia(mediaType, mediaUrl, caption);
+    const result = await publishInstagramMedia(mediaType, mediaUrls, caption);
 
     await updateInstagramMetadata(submissionId, {
       mediaType,
@@ -582,8 +752,12 @@ export async function startInstagramPublishForSubmission(
       containerId: result.containerId,
       publishedMediaId: result.publishedMediaId,
       caption,
-      assetId: asset.id,
-      assetPath: asset.file_path,
+      assetId: assetSelection.assets[0]?.id ?? null,
+      assetPath: assetSelection.assets[0]?.file_path ?? null,
+      assetIds: assetSelection.assets.map((asset) => asset.id),
+      assetPaths: assetSelection.assets.map((asset) => asset.file_path),
+      publishMode: result.publishMode,
+      carouselItemCount: result.carouselItemCount,
       requestedAt,
       publishedAt: null,
       lastCheckedAt: new Date().toISOString(),
@@ -596,6 +770,8 @@ export async function startInstagramPublishForSubmission(
       submissionId,
       mediaType,
       status: result.status,
+      publishMode: result.publishMode,
+      carouselItemCount: result.carouselItemCount,
       containerId: result.containerId,
       publishedMediaId: result.publishedMediaId,
       caption,
@@ -609,8 +785,12 @@ export async function startInstagramPublishForSubmission(
       mediaType,
       status: "failed",
       caption,
-      assetId: asset.id,
-      assetPath: asset.file_path,
+      assetId: assetSelection.assets[0]?.id ?? null,
+      assetPath: assetSelection.assets[0]?.file_path ?? null,
+      assetIds: assetSelection.assets.map((asset) => asset.id),
+      assetPaths: assetSelection.assets.map((asset) => asset.file_path),
+      publishMode: assetSelection.publishMode,
+      carouselItemCount: assetSelection.assets.length,
       requestedAt,
       lastError: message,
       lastCheckedAt: new Date().toISOString(),
@@ -621,6 +801,8 @@ export async function startInstagramPublishForSubmission(
       submissionId,
       mediaType,
       status: "failed",
+      publishMode: assetSelection.publishMode,
+      carouselItemCount: assetSelection.assets.length,
       containerId: null,
       publishedMediaId: null,
       caption,
@@ -649,6 +831,11 @@ export async function syncInstagramPublishForSubmission(
       submissionId,
       mediaType: instagramPublish.mediaType,
       status: "published",
+      publishMode: normalizePublishMode(instagramPublish.publishMode) ?? "single",
+      carouselItemCount:
+        typeof instagramPublish.carouselItemCount === "number"
+          ? instagramPublish.carouselItemCount
+          : undefined,
       containerId: instagramPublish.containerId,
       publishedMediaId: instagramPublish.publishedMediaId ?? null,
       caption: instagramPublish.caption ?? null,
@@ -657,8 +844,18 @@ export async function syncInstagramPublishForSubmission(
   }
 
   return instagramPublish.mediaType === "photo"
-    ? publishInstagramContainer(submissionId, instagramPublish.containerId, "photo")
-    : publishInstagramContainer(submissionId, instagramPublish.containerId, "video");
+    ? publishInstagramContainer(
+        submissionId,
+        instagramPublish.containerId,
+        "photo",
+        instagramPublish,
+      )
+    : publishInstagramContainer(
+        submissionId,
+        instagramPublish.containerId,
+        "video",
+        instagramPublish,
+      );
 }
 
 export async function waitForInstagramPublishCompletion(
