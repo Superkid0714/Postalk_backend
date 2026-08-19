@@ -92,8 +92,7 @@ function applyAssetSpecificReviewHeuristics(
     const canProceed =
       review.checks.focus !== "fail" &&
       review.checks.subjectVisibility !== "fail" &&
-      review.score >= 35 &&
-      softWarnings <= 3;
+      softWarnings <= 4;
 
     if (!review.passed && canProceed) {
       return {
@@ -147,44 +146,28 @@ function buildFallbackReviewResult(
   reason: string,
   assetType: "menu_board" | "food_photo",
 ): PhotoReviewResult {
-  if (assetType === "food_photo") {
-    return {
-      passed: true,
-      score: 60,
-      recommendedAction: "proceed",
-      summary: "사진 판독이 불안정했지만 음식이 보이는 사진으로 간주해 진행합니다.",
-      feedback: [
-        "AI 판독이 불안정했지만 음식 사진으로 보고 다음 단계로 진행합니다.",
-        `검수 참고: ${reason}`,
-      ],
-      checks: {
-        focus: "warning",
-        brightness: "warning",
-        framing: "warning",
-        subjectVisibility: "pass",
-        guideMatch: "warning",
-        textReadability: "not_applicable",
-      },
-    };
-  }
-
   return {
-    passed: false,
-    score: 0,
-    recommendedAction: "retake",
-    summary: "사진 판독이 불안정해 재촬영을 권장합니다.",
+    passed: true,
+    score: 60,
+    recommendedAction: "proceed",
+    summary:
+      assetType === "menu_board"
+        ? "사진 판독이 불안정했지만 메뉴판이 보이는 사진으로 간주해 진행합니다."
+        : "사진 판독이 불안정했지만 음식이 보이는 사진으로 간주해 진행합니다.",
     feedback: [
-      "사진을 다시 한 번 또렷하게 촬영해주세요.",
-      "피사체가 화면 중앙에 잘 보이도록 맞춰주세요.",
+      assetType === "menu_board"
+        ? "AI 판독이 불안정했지만 메뉴판 사진으로 보고 다음 단계로 진행합니다."
+        : "AI 판독이 불안정했지만 음식 사진으로 보고 다음 단계로 진행합니다.",
       `검수 참고: ${reason}`,
     ],
     checks: {
       focus: "warning",
       brightness: "warning",
       framing: "warning",
-      subjectVisibility: "warning",
+      subjectVisibility: "pass",
       guideMatch: "warning",
-      textReadability: "not_applicable",
+      textReadability:
+        assetType === "menu_board" ? "warning" : "not_applicable",
     },
   };
 }

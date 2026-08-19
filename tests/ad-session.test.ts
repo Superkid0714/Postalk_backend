@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildPhotoRequest,
   buildSessionWorkflowSeed,
   inferPrimarySubjectFromIntro,
   normalizeAdSessionWorkflow,
@@ -79,4 +80,23 @@ test("inferPrimarySubjectFromIntro ignores label text before extracting menu", (
     inferPrimarySubjectFromIntro("주력 메뉴를 포함한 대표 메뉴 소개: 대표메뉴는 제육볶음 입니다."),
     "제육볶음",
   );
+});
+
+test("buildPhotoRequest uses storefront, interior, and specialty-oriented prompts", () => {
+  const storefront = buildPhotoRequest("restaurant_food", "flatlay_menu", {
+    primarySubject: "제육볶음",
+    storeSpecialty: "60년 전통의 맛집입니다.",
+  });
+  const interior = buildPhotoRequest("restaurant_food", "cooking_scene", {
+    primarySubject: "제육볶음",
+    storeSpecialty: "60년 전통의 맛집입니다.",
+  });
+  const specialty = buildPhotoRequest("restaurant_food", "detail_closeup", {
+    primarySubject: "제육볶음",
+    storeSpecialty: "60년 전통의 맛집입니다.",
+  });
+
+  assert.equal(storefront.prompt, "사진요청 : 가게 간판이 함께 보이도록 찍은 외관 사진");
+  assert.equal(interior.prompt, "사진요청 : 가게 내부 분위기가 보이도록 찍은 사진");
+  assert.equal(specialty.prompt, "사진요청 : 가게의 특별함이 드러나는 사진");
 });

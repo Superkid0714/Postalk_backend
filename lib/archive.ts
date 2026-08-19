@@ -2,7 +2,6 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 import {
   getSubmissionTitle,
-  pickThumbnailAsset,
   type SubmissionAssetRecord,
   type SubmissionHomeRecord,
 } from "@/lib/submissions/home";
@@ -121,6 +120,34 @@ export async function getArchiveThumbnailUrl(
   return data.signedUrl;
 }
 
+async function buildArchivePreviewAssets(
+  assets: SubmissionAssetRecord[] | null | undefined,
+  mediaType: ArchiveMediaType,
+) {
+  if (!assets || assets.length === 0) {
+    return [];
+  }
+
+  const sortedAssets = [...assets].sort((left, right) => left.sort_order - right.sort_order);
+  const targetAssets =
+    mediaType === "video"
+      ? sortedAssets.filter(
+          (asset) =>
+            asset.asset_type === "video_thumbnail" ||
+            asset.asset_type === "generated_video",
+        )
+      : sortedAssets.filter((asset) => asset.asset_type === "generated_image");
+
+  return Promise.all(
+    targetAssets.map(async (asset, index) => ({
+      index,
+      assetType: asset.asset_type,
+      sortOrder: asset.sort_order,
+      url: await getArchiveThumbnailUrl(asset),
+    })),
+  );
+}
+
 function getVideoScriptCaption(aiMetadata: Record<string, unknown> | null | undefined) {
   if (
     !aiMetadata ||
@@ -226,12 +253,13 @@ export async function buildArchiveItem(
   mediaType: ArchiveMediaType = "photo",
 ) {
   const store = normalizeArchiveStore(submission.stores);
-  const thumbnailAsset = pickThumbnailAsset(submission.submission_assets);
+  const previewAssets = await buildArchivePreviewAssets(
+    submission.submission_assets,
+    mediaType,
+  );
+  const thumbnailUrl = previewAssets[0]?.url ?? null;
   const generatedAsset = pickGeneratedAsset(submission.submission_assets, mediaType);
-  const [thumbnailUrl, generatedAssetUrl] = await Promise.all([
-    getArchiveThumbnailUrl(thumbnailAsset),
-    getArchiveThumbnailUrl(generatedAsset),
-  ]);
+  const generatedAssetUrl = await getArchiveThumbnailUrl(generatedAsset);
   const publishCaption = buildArchiveCaption(submission);
   const instagramPermalink = getInstagramPermalink(submission.ai_metadata);
 
@@ -249,5 +277,6 @@ export async function buildArchiveItem(
     mediaType,
     publishCaption,
     instagramPermalink,
+    previewAssets,
   };
 }

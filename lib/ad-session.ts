@@ -236,7 +236,10 @@ export function getRequestedShot(
     return null;
   }
 
-  return buildPhotoRequest(category, shotKey, workflow.primarySubject ?? "주력 메뉴");
+  return buildPhotoRequest(category, shotKey, {
+    primarySubject: workflow.primarySubject ?? "주력 메뉴",
+    storeSpecialty: workflow.storeSpecialty ?? null,
+  });
 }
 
 export function getNextShot(
@@ -254,7 +257,10 @@ export function getNextShot(
 
   return {
     nextIndex,
-    request: buildPhotoRequest(category, shotKey, workflow.primarySubject ?? "주력 메뉴"),
+    request: buildPhotoRequest(category, shotKey, {
+      primarySubject: workflow.primarySubject ?? "주력 메뉴",
+      storeSpecialty: workflow.storeSpecialty ?? null,
+    }),
   };
 }
 
@@ -266,11 +272,47 @@ function findGuideOrderByTitle(category: StoreCategoryCode, titles: string[]) {
   return matched?.order ?? null;
 }
 
+function toObjectParticle(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return "메뉴를";
+  }
+
+  const lastChar = trimmed[trimmed.length - 1];
+  const code = lastChar.charCodeAt(0);
+  const isHangulSyllable = code >= 0xac00 && code <= 0xd7a3;
+
+  if (!isHangulSyllable) {
+    return `${trimmed}를`;
+  }
+
+  const hasFinalConsonant = (code - 0xac00) % 28 !== 0;
+
+  return `${trimmed}${hasFinalConsonant ? "을" : "를"}`;
+}
+
+function normalizeSpecialtyPrompt(value: string | null | undefined) {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.replace(/^가게만의 특별함\s*:\s*/u, "").replace(/\s+/g, " ").trim();
+}
+
 export function buildPhotoRequest(
   category: StoreCategoryCode,
   shotKey: AdSessionShotKey,
-  primarySubject: string,
+  options: {
+    primarySubject: string;
+    storeSpecialty?: string | null;
+  },
 ): AdSessionPhotoRequest {
+  const primarySubject = options.primarySubject;
+  const specialtyPrompt = normalizeSpecialtyPrompt(options.storeSpecialty ?? null);
+
   if (shotKey === "menu_board") {
     return {
       shotKey,
@@ -287,7 +329,7 @@ export function buildPhotoRequest(
       shotKey,
       assetType: "food_photo",
       title: primarySubject,
-      prompt: `사진요청 : ${primarySubject}`,
+      prompt: `사진요청 : ${toObjectParticle(primarySubject)} 정면 또는 45도 각도에서 찍은 사진`,
       helperText: `${primarySubject} 완성 메뉴를 정면 또는 45도 각도에서 선명하게 찍어주세요.`,
       reviewShotOrder: findGuideOrderByTitle(category, ["전체 밥상", "완성 메뉴", "대표 상품"]),
     };
@@ -297,11 +339,11 @@ export function buildPhotoRequest(
     return {
       shotKey,
       assetType: "food_photo",
-      title: `${primarySubject} 탑다운`,
-      prompt: `사진요청 : ${primarySubject} 탑다운`,
+      title: "가게 외관",
+      prompt: "사진요청 : 가게 간판이 함께 보이도록 찍은 외관 사진",
       helperText:
-        "대표 메뉴와 곁들임이 함께 보이도록 위에서 내려다본 구도로 찍어주세요. 여백이 조금 남으면 더 좋습니다.",
-      reviewShotOrder: findGuideOrderByTitle(category, ["전체 밥상", "완성 메뉴", "매대 전체"]),
+        "가게 이름이나 간판이 잘 보이도록 가게 앞모습을 찍어주세요. 입구 분위기도 함께 보이면 좋습니다.",
+      reviewShotOrder: null,
     };
   }
 
@@ -309,22 +351,28 @@ export function buildPhotoRequest(
     return {
       shotKey,
       assetType: "food_photo",
-      title: "조리 장면",
-      prompt: "사진요청 : 조리 장면",
+      title: "가게 내부",
+      prompt: "사진요청 : 가게 내부 분위기가 보이도록 찍은 사진",
       helperText:
-        "사장님이 직접 만들거나 손질하는 핵심 순간을 자연스럽게 찍어주세요.",
-      reviewShotOrder: findGuideOrderByTitle(category, ["사장님이 요리하는 모습", "제작 과정", "손질 장면", "작업 중 장면"]),
+        "좌석, 진열, 조리 공간 등 가게 분위기가 자연스럽게 드러나도록 내부 사진을 찍어주세요.",
+      reviewShotOrder: null,
     };
   }
 
   return {
     shotKey,
     assetType: "food_photo",
-    title: `${primarySubject} 클로즈업`,
-    prompt: `사진요청 : ${primarySubject} 클로즈업`,
+    title: specialtyPrompt ? "가게의 특별함" : `${primarySubject} 클로즈업`,
+    prompt: specialtyPrompt
+      ? "사진요청 : 가게의 특별함이 드러나는 사진"
+      : `사진요청 : ${toObjectParticle(primarySubject)} 가까이서 찍은 클로즈업 사진`,
     helperText:
-      "한 입 포인트가 느껴지도록 가까이서 찍어주세요. 재료 결이나 식감이 보이면 좋습니다.",
-    reviewShotOrder: findGuideOrderByTitle(category, ["건더기 들어 올리기", "한 입 포인트", "디테일 액션", "대표 추천 메뉴"]),
+      specialtyPrompt
+        ? `사장님이 말한 특별함이 드러나는 장면을 찍어주세요. 예: ${specialtyPrompt}`
+        : "한 입 포인트가 느껴지도록 가까이서 찍어주세요. 재료 결이나 식감이 보이면 좋습니다.",
+    reviewShotOrder: specialtyPrompt
+      ? null
+      : findGuideOrderByTitle(category, ["건더기 들어 올리기", "한 입 포인트", "디테일 액션", "대표 추천 메뉴"]),
   };
 }
 

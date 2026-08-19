@@ -314,6 +314,25 @@ function buildShortCopyGuidance(
     .join("\n");
 }
 
+function pickPrioritySupportMessage(
+  submission: SubmissionForGeneration,
+  merchantInsights: MerchantInsights,
+) {
+  if (merchantInsights.targetCustomer?.trim()) {
+    return `${merchantInsights.targetCustomer.trim()} 손님들이 자연스럽게 떠올릴 만한 메뉴 톤으로 정리했습니다.`;
+  }
+
+  if (merchantInsights.peakSalesTime?.trim()) {
+    return `${merchantInsights.peakSalesTime.trim()}에 특히 잘 어울리는 메뉴 분위기를 담았습니다.`;
+  }
+
+  if (submission.extra_message?.trim()) {
+    return `${submission.extra_message.trim().replace(/[.。!！?？]+$/u, "")} 느낌을 자연스럽게 살렸습니다.`;
+  }
+
+  return `${submission.target_menu_name} 생각날 때 부담 없이 찾을 수 있는 메뉴 톤으로 정리했습니다.`;
+}
+
 function buildCaptionFallback(
   submission: SubmissionForGeneration,
   merchantInsights: MerchantInsights,
@@ -342,11 +361,10 @@ function buildCaptionFallback(
                 tourismCorpusContext.region_scope
               ? `${tourismCorpusContext.region_scope} 지역 분위기를 살린 자연스러운 문장 톤으로 소개하기 좋습니다.`
             : null;
-  const closingSentence = submission.extra_message
-    ? submission.extra_message.endsWith(".")
-      ? submission.extra_message
-      : `${submission.extra_message}.`
-    : `${submission.target_menu_name} 생각날 때 부담 없이 찾을 수 있는 메뉴 톤으로 정리했습니다.`;
+  const closingSentence = pickPrioritySupportMessage(
+    submission,
+    merchantInsights,
+  );
 
   const caption = [
     intro,
@@ -528,6 +546,9 @@ export async function generatePromoCaption(
     "- Final sentence should softly encourage a visit or make the store/menu feel easy to remember.",
     "- Sound warm, trustworthy, and appetizing.",
     "- Avoid flat summary style and avoid mechanically repeating field labels.",
+    "- Do not try to include every merchant fact. Select only the 1 or 2 most important selling points for the ad.",
+    "- If multiple merchant facts exist, prioritize menu appeal first, then one supporting point such as specialty, target customer, timing, or local context.",
+    "- Omit less important details instead of forcing everything into the caption.",
     "- Do not invent facts that were not provided.",
     "- Reflect the merchant's target customer and peak sales timing naturally if useful.",
     "- [MERCHANT FACT] is the source of truth for menu, price, appeal point, packaging, cooking, and current sales details.",
@@ -690,6 +711,10 @@ export function buildPromoPrompt(
       : null,
     submission.caption ? `Suggested caption: ${submission.caption}` : null,
     "Primary goal: make the food look irresistibly delicious at first glance while preserving a trustworthy local-market identity.",
+    "Do not stuff every merchant fact into the ad. Select only the most important selling points that make the poster feel clean and memorable.",
+    "Prefer one hero message about the menu, plus at most one supporting message about specialty, mood, customer fit, or local context.",
+    "Preserve a realistic, minimally edited feeling so the final result stays close to the merchant's original uploaded photos.",
+    "Prefer believable compositions, real-world camera angles, and natural details that could be achieved from the merchant's own source photos.",
     "Design for a Korean mobile audience and a vertical or 4:5 social promo card.",
     "Use elegant Korean promotional typography space with very short text only.",
     "If text appears inside the image, keep it minimal, bold, legible, and naturally integrated.",

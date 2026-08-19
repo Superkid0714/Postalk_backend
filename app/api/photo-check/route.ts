@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/response";
+import { reviewPhotoAsset } from "@/lib/ai/photo-review";
 import { findPhotoGuideShot } from "@/lib/photo-guides";
 import { resolveActivatedStoreFromQrToken } from "@/lib/merchant-qr";
 import { resolveStore } from "@/lib/stores";
@@ -22,31 +23,6 @@ type PhotoCheckBody = {
   category?: string;
   shotOrder?: number;
 };
-
-function buildAutoPassReview(assetType: "menu_board" | "food_photo") {
-  return {
-    passed: true,
-    score: 100,
-    recommendedAction: "proceed" as const,
-    summary:
-      assetType === "menu_board"
-        ? "메뉴판 사진은 자동 승인되었습니다."
-        : "음식 사진은 자동 승인되었습니다.",
-    feedback: [
-      assetType === "menu_board"
-        ? "메뉴판 사진은 추가 지시 전까지 검수 없이 다음 단계로 진행합니다."
-        : "음식 사진은 추가 지시 전까지 검수 없이 다음 단계로 진행합니다.",
-    ],
-    checks: {
-      focus: "pass" as const,
-      brightness: "pass" as const,
-      framing: "pass" as const,
-      subjectVisibility: "pass" as const,
-      guideMatch: "pass" as const,
-      textReadability: "pass" as const,
-    },
-  };
-}
 
 function isPhotoAssetType(value: unknown): value is "menu_board" | "food_photo" {
   return value === "menu_board" || value === "food_photo";
@@ -177,7 +153,17 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const review = buildAutoPassReview(body.assetType!);
+    const review = await reviewPhotoAsset({
+      supabase,
+      bucket: body.bucket!.trim(),
+      filePath: body.filePath!.trim(),
+      assetType: body.assetType!,
+      category,
+      shotOrder:
+        typeof body.shotOrder === "number"
+          ? Math.trunc(body.shotOrder)
+          : null,
+    });
     const guideShot =
       typeof body.shotOrder === "number"
         ? findPhotoGuideShot(category, Math.trunc(body.shotOrder))
