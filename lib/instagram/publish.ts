@@ -11,6 +11,7 @@ export type InstagramPublishMetadata = {
   status?: InstagramPublishStatus | null;
   containerId?: string | null;
   publishedMediaId?: string | null;
+  permalink?: string | null;
   caption?: string | null;
   assetId?: string | null;
   assetPath?: string | null;
@@ -69,6 +70,7 @@ type InstagramPublishResult = {
   carouselItemCount?: number;
   containerId: string | null;
   publishedMediaId: string | null;
+  permalink: string | null;
   caption: string | null;
   lastError: string | null;
 };
@@ -77,6 +79,11 @@ type InstagramContainerStatus = {
   id?: string;
   status_code?: string;
   status?: string;
+};
+
+type InstagramPublishedMediaSummary = {
+  id?: string;
+  permalink?: string;
 };
 
 type WaitForInstagramPublishCompletionOptions = {
@@ -268,6 +275,17 @@ async function getGraphJson<T>(path: string, params: Record<string, string>) {
   }
 
   return (await response.json()) as T;
+}
+
+async function fetchPublishedMediaPermalink(mediaId: string) {
+  const response = await getGraphJson<InstagramPublishedMediaSummary>(
+    `/${mediaId}`,
+    {
+      fields: "id,permalink",
+    },
+  );
+
+  return response.permalink ?? null;
 }
 
 async function updateInstagramMetadata(
@@ -614,11 +632,21 @@ async function publishInstagramContainer(
     await updateInstagramMetadata(submissionId, {
       status: "published",
       publishedMediaId: published.id,
+      permalink: null,
       containerStatusCode: statusCode,
       publishedAt: checkedAt,
       lastCheckedAt: checkedAt,
       lastError: null,
     });
+
+    const permalink = await fetchPublishedMediaPermalink(published.id).catch(() => null);
+
+    if (permalink) {
+      await updateInstagramMetadata(submissionId, {
+        permalink,
+        lastCheckedAt: new Date().toISOString(),
+      });
+    }
 
     return {
       ok: true,
@@ -632,6 +660,7 @@ async function publishInstagramContainer(
           : undefined,
       containerId,
       publishedMediaId: published.id,
+      permalink,
       caption: null,
       lastError: null,
     };
@@ -659,6 +688,7 @@ async function publishInstagramContainer(
           : undefined,
       containerId,
       publishedMediaId: null,
+      permalink: null,
       caption: null,
       lastError: message,
     };
@@ -683,6 +713,7 @@ async function publishInstagramContainer(
         : undefined,
     containerId,
     publishedMediaId: null,
+    permalink: null,
     caption: null,
     lastError: null,
   };
@@ -729,6 +760,7 @@ export async function startInstagramPublishForSubmission(
     status: "processing",
     containerId: null,
     publishedMediaId: null,
+    permalink: null,
     caption,
     assetId: assetSelection.assets[0]?.id ?? null,
     assetPath: assetSelection.assets[0]?.file_path ?? null,
@@ -751,6 +783,7 @@ export async function startInstagramPublishForSubmission(
       status: result.status,
       containerId: result.containerId,
       publishedMediaId: result.publishedMediaId,
+      permalink: result.permalink,
       caption,
       assetId: assetSelection.assets[0]?.id ?? null,
       assetPath: assetSelection.assets[0]?.file_path ?? null,
@@ -774,6 +807,7 @@ export async function startInstagramPublishForSubmission(
       carouselItemCount: result.carouselItemCount,
       containerId: result.containerId,
       publishedMediaId: result.publishedMediaId,
+      permalink: result.permalink,
       caption,
       lastError: null,
     };
@@ -805,6 +839,7 @@ export async function startInstagramPublishForSubmission(
       carouselItemCount: assetSelection.assets.length,
       containerId: null,
       publishedMediaId: null,
+      permalink: null,
       caption,
       lastError: message,
     };
@@ -838,6 +873,10 @@ export async function syncInstagramPublishForSubmission(
           : undefined,
       containerId: instagramPublish.containerId,
       publishedMediaId: instagramPublish.publishedMediaId ?? null,
+      permalink:
+        typeof instagramPublish.permalink === "string"
+          ? instagramPublish.permalink
+          : null,
       caption: instagramPublish.caption ?? null,
       lastError: null,
     };

@@ -18,6 +18,37 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function readPrecomputedCaptionRequest(value: unknown) {
+  if (!isObject(value)) {
+    return {
+      caption: null,
+      hashtags: [] as string[],
+      foodCardNewsPlan: null as Record<string, unknown> | null,
+    };
+  }
+
+  const caption =
+    typeof value.precomputedCaption === "string" &&
+    value.precomputedCaption.trim().length > 0
+      ? value.precomputedCaption.trim()
+      : null;
+  const hashtags = Array.isArray(value.precomputedHashtags)
+    ? value.precomputedHashtags.filter(
+        (item): item is string =>
+          typeof item === "string" && item.trim().length > 0,
+      )
+    : [];
+  const foodCardNewsPlan = isObject(value.precomputedFoodCardNewsPlan)
+    ? value.precomputedFoodCardNewsPlan
+    : null;
+
+  return {
+    caption,
+    hashtags,
+    foodCardNewsPlan,
+  };
+}
+
 function pickMockSourceAsset(
   assets:
     | Array<{
@@ -73,7 +104,8 @@ export async function processGenerationJobById(jobId: string) {
         stores (
           market_name,
           store_name,
-          owner_name
+          owner_name,
+          description
         ),
         submission_assets (
           asset_type,
@@ -170,13 +202,27 @@ export async function processGenerationJobById(jobId: string) {
     }
 
     const generatedImages = [];
-    const captionResult = await generatePromoCaption(normalizedGenerationSubmission);
+    const precomputedRequest = readPrecomputedCaptionRequest(job.request_payload);
+    const generatedCaptionResult = await generatePromoCaption(
+      normalizedGenerationSubmission,
+    );
+    const captionResult = precomputedRequest.caption
+      ? {
+          ...generatedCaptionResult,
+          caption: precomputedRequest.caption,
+          hashtags:
+            precomputedRequest.hashtags.length > 0
+              ? precomputedRequest.hashtags
+              : generatedCaptionResult.hashtags,
+        }
+      : generatedCaptionResult;
     const foodCardNewsPlan =
       job.style_preset === "food_card_news"
-        ? await generateFoodCardNewsPlan({
+        ? precomputedRequest.foodCardNewsPlan ??
+          (await generateFoodCardNewsPlan({
             ...normalizedGenerationSubmission,
             caption: captionResult.caption,
-          })
+          }))
         : null;
     const carouselPrompts = buildPromoCarouselPrompts(
       {
@@ -286,8 +332,10 @@ export async function processGenerationJobById(jobId: string) {
               ? normalizedSubmission.ai_metadata
               : {}),
             marketContext: captionResult.marketContext,
+            weatherContext: captionResult.weatherContext,
             festivalContext: captionResult.festivalContext,
             kamisContext: captionResult.kamisContext,
+            tourismCorpusContext: captionResult.tourismCorpusContext,
             captionInputContext: captionResult.captionInputContext,
             captionEvidence: captionResult.evidence,
           },

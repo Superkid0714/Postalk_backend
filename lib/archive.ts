@@ -168,6 +168,38 @@ function buildArchiveCaption(submission: ArchiveSubmissionRecord) {
   return [baseCaption, hashtags].filter(Boolean).join("\n\n") || null;
 }
 
+function getInstagramPermalink(
+  aiMetadata: Record<string, unknown> | null | undefined,
+) {
+  if (!aiMetadata || typeof aiMetadata !== "object" || Array.isArray(aiMetadata)) {
+    return null;
+  }
+
+  const instagramPublish = aiMetadata.instagramPublish;
+
+  if (
+    instagramPublish &&
+    typeof instagramPublish === "object" &&
+    !Array.isArray(instagramPublish) &&
+    typeof (instagramPublish as Record<string, unknown>).permalink === "string"
+  ) {
+    return (instagramPublish as Record<string, unknown>).permalink as string;
+  }
+
+  const instagramMetrics = aiMetadata.instagramMetrics;
+
+  if (
+    instagramMetrics &&
+    typeof instagramMetrics === "object" &&
+    !Array.isArray(instagramMetrics) &&
+    typeof (instagramMetrics as Record<string, unknown>).permalink === "string"
+  ) {
+    return (instagramMetrics as Record<string, unknown>).permalink as string;
+  }
+
+  return null;
+}
+
 function pickGeneratedAsset(
   assets: SubmissionAssetRecord[] | null | undefined,
   mediaType: ArchiveMediaType,
@@ -201,6 +233,7 @@ export async function buildArchiveItem(
     getArchiveThumbnailUrl(generatedAsset),
   ]);
   const publishCaption = buildArchiveCaption(submission);
+  const instagramPermalink = getInstagramPermalink(submission.ai_metadata);
 
   return {
     submissionId: submission.id,
@@ -215,5 +248,6 @@ export async function buildArchiveItem(
     updatedAt: submission.updated_at,
     mediaType,
     publishCaption,
+    instagramPermalink,
   };
 }

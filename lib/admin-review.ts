@@ -89,6 +89,7 @@ function readInstagramPublish(aiMetadata: Record<string, unknown> | null | undef
       status: null,
       containerId: null,
       publishedMediaId: null,
+      permalink: null,
       caption: null,
       requestedAt: null,
       publishedAt: null,
@@ -109,6 +110,7 @@ function readInstagramPublish(aiMetadata: Record<string, unknown> | null | undef
       status: null,
       containerId: null,
       publishedMediaId: null,
+      permalink: null,
       caption: null,
       requestedAt: null,
       publishedAt: null,
@@ -135,10 +137,77 @@ function readInstagramPublish(aiMetadata: Record<string, unknown> | null | undef
     status: normalizedStatus,
     containerId: readString("containerId"),
     publishedMediaId,
+    permalink: readString("permalink"),
     caption: readString("caption"),
     requestedAt: readString("requestedAt"),
     publishedAt,
     lastCheckedAt: readString("lastCheckedAt"),
+    lastError: readString("lastError"),
+  };
+}
+
+function readInstagramMetrics(aiMetadata: Record<string, unknown> | null | undefined) {
+  if (!aiMetadata || typeof aiMetadata !== "object" || Array.isArray(aiMetadata)) {
+    return {
+      mediaId: null,
+      permalink: null,
+      mediaType: null,
+      mediaProductType: null,
+      likeCount: null,
+      commentsCount: null,
+      views: null,
+      reach: null,
+      impressions: null,
+      fetchedAt: null,
+      lastError: null,
+    };
+  }
+
+  const instagramMetrics = aiMetadata.instagramMetrics;
+
+  if (
+    !instagramMetrics ||
+    typeof instagramMetrics !== "object" ||
+    Array.isArray(instagramMetrics)
+  ) {
+    return {
+      mediaId: null,
+      permalink: null,
+      mediaType: null,
+      mediaProductType: null,
+      likeCount: null,
+      commentsCount: null,
+      views: null,
+      reach: null,
+      impressions: null,
+      fetchedAt: null,
+      lastError: null,
+    };
+  }
+
+  const instagramMetricsRecord = instagramMetrics as Record<string, unknown>;
+
+  const readString = (key: string) =>
+    typeof instagramMetricsRecord[key] === "string"
+      ? (instagramMetricsRecord[key] as string)
+      : null;
+
+  const readNumber = (key: string) =>
+    typeof instagramMetricsRecord[key] === "number"
+      ? (instagramMetricsRecord[key] as number)
+      : null;
+
+  return {
+    mediaId: readString("mediaId"),
+    permalink: readString("permalink"),
+    mediaType: readString("mediaType"),
+    mediaProductType: readString("mediaProductType"),
+    likeCount: readNumber("likeCount"),
+    commentsCount: readNumber("commentsCount"),
+    views: readNumber("views"),
+    reach: readNumber("reach"),
+    impressions: readNumber("impressions"),
+    fetchedAt: readString("fetchedAt"),
     lastError: readString("lastError"),
   };
 }
@@ -194,6 +263,7 @@ export async function buildReviewDetail(submission: ReviewSubmissionRecord) {
   const store = normalizeReviewStore(submission.stores);
   const merchantInsights = readMerchantInsights(submission.ai_metadata);
   const instagramPublish = readInstagramPublish(submission.ai_metadata);
+  const instagramMetrics = readInstagramMetrics(submission.ai_metadata);
 
   const assets = await Promise.all(
     (submission.submission_assets ?? []).map(async (asset) => ({
@@ -247,6 +317,7 @@ export async function buildReviewDetail(submission: ReviewSubmissionRecord) {
       reviewedAt: submission.reviewed_at ?? null,
     },
     instagramPublish,
+    instagramMetrics,
     primaryAssetUrl: primaryAsset ? await getReviewSignedUrl(primaryAsset) : null,
     assets,
   };

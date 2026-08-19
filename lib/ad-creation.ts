@@ -1,6 +1,7 @@
 import {
   buildPromoPrompt,
   normalizeStoreRelation,
+  validateStylePresetForSubmission,
   type GenerationStylePreset,
 } from "@/lib/ai/generation";
 
@@ -101,6 +102,19 @@ export function buildSubmissionPrompt(
   stylePreset: GenerationStylePreset,
 ) {
   return buildPromoPrompt(
+    {
+      ...submission,
+      stores: normalizeStoreRelation(submission.stores),
+    },
+    stylePreset,
+  );
+}
+
+export function validateSubmissionStylePreset(
+  submission: SubmissionWorkflowRow,
+  stylePreset: GenerationStylePreset,
+) {
+  return validateStylePresetForSubmission(
     {
       ...submission,
       stores: normalizeStoreRelation(submission.stores),

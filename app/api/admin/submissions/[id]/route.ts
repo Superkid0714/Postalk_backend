@@ -222,6 +222,7 @@ export async function PATCH(
         mediaType: string | null;
         containerId: string | null;
         publishedMediaId: string | null;
+        permalink: string | null;
         lastError: string | null;
       }
     | null = null;
@@ -245,6 +246,7 @@ export async function PATCH(
         mediaType: publishResult.mediaType,
         containerId: publishResult.containerId,
         publishedMediaId: publishResult.publishedMediaId,
+        permalink: publishResult.permalink,
         lastError: publishResult.lastError,
       };
     } catch (publishError) {
@@ -255,6 +257,7 @@ export async function PATCH(
         mediaType: null,
         containerId: null,
         publishedMediaId: null,
+        permalink: null,
         lastError:
           publishError instanceof Error
             ? publishError.message

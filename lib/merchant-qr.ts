@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { getStoreCategoryLabel } from "@/lib/store-categories";
+
 type MerchantQrStatus = "ready" | "activated" | "disabled";
 
 type MerchantQrRecord = {
@@ -21,6 +23,9 @@ type MerchantQrStoreRecord = {
   owner_name: string | null;
   category: string | null;
   description: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  location_address: string | null;
 };
 
 export function buildMerchantQrToken() {
@@ -54,7 +59,7 @@ export async function loadMerchantQrStore(
 
   return supabase
     .from("stores")
-    .select("id, market_name, store_name, owner_name, category, description")
+    .select("id, market_name, store_name, owner_name, category, description, latitude, longitude, location_address")
     .eq("id", assignedStoreId)
     .maybeSingle<MerchantQrStoreRecord>();
 }
@@ -107,7 +112,11 @@ export function mapMerchantQrResponse(
           storeName: store.store_name,
           ownerName: store.owner_name,
           category: store.category,
+          categoryLabel: getStoreCategoryLabel(store.category),
           description: store.description,
+          latitude: store.latitude,
+          longitude: store.longitude,
+          locationAddress: store.location_address,
         }
       : null,
   };

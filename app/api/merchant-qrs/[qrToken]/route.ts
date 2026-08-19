@@ -6,6 +6,8 @@ import {
   loadMerchantQrStore,
   mapMerchantQrResponse,
 } from "@/lib/merchant-qr";
+import { getPhotoGuideByCategory } from "@/lib/photo-guides";
+import { isStoreCategoryCode, STORE_CATEGORY_OPTIONS } from "@/lib/store-categories";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +42,19 @@ export async function GET(
   return successResponse(
     {
       qr: mapMerchantQrResponse(qr, request.nextUrl.origin, store),
+      onboarding: {
+        needsCategorySelection:
+          qr.status === "ready" || !store?.category?.trim(),
+        needsLocationCapture:
+          qr.status === "ready" ||
+          typeof store?.latitude !== "number" ||
+          typeof store?.longitude !== "number",
+        categoryOptions: STORE_CATEGORY_OPTIONS,
+        selectedCategory: store?.category ?? null,
+        photoGuide: isStoreCategoryCode(store?.category)
+          ? getPhotoGuideByCategory(store.category)
+          : null,
+      },
     },
     "Merchant QR loaded",
   );

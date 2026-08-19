@@ -7,6 +7,12 @@ import {
   mapMerchantQrResponse,
   type MerchantQrStoreRecord,
 } from "@/lib/merchant-qr";
+import { getPhotoGuideByCategory } from "@/lib/photo-guides";
+import {
+  isStoreCategoryCode,
+  STORE_CATEGORY_OPTIONS,
+  type StoreCategoryCode,
+} from "@/lib/store-categories";
 import { resolveStore } from "@/lib/stores";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -15,8 +21,18 @@ type ActivateMerchantQrBody = {
   storeName?: string;
   ownerName?: string;
   category?: string;
-  description?: string;
+  latitude?: number;
+  longitude?: number;
+  locationAddress?: string;
 };
+
+function parseCoordinate(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return value;
+}
 
 export async function POST(
   request: NextRequest,
@@ -54,6 +70,39 @@ export async function POST(
     });
   }
 
+  if (!body.category?.trim()) {
+    return errorResponse("category is required", 400, {
+      code: "VALIDATION_ERROR",
+      details: [{ field: "category", reason: "category is required" }],
+    });
+  }
+
+  if (!isStoreCategoryCode(body.category)) {
+    return errorResponse("Invalid category", 400, {
+      code: "VALIDATION_ERROR",
+      details: [{ field: "category", reason: "category must be one of the supported store categories" }],
+    });
+  }
+
+  const category = body.category.trim() as StoreCategoryCode;
+
+  const latitude = parseCoordinate(body.latitude);
+  const longitude = parseCoordinate(body.longitude);
+
+  if (latitude === null) {
+    return errorResponse("latitude is required", 400, {
+      code: "VALIDATION_ERROR",
+      details: [{ field: "latitude", reason: "latitude must be a valid number" }],
+    });
+  }
+
+  if (longitude === null) {
+    return errorResponse("longitude is required", 400, {
+      code: "VALIDATION_ERROR",
+      details: [{ field: "longitude", reason: "longitude must be a valid number" }],
+    });
+  }
+
   const supabase = getSupabaseAdminClient();
   const { data: qr, error: qrError } = await loadMerchantQrByToken(supabase, qrToken);
 
@@ -75,6 +124,54 @@ export async function POST(
   if (qr.assigned_store_id) {
     const storeResult = await loadMerchantQrStore(supabase, qr.assigned_store_id);
     store = storeResult.data ?? null;
+
+    if (store && store.category !== body.category.trim()) {
+      const { error: updateStoreError } = await supabase
+        .from("stores")
+        .update({
+          category,
+          latitude,
+          longitude,
+          location_address: body.locationAddress?.trim() || null,
+        })
+        .eq("id", store.id);
+
+      if (updateStoreError) {
+        return errorResponse("Failed to update store category", 500, {
+          code: "STORE_CATEGORY_UPDATE_FAILED",
+          details: updateStoreError.message,
+        });
+      }
+
+      const refreshedStoreResult = await loadMerchantQrStore(supabase, qr.assigned_store_id);
+      store = refreshedStoreResult.data ?? store;
+    }
+    if (
+      store &&
+      store.category === category &&
+      (store.latitude !== latitude ||
+        store.longitude !== longitude ||
+        (store.location_address ?? null) !== (body.locationAddress?.trim() || null))
+    ) {
+      const { error: updateLocationError } = await supabase
+        .from("stores")
+        .update({
+          latitude,
+          longitude,
+          location_address: body.locationAddress?.trim() || null,
+        })
+        .eq("id", store.id);
+
+      if (updateLocationError) {
+        return errorResponse("Failed to update store location", 500, {
+          code: "STORE_LOCATION_UPDATE_FAILED",
+          details: updateLocationError.message,
+        });
+      }
+
+      const refreshedStoreResult = await loadMerchantQrStore(supabase, qr.assigned_store_id);
+      store = refreshedStoreResult.data ?? store;
+    }
   } else {
     const existingStoreResult = await resolveStore(supabase, {
       marketName: body.marketName.trim(),
@@ -90,8 +187,10 @@ export async function POST(
           market_name: body.marketName.trim(),
           store_name: body.storeName.trim(),
           owner_name: body.ownerName?.trim() || null,
-          category: body.category?.trim() || null,
-          description: body.description?.trim() || null,
+          category,
+          latitude,
+          longitude,
+          location_address: body.locationAddress?.trim() || null,
         })
         .select("id")
         .single<{ id: string }>();
@@ -104,6 +203,23 @@ export async function POST(
       }
 
       assignedStoreId = createdStore.id;
+    } else if (body.category.trim()) {
+      const { error: updateExistingStoreError } = await supabase
+        .from("stores")
+        .update({
+          category,
+          latitude,
+          longitude,
+          location_address: body.locationAddress?.trim() || null,
+        })
+        .eq("id", assignedStoreId);
+
+      if (updateExistingStoreError) {
+        return errorResponse("Failed to update existing store category", 500, {
+          code: "STORE_CATEGORY_UPDATE_FAILED",
+          details: updateExistingStoreError.message,
+        });
+      }
     }
 
     const { error: assignError } = await supabase
@@ -142,6 +258,13 @@ export async function POST(
     {
       qr: mapMerchantQrResponse(finalQr, request.nextUrl.origin, store),
       store,
+      onboarding: {
+        needsCategorySelection: false,
+        needsLocationCapture: false,
+        categoryOptions: STORE_CATEGORY_OPTIONS,
+        selectedCategory: category,
+        photoGuide: getPhotoGuideByCategory(category),
+      },
     },
     qr.assigned_store_id ? "Merchant QR already activated" : "Merchant QR activated",
     qr.assigned_store_id ? 200 : 201,

@@ -11,15 +11,19 @@ import {
   buildKamisEvidenceItems,
   buildMarketEvidenceItems,
   buildMerchantEvidenceItems,
+  buildTourismCorpusEvidenceItems,
+  buildWeatherEvidenceItems,
   type CaptionInputContext,
 } from "@/lib/ai/context";
 import { fetchWithTimeout } from "@/lib/http";
 import type { KamisContext } from "@/lib/public-data/kamis";
 import type { FestivalContext } from "@/lib/public-data/tour-festival";
+import type { TourismCorpusContext } from "@/lib/public-data/tourism-corpus";
 import type {
   CaptionEvidenceItem,
   MarketContext,
 } from "@/lib/public-data/traditional-market";
+import type { WeatherContext } from "@/lib/weather/context";
 
 const DEFAULT_IMAGE_MODEL = "gpt-image-2";
 const DEFAULT_IMAGE_SIZE = "1536x1024";
@@ -71,6 +75,9 @@ export type SubmissionForGeneration = {
     market_name: string;
     store_name: string;
     owner_name: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+    location_address?: string | null;
   } | null;
   submission_assets?:
     | Array<{
@@ -88,11 +95,31 @@ export type SubmissionForGeneration = {
 };
 
 export function normalizeStoreRelation(stores: unknown) {
-  if (Array.isArray(stores)) {
-    return (stores[0] as SubmissionForGeneration["stores"]) ?? null;
+  const source = Array.isArray(stores) ? stores[0] : stores;
+
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    return null;
   }
 
-  return (stores as SubmissionForGeneration["stores"]) ?? null;
+  const record = source as Record<string, unknown>;
+
+  return {
+    market_name:
+      typeof record.market_name === "string" ? record.market_name : "전통시장",
+    store_name: typeof record.store_name === "string" ? record.store_name : "가게",
+    owner_name:
+      typeof record.owner_name === "string" ? record.owner_name : null,
+    latitude:
+      typeof record.latitude === "number" ? record.latitude : null,
+    longitude:
+      typeof record.longitude === "number" ? record.longitude : null,
+    location_address:
+      typeof record.location_address === "string"
+        ? record.location_address
+        : typeof record.description === "string"
+          ? record.description
+          : null,
+  } satisfies SubmissionForGeneration["stores"];
 }
 
 export function normalizeSubmissionRelation(submissions: unknown) {
@@ -125,8 +152,10 @@ export type GeneratedPromoCaption = {
   caption: string;
   hashtags: string[];
   marketContext: MarketContext;
+  weatherContext: WeatherContext;
   festivalContext: FestivalContext;
   kamisContext: KamisContext;
+  tourismCorpusContext: TourismCorpusContext;
   captionInputContext: CaptionInputContext;
   evidence: CaptionEvidenceItem[];
 };
@@ -289,8 +318,10 @@ function buildCaptionFallback(
   submission: SubmissionForGeneration,
   merchantInsights: MerchantInsights,
   marketContext?: MarketContext | null,
+  weatherContext?: WeatherContext | null,
   festivalContext?: FestivalContext | null,
   kamisContext?: KamisContext | null,
+  tourismCorpusContext?: TourismCorpusContext | null,
 ){
   const intro = `${submission.target_menu_name}${merchantInsights.peakSalesTime ? ` ${merchantInsights.peakSalesTime}` : ""}에 더 눈길이 가는 메뉴입니다.`;
   const appealSentence = submission.appeal_point
@@ -299,12 +330,17 @@ function buildCaptionFallback(
   const contextSentence =
     merchantInsights.targetCustomer
       ? `${merchantInsights.targetCustomer} 손님들이 자주 찾는 흐름을 자연스럽게 담았습니다.`
+      : weatherContext?.selected_for_prompt && weatherContext.summary
+        ? `${weatherContext.summary.replace(/ 활용할 수 있음$/u, " 살리기 좋은 날입니다.")}`
       : marketContext?.found && marketContext.market_name
         ? `${marketContext.market_name}${marketContext.district ? ` ${marketContext.district}` : ""} 분위기 속에서 편하게 떠올리기 좋은 메뉴입니다.`
         : festivalContext?.found && festivalContext.verified && festivalContext.title
           ? `${festivalContext.title} 일정 전후로 근처에서 들르기 좋은 한 끼 흐름으로도 연결할 수 있습니다.`
           : kamisContext?.selected_for_prompt && kamisContext.region
             ? `${kamisContext.region} 기준 장바구니 물가 흐름을 참고해도 일상적으로 매력 있게 다가갈 수 있는 메뉴입니다.`
+            : tourismCorpusContext?.selected_for_prompt &&
+                tourismCorpusContext.region_scope
+              ? `${tourismCorpusContext.region_scope} 지역 분위기를 살린 자연스러운 문장 톤으로 소개하기 좋습니다.`
             : null;
   const closingSentence = submission.extra_message
     ? submission.extra_message.endsWith(".")
@@ -350,28 +386,36 @@ export async function generatePromoCaption(
   const apiKey = getOpenAiApiKey();
   const captionInputContext = await buildCaptionInputContext(submission);
   const marketContext = captionInputContext.market_context;
+  const weatherContext = captionInputContext.weather_context;
   const festivalContext = captionInputContext.festival_context;
   const kamisContext = captionInputContext.kamis_context;
+  const tourismCorpusContext = captionInputContext.tourism_corpus_context;
   const evidence = [
     ...buildMerchantEvidenceItems(captionInputContext.merchant_context),
     ...buildMarketEvidenceItems(marketContext),
+    ...buildWeatherEvidenceItems(weatherContext),
     ...buildFestivalEvidenceItems(festivalContext),
     ...buildKamisEvidenceItems(kamisContext),
+    ...buildTourismCorpusEvidenceItems(tourismCorpusContext),
   ];
   const merchantInsights = readMerchantInsights(submission.ai_metadata);
   const fallback = buildCaptionFallback(
     submission,
     merchantInsights,
     marketContext,
+    weatherContext,
     festivalContext,
     kamisContext,
+    tourismCorpusContext,
   );
   const fallbackResult: GeneratedPromoCaption = {
     caption: fallback.caption,
     hashtags: fallback.hashtags,
     marketContext,
+    weatherContext,
     festivalContext,
     kamisContext,
+    tourismCorpusContext,
     captionInputContext,
     evidence,
   };
@@ -435,6 +479,22 @@ export async function generatePromoCaption(
           .join("\n- ")
       : "행사 데이터 미활용";
 
+  const weatherGuide = weatherContext.selected_for_prompt
+    ? [
+        weatherContext.summary,
+        typeof weatherContext.current?.temperature === "number"
+          ? `현재 기온: ${Math.round(weatherContext.current.temperature)}도`
+          : null,
+        weatherContext.current?.precipitationType &&
+        weatherContext.current.precipitationType !== "없음"
+          ? `현재 강수: ${weatherContext.current.precipitationType}`
+          : null,
+        weatherContext.forecast?.sky ? `가까운 예보: ${weatherContext.forecast.sky}` : null,
+      ]
+        .filter((value): value is string => Boolean(value))
+        .join("\n- ")
+    : "날씨 데이터 미활용";
+
   const kamisGuide = kamisContext.selected_for_prompt
     ? [
         kamisContext.matched_item ? `품목: ${kamisContext.matched_item}` : null,
@@ -444,6 +504,16 @@ export async function generatePromoCaption(
         .filter((value): value is string => Boolean(value))
         .join("\n- ")
     : "가격 데이터 미활용";
+  const tourismCorpusGuide =
+    tourismCorpusContext.selected_for_prompt && tourismCorpusContext.examples.length > 0
+      ? tourismCorpusContext.examples
+          .slice(0, 3)
+          .map(
+            (example) =>
+              `${example.place_name} (${example.category}) - ${example.excerpt.slice(0, 120)}`,
+          )
+          .join("\n- ")
+      : "관광 말뭉치 미활용";
 
   const prompt = [
     "You are writing a Korean Instagram caption for a traditional-market food merchant.",
@@ -454,26 +524,34 @@ export async function generatePromoCaption(
     "- Write 3 to 4 sentences.",
     "- Sentence 1 should make the menu feel appetizing or immediately interesting.",
     "- Sentence 2 should clearly reflect the merchant's direct selling point.",
-    "- Sentence 3 may reflect customer group, time-of-day demand, market context, or nearby festival context only when verified and useful.",
+    "- Sentence 3 may reflect customer group, time-of-day demand, weather context, market context, or nearby festival context only when verified and useful.",
     "- Final sentence should softly encourage a visit or make the store/menu feel easy to remember.",
     "- Sound warm, trustworthy, and appetizing.",
     "- Avoid flat summary style and avoid mechanically repeating field labels.",
     "- Do not invent facts that were not provided.",
     "- Reflect the merchant's target customer and peak sales timing naturally if useful.",
     "- [MERCHANT FACT] is the source of truth for menu, price, appeal point, packaging, cooking, and current sales details.",
+    "- [WEATHER PUBLIC DATA] may only be used for verified current weather or near-term forecast context when weather_context.selected_for_prompt=true.",
     "- [MARKET PUBLIC DATA] may only be used for verified market name, region, road address, and facility facts when found=true.",
     "- [FESTIVAL PUBLIC DATA] may only be used for verified festival title, event dates, event address, and distance when found=true and verified=true.",
     "- [KAMIS PUBLIC DATA] may only be used as auxiliary price-market context when kamis_context.selected_for_prompt=true.",
+    "- [TOURISM CORPUS REFERENCE] is style-only reference for regional promotional tone, never factual merchant evidence.",
+    "- If weather_context.selected_for_prompt is false, do not add any weather public-data facts.",
     "- If market_context.found is false, do not add any market public-data facts.",
     "- If festival_context.found is false or festival_context.verified is not true, do not add any festival public-data facts.",
     "- If kamis_context.selected_for_prompt is false, do not add any KAMIS public-data facts.",
+    "- If tourism_corpus_context.selected_for_prompt is false, do not use tourism corpus references.",
     "- If a facility value is false or null, do not mention that facility.",
     "- Never infer popularity, rankings, tourism, reputation, or visitor volume from market_context.",
     "- Never claim the merchant is officially linked to a festival, is the festival's official 맛집, or is popular because of the festival.",
     "- Festival information should only be used as nearby timing/location context when it naturally helps the caption.",
+    "- Weather information should only be used as visit timing or menu mood context. Never claim exact business performance from weather.",
     "- KAMIS public data must never override the merchant's actual selling price.",
     "- Do not claim cheaper than market, best price, lowest price, or value superiority from KAMIS data.",
     "- KAMIS should only help decide whether explicit price exposure or freshness/current-price context is meaningful.",
+    "- Tourism corpus may inspire sentence texture, rhythm, and local travel mood only.",
+    "- Never copy tourism place names, addresses, phone numbers, opening hours, or facilities into the merchant caption.",
+    "- Never present tourism corpus text as if it were true for this merchant unless separately verified.",
     "- Do not use excessive emojis. At most 1 emoji.",
     "- Do not use empty ad clichés such as '깊은 풍미', '특별한 경험', '맛의 진수', '정성을 담아'.",
     "- Prefer concrete everyday Korean wording that sounds like a good local 홍보 글.",
@@ -489,18 +567,26 @@ export async function generatePromoCaption(
     `- ${merchantSummary}`,
     "[MARKET USAGE GUIDE]",
     `- ${marketGuide}`,
+    "[WEATHER USAGE GUIDE]",
+    `- ${weatherGuide}`,
     "[FESTIVAL USAGE GUIDE]",
     `- ${festivalGuide}`,
     "[KAMIS USAGE GUIDE]",
     `- ${kamisGuide}`,
+    "[TOURISM CORPUS USAGE GUIDE]",
+    `- ${tourismCorpusGuide}`,
     "[MERCHANT FACT]",
     JSON.stringify(captionInputContext.merchant_context, null, 2),
     "[MARKET PUBLIC DATA]",
     JSON.stringify(captionInputContext.market_context, null, 2),
+    "[WEATHER PUBLIC DATA]",
+    JSON.stringify(captionInputContext.weather_context, null, 2),
     "[FESTIVAL PUBLIC DATA]",
     JSON.stringify(captionInputContext.festival_context, null, 2),
     "[KAMIS PUBLIC DATA]",
     JSON.stringify(captionInputContext.kamis_context, null, 2),
+    "[TOURISM CORPUS REFERENCE]",
+    JSON.stringify(captionInputContext.tourism_corpus_context, null, 2),
     "[SELECTED CONTEXT]",
     JSON.stringify(captionInputContext.selected_context, null, 2),
     "[SELECTION REASON]",
@@ -555,8 +641,10 @@ export async function generatePromoCaption(
       caption,
       hashtags: hashtags.length > 0 ? hashtags : fallbackResult.hashtags,
       marketContext,
+      weatherContext,
       festivalContext,
       kamisContext,
+      tourismCorpusContext,
       captionInputContext,
       evidence,
     };
