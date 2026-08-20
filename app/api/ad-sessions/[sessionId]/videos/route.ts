@@ -262,35 +262,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
   }
 
-  if (validatedDurationSeconds < 2) {
-    const review = {
-      passed: false,
-      score: 40,
-      summary: "영상 길이가 2초보다 짧습니다.",
-      feedback: ["영상이 2초보다 짧습니다. 2초 이상으로 다시 촬영해주세요."],
-      payload: {
-        durationSeconds: validatedDurationSeconds,
-      },
-    };
-
-    return successResponse(
-      {
-        sessionId: session.id,
-        response: "fail",
-        status: session.status,
-        request: {
-          shotKey: currentRequest.shotKey,
-          assetType: currentRequest.assetType,
-          prompt: currentRequest.prompt,
-          helperText: currentRequest.helperText,
-        },
-        review,
-        retryMessage: review.feedback[0],
-      },
-      "Video needs retake",
-    );
-  }
-
   const currentSortOrder = Array.isArray(session.ad_creation_session_assets)
     ? session.ad_creation_session_assets.length
     : 0;
@@ -298,7 +269,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const review = {
     passed: true,
     score: 100,
-      summary: "영상 길이가 기준을 충족했습니다.",
+      summary: "영상이 정상적으로 승인되었습니다.",
       feedback: [],
       payload: {
         durationSeconds: validatedDurationSeconds,
