@@ -30,6 +30,100 @@ type SubmitSessionVideoBody = {
   durationMs?: number | null;
 };
 
+const LEGACY_VIDEO_SHOT_KEY_BY_SHOT: Record<string, string> = {
+  video_storefront_sign: "menu_board",
+  video_storefront_entry: "signature_menu",
+  video_menu_board: "flatlay_menu",
+  video_signature_menu: "cooking_scene",
+  video_signature_interaction: "detail_closeup",
+  video_cooking_scene: "menu_board",
+  video_side_menu: "signature_menu",
+  video_side_menu_interaction: "flatlay_menu",
+};
+
+function resolveOriginalShotKey(reviewPayload: unknown, fallback: string) {
+  if (
+    reviewPayload &&
+    typeof reviewPayload === "object" &&
+    "originalShotKey" in reviewPayload &&
+    typeof reviewPayload.originalShotKey === "string" &&
+    reviewPayload.originalShotKey.trim().length > 0
+  ) {
+    return reviewPayload.originalShotKey.trim();
+  }
+
+  return fallback;
+}
+
+async function insertSessionVideoAsset(params: {
+  supabase: ReturnType<typeof getSupabaseAdminClient>;
+  sessionId: string;
+  shotKey: string;
+  bucket: string;
+  filePath: string;
+  fileName: string;
+  mimeType: string;
+  fileSize: number | null;
+  sortOrder: number;
+  review: {
+    score: number;
+    summary: string;
+    feedback: string[];
+    payload: {
+      durationSeconds: number;
+    };
+  };
+}) {
+  const baseInsertPayload = {
+    session_id: params.sessionId,
+    storage_bucket: params.bucket,
+    file_path: params.filePath,
+    file_name: params.fileName,
+    mime_type: params.mimeType,
+    file_size: params.fileSize,
+    sort_order: params.sortOrder,
+    review_passed: true,
+    review_score: params.review.score,
+    review_summary: params.review.summary,
+    review_feedback: params.review.feedback,
+  };
+
+  const primaryAttempt = await params.supabase.from("ad_creation_session_assets").insert({
+    ...baseInsertPayload,
+    shot_key: params.shotKey,
+    asset_type: "video_clip",
+    review_payload: params.review.payload,
+  });
+
+  if (!primaryAttempt.error) {
+    return { error: null, usedLegacyFallback: false };
+  }
+
+  const legacyShotKey =
+    LEGACY_VIDEO_SHOT_KEY_BY_SHOT[params.shotKey] ?? "detail_closeup";
+
+  const fallbackAttempt = await params.supabase.from("ad_creation_session_assets").insert({
+    ...baseInsertPayload,
+    shot_key: legacyShotKey,
+    asset_type: "food_photo",
+    review_payload: {
+      ...params.review.payload,
+      originalShotKey: params.shotKey,
+      originalAssetType: "video_clip",
+      compatibilityMode: "legacy_video_asset_fallback",
+    },
+  });
+
+  if (!fallbackAttempt.error) {
+    return { error: null, usedLegacyFallback: true };
+  }
+
+  return {
+    error: fallbackAttempt.error.message,
+    usedLegacyFallback: false,
+  };
+}
+
 function resolveDurationSeconds(body: SubmitSessionVideoBody) {
   if (typeof body.durationSeconds === "number" && Number.isFinite(body.durationSeconds)) {
     return body.durationSeconds;
@@ -211,29 +305,23 @@ export async function POST(request: NextRequest, context: RouteContext) {
       },
     };
 
-  const { error: assetInsertError } = await supabase
-    .from("ad_creation_session_assets")
-    .insert({
-      session_id: session.id,
-      shot_key: currentRequest.shotKey,
-      asset_type: "video_clip",
-      storage_bucket: body.bucket!.trim(),
-      file_path: body.filePath!.trim(),
-      file_name: canonicalFileName,
-      mime_type: body.mimeType?.trim() || "video/mp4",
-      file_size: body.fileSize ?? null,
-      sort_order: currentSortOrder,
-      review_passed: true,
-      review_score: review.score,
-      review_summary: review.summary,
-      review_feedback: review.feedback,
-      review_payload: review.payload,
-    });
+  const { error: assetInsertError } = await insertSessionVideoAsset({
+    supabase,
+    sessionId: session.id,
+    shotKey: currentRequest.shotKey,
+    bucket: body.bucket!.trim(),
+    filePath: body.filePath!.trim(),
+    fileName: canonicalFileName,
+    mimeType: body.mimeType?.trim() || "video/mp4",
+    fileSize: body.fileSize ?? null,
+    sortOrder: currentSortOrder,
+    review,
+  });
 
   if (assetInsertError) {
     return errorResponse("Failed to store session video", 500, {
       code: "SESSION_ASSET_CREATE_FAILED",
-      details: assetInsertError.message,
+      details: assetInsertError,
     });
   }
 
@@ -289,7 +377,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       file_name,
       mime_type,
       file_size,
-      sort_order
+      sort_order,
+      review_payload
     `)
     .eq("session_id", session.id)
     .order("sort_order", { ascending: true });
@@ -347,8 +436,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
           mime_type: string | null;
           file_size: number | null;
           sort_order: number;
-        } => asset.asset_type === "video_clip",
-      ),
+          review_payload: unknown;
+        } =>
+          typeof asset.storage_bucket === "string" &&
+          typeof asset.file_path === "string",
+      ).map((asset) => ({
+        shot_key: resolveOriginalShotKey(asset.review_payload, asset.shot_key),
+        asset_type: "video_clip" as const,
+        storage_bucket: asset.storage_bucket,
+        file_path: asset.file_path,
+        file_name: asset.file_name,
+        mime_type: asset.mime_type,
+        file_size: asset.file_size,
+        sort_order: asset.sort_order,
+      })),
     });
   } catch (generationError) {
     await supabase
