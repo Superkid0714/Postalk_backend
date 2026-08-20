@@ -41,6 +41,12 @@ export type ReviewSubmissionRecord = Omit<
   submission_assets?: ReviewAssetRecord[] | null;
 };
 
+const REVIEW_GENERATED_ASSET_TYPES = new Set([
+  "generated_image",
+  "generated_video",
+  "video_thumbnail",
+]);
+
 function readMerchantInsights(aiMetadata: Record<string, unknown> | null | undefined) {
   if (!aiMetadata || typeof aiMetadata !== "object" || Array.isArray(aiMetadata)) {
     return {
@@ -222,6 +228,36 @@ export function normalizeReviewStore(
   return store;
 }
 
+export function selectReviewDisplayAssets(
+  assets: ReviewAssetRecord[] | null | undefined,
+) {
+  if (!assets || assets.length === 0) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+
+  return assets
+    .filter((asset) => REVIEW_GENERATED_ASSET_TYPES.has(asset.asset_type))
+    .sort((left, right) => {
+      if (left.sort_order !== right.sort_order) {
+        return left.sort_order - right.sort_order;
+      }
+
+      return left.file_path.localeCompare(right.file_path);
+    })
+    .filter((asset) => {
+      const dedupeKey = `${asset.asset_type}:${asset.file_path}`;
+
+      if (seen.has(dedupeKey)) {
+        return false;
+      }
+
+      seen.add(dedupeKey);
+      return true;
+    });
+}
+
 export async function getReviewSignedUrl(asset: SubmissionAssetRecord | null) {
   if (!asset) {
     return null;
@@ -264,9 +300,10 @@ export async function buildReviewDetail(submission: ReviewSubmissionRecord) {
   const merchantInsights = readMerchantInsights(submission.ai_metadata);
   const instagramPublish = readInstagramPublish(submission.ai_metadata);
   const instagramMetrics = readInstagramMetrics(submission.ai_metadata);
+  const displayAssets = selectReviewDisplayAssets(submission.submission_assets);
 
   const assets = await Promise.all(
-    (submission.submission_assets ?? []).map(async (asset) => ({
+    displayAssets.map(async (asset) => ({
       assetType: asset.asset_type,
       fileName: asset.file_name ?? null,
       filePath: asset.file_path,
@@ -278,8 +315,8 @@ export async function buildReviewDetail(submission: ReviewSubmissionRecord) {
   );
 
   const primaryAsset =
-    pickThumbnailAsset(submission.submission_assets) ??
-    submission.submission_assets?.[0] ??
+    pickThumbnailAsset(displayAssets) ??
+    displayAssets[0] ??
     null;
 
   return {
