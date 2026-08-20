@@ -1010,6 +1010,7 @@ export async function generatePromoImage(params: {
   model?: string;
   size?: string;
   quality?: string;
+  timeoutMs?: number;
 }) {
   const apiKey = getOpenAiApiKey();
 
@@ -1031,7 +1032,7 @@ export async function generatePromoImage(params: {
       background: "auto",
       output_format: "png",
     }),
-    timeoutMs: 120_000,
+    timeoutMs: params.timeoutMs ?? 120_000,
   });
 
   if (!response.ok) {

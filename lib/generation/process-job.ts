@@ -431,6 +431,10 @@ export async function processGenerationJobById(jobId: string) {
               job.style_preset === "food_card_news"
                 ? "high"
                 : job.quality,
+            timeoutMs:
+              job.style_preset === "food_card_news"
+                ? 300_000
+                : 120_000,
           });
 
       const filePath = `${job.store_id}/${job.submission_id}/generated/${job.id}-${carouselPrompt.index + 1}.png`;
