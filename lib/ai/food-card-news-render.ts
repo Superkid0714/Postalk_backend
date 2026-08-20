@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import sharp from "sharp";
 
 import type { SubmissionForGeneration } from "@/lib/ai/generation";
@@ -15,8 +18,35 @@ const SUBTLE_BRIGHT = "#8B8175";
 const PAPER = "#F0EADD";
 const LINE = "#D8CDB6";
 const ACCENT = "#7E2E24";
-const FONT_STACK =
-  "'Noto Serif CJK KR','Noto Serif KR','Source Han Serif KR','Nanum Myeongjo','Batang','Apple SD Gothic Neo','Malgun Gothic',serif";
+const FONT_FAMILY = "PostalkCardNewsKR";
+
+let embeddedFontFaceCss: string | null = null;
+
+function getEmbeddedFontFaceCss() {
+  if (embeddedFontFaceCss) {
+    return embeddedFontFaceCss;
+  }
+
+  const fontPath = path.join(
+    process.cwd(),
+    "assets",
+    "fonts",
+    "NotoSansCJKkr-Regular.otf",
+  );
+  const fontBytes = fs.readFileSync(fontPath);
+  const fontBase64 = fontBytes.toString("base64");
+
+  embeddedFontFaceCss = `
+    @font-face {
+      font-family: '${FONT_FAMILY}';
+      src: url("data:font/otf;base64,${fontBase64}") format("opentype");
+      font-weight: 400 700;
+      font-style: normal;
+    }
+  `.trim();
+
+  return embeddedFontFaceCss;
+}
 
 export type FoodCardNewsSourceAssets = {
   menuBoard: Buffer;
@@ -130,7 +160,7 @@ function buildTextBlockSvg(params: {
     textAnchor = "start",
   } = params;
 
-  return `<text x="${x}" y="${y}" fill="${fill}" font-family="${FONT_STACK}" font-size="${fontSize}" font-weight="${fontWeight}" letter-spacing="${letterSpacing}" text-anchor="${textAnchor}">${lines
+  return `<text x="${x}" y="${y}" fill="${fill}" font-family="${FONT_FAMILY}" font-size="${fontSize}" font-weight="${fontWeight}" letter-spacing="${letterSpacing}" text-anchor="${textAnchor}">${lines
     .map((line, index) => {
       const dy = index === 0 ? 0 : lineHeight;
       return `<tspan x="${x}" dy="${dy}">${escapeXml(line)}</tspan>`;
@@ -265,6 +295,9 @@ async function renderCoverCard(
   const overlay = svgBuffer(`
     <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
       <defs>
+        <style>
+          ${getEmbeddedFontFaceCss()}
+        </style>
         <linearGradient id="coverShade" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stop-color="#1F1814" stop-opacity="0.78" />
           <stop offset="52%" stop-color="#261E18" stop-opacity="0.42" />
@@ -341,6 +374,11 @@ async function renderFlatLayCard(
   const menu = await containPhoto(assets.menuBoard, 250, 320, BRIGHT_BG);
   const baseOverlay = svgBuffer(`
     <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <style>
+          ${getEmbeddedFontFaceCss()}
+        </style>
+      </defs>
       <rect x="0" y="0" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" fill="${DARK_BG}" />
       <rect x="70" y="70" width="940" height="1210" rx="44" fill="#2B241F" />
       <rect x="110" y="970" width="860" height="220" rx="30" fill="#312924" />
@@ -349,6 +387,11 @@ async function renderFlatLayCard(
   `);
   const textOverlay = svgBuffer(`
     <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <style>
+          ${getEmbeddedFontFaceCss()}
+        </style>
+      </defs>
       <rect x="110" y="106" width="180" height="48" rx="24" fill="${ACCENT}" />
       ${buildTextBlockSvg({
         x: 200,
@@ -452,6 +495,11 @@ async function renderCircleLayoutCard(
   const smallCircle = await createCircularPhoto(assets.cookingPhoto, 220);
   const overlay = svgBuffer(`
     <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <style>
+          ${getEmbeddedFontFaceCss()}
+        </style>
+      </defs>
       <rect x="0" y="0" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" fill="${BRIGHT_BG}" />
       <rect x="76" y="74" width="928" height="1202" rx="42" fill="#FBF7EF" />
       <circle cx="700" cy="490" r="292" fill="none" stroke="#E5DAC6" stroke-width="2" />
@@ -549,6 +597,11 @@ async function renderQuoteStripCard(
   );
   const baseOverlay = svgBuffer(`
     <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <style>
+          ${getEmbeddedFontFaceCss()}
+        </style>
+      </defs>
       <rect x="0" y="0" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" fill="${BRIGHT_BG}" />
       <rect x="86" y="700" width="908" height="540" rx="36" fill="#FBF7EF" />
       <rect x="0" y="0" width="${CANVAS_WIDTH}" height="640" fill="#000000" opacity="0.18" />
@@ -556,6 +609,11 @@ async function renderQuoteStripCard(
   `);
   const textOverlay = svgBuffer(`
     <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <style>
+          ${getEmbeddedFontFaceCss()}
+        </style>
+      </defs>
       <rect x="86" y="734" width="170" height="46" rx="23" fill="${ACCENT}" />
       ${buildTextBlockSvg({
         x: 171,
@@ -632,6 +690,11 @@ async function renderInfoCard(
   );
   const baseOverlay = svgBuffer(`
     <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <style>
+          ${getEmbeddedFontFaceCss()}
+        </style>
+      </defs>
       <rect x="0" y="0" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" fill="${BRIGHT_BG}" />
       <rect x="80" y="80" width="920" height="1190" rx="44" fill="#FBF7EF" />
       <circle cx="170" cy="170" r="120" fill="none" stroke="#E8DCC8" stroke-width="1.5" opacity="0.9" />
@@ -640,6 +703,11 @@ async function renderInfoCard(
   `);
   const textOverlay = svgBuffer(`
     <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <style>
+          ${getEmbeddedFontFaceCss()}
+        </style>
+      </defs>
       <rect x="406" y="118" width="268" height="52" rx="26" fill="${ACCENT}" />
       ${buildTextBlockSvg({
         x: 540,
