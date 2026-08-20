@@ -31,6 +31,14 @@ export type ReviewedFoodCardNewsPlan = {
   cards: ReviewedFoodCardNewsCard[];
 };
 
+export type FoodCardNewsPublicDataContext = {
+  marketLabel?: string | null;
+  weatherSummary?: string | null;
+  festivalLabel?: string | null;
+  kamisLabel?: string | null;
+  tourismTone?: string | null;
+};
+
 type OpenAiResponsesResponse = {
   output_text?: string;
 };
@@ -150,9 +158,52 @@ function joinCopyParts(...parts: Array<string | null | undefined>) {
     .join(" ");
 }
 
+export function buildFoodCardNewsPublicDataCue(
+  context?: FoodCardNewsPublicDataContext | null,
+) {
+  if (!context) {
+    return null;
+  }
+
+  if (context.festivalLabel?.trim()) {
+    return squeezeText(
+      `${context.festivalLabel.trim()} 무렵 더 반가운 한 끼`,
+      22,
+    );
+  }
+
+  if (context.weatherSummary?.trim()) {
+    return squeezeText(context.weatherSummary.trim(), 22);
+  }
+
+  if (context.marketLabel?.trim()) {
+    return squeezeText(
+      `${context.marketLabel.trim()}에서 기억될 메뉴`,
+      22,
+    );
+  }
+
+  if (context.kamisLabel?.trim()) {
+    return squeezeText(
+      `${context.kamisLabel.trim()} 장보기 흐름에 어울리는 메뉴`,
+      22,
+    );
+  }
+
+  if (context.tourismTone?.trim()) {
+    return squeezeText(
+      `${context.tourismTone.trim()} 분위기와 닿는 한 끼`,
+      22,
+    );
+  }
+
+  return null;
+}
+
 function buildCardCopy(
   card: FoodCardNewsPlanCard,
   submission: SubmissionForGeneration,
+  publicDataCue: string | null,
 ) {
   const menu = compactText(submission.target_menu_name, "대표 메뉴");
   const market = compactText(submission.stores?.market_name, "전통시장");
@@ -193,7 +244,10 @@ function buildCardCopy(
         title: squeezeText("오늘의 포인트", 10),
         subtitle: squeezeText(appeal, 20),
         body: splitBodyLines(
-          joinCopyParts(marketStore, price ? `가볍게 ${price}` : "기억에 남는 시장 한 끼"),
+          joinCopyParts(
+            publicDataCue ?? marketStore,
+            price ? `가볍게 ${price}` : "기억에 남는 시장 한 끼",
+          ),
           16,
           2,
         ),
@@ -217,7 +271,11 @@ function buildCardCopy(
       return {
         title: squeezeText("저장해둘 한 끼", 10),
         subtitle: squeezeText(menu, 16),
-        body: splitBodyLines(joinCopyParts(caption, marketStore), 18, 2),
+        body: splitBodyLines(
+          joinCopyParts(caption, publicDataCue ?? marketStore),
+          18,
+          2,
+        ),
         reason: "마감 카드는 다시 떠오를 한 줄과 가게 정보를 깔끔하게 남기는 데 집중",
       };
   }
@@ -244,14 +302,16 @@ function chooseSlot(
 function buildFallbackReviewedPlan(
   submission: SubmissionForGeneration,
   plan: FoodCardNewsCreativePlan,
+  publicDataContext?: FoodCardNewsPublicDataContext | null,
 ): ReviewedFoodCardNewsPlan {
   const usedSlots = new Set<FoodCardNewsSourceSlotKey>();
+  const publicDataCue = buildFoodCardNewsPublicDataCue(publicDataContext);
 
   return {
     concept: plan.concept,
     tone: plan.tone,
     cards: plan.cards.map((card, index) => {
-      const copy = buildCardCopy(card, submission);
+      const copy = buildCardCopy(card, submission, publicDataCue);
 
       return {
         index,
@@ -348,8 +408,13 @@ function normalizeReviewedPlan(
 export async function reviewFoodCardNewsPlan(params: {
   submission: SubmissionForGeneration;
   plan: FoodCardNewsCreativePlan;
+  publicDataContext?: FoodCardNewsPublicDataContext | null;
 }): Promise<ReviewedFoodCardNewsPlan> {
-  const fallback = buildFallbackReviewedPlan(params.submission, params.plan);
+  const fallback = buildFallbackReviewedPlan(
+    params.submission,
+    params.plan,
+    params.publicDataContext,
+  );
   const apiKey = getOpenAiApiKey();
 
   if (!apiKey) {
@@ -376,6 +441,10 @@ export async function reviewFoodCardNewsPlan(params: {
     "- closing card should prefer infoPhoto or menuBoard.",
     "- Keep the merchant's real selling point, but rewrite it into cleaner template-friendly Korean.",
     "- Remove awkward report-like phrases and reduce duplication.",
+    "- Every card's Korean should read naturally to a real local customer, not like a generated label list.",
+    "- Prefer fully natural Korean phrasing over noun-fragment copy when possible.",
+    "- If verified public-data context exists, weave in at most one small grounded cue across the full set.",
+    "- Public-data cues must feel subtle and local, never like a government report.",
     "Submission facts:",
     JSON.stringify(
       {
@@ -386,6 +455,7 @@ export async function reviewFoodCardNewsPlan(params: {
         appealPoint: params.submission.appeal_point,
         extraMessage: params.submission.extra_message ?? null,
         caption: params.submission.caption ?? null,
+        publicDataContext: params.publicDataContext ?? null,
       },
       null,
       2,

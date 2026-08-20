@@ -423,6 +423,30 @@ export async function processGenerationJobById(jobId: string) {
               caption: captionResult.caption,
             },
             plan: foodCardNewsPlan,
+            publicDataContext: {
+              marketLabel: captionResult.marketContext.found
+                ? [
+                    captionResult.marketContext.market_name,
+                    captionResult.marketContext.district,
+                  ]
+                    .filter(Boolean)
+                    .join(" ")
+                : null,
+              weatherSummary: captionResult.weatherContext.selected_for_prompt
+                ? captionResult.weatherContext.summary
+                : null,
+              festivalLabel:
+                captionResult.festivalContext.found &&
+                captionResult.festivalContext.verified
+                  ? captionResult.festivalContext.title
+                  : null,
+              kamisLabel: captionResult.kamisContext.selected_for_prompt
+                ? captionResult.kamisContext.region
+                : null,
+              tourismTone: captionResult.tourismCorpusContext.selected_for_prompt
+                ? captionResult.tourismCorpusContext.region_scope
+                : null,
+            },
           })
         : null;
     const carouselPrompts = buildPromoCarouselPrompts(

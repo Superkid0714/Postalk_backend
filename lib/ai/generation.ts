@@ -28,6 +28,7 @@ import type { WeatherContext } from "@/lib/weather/context";
 const DEFAULT_IMAGE_MODEL = "gpt-image-2";
 const DEFAULT_IMAGE_SIZE = "1536x1024";
 const DEFAULT_IMAGE_QUALITY = "medium";
+const PROMO_CAPTION_MODEL = "gpt-4.1-mini";
 
 export type ImageGenerationStatus =
   | "queued"
@@ -378,6 +379,60 @@ function deriveMarketingHashtags(source: string | null | undefined) {
   return tags;
 }
 
+function formatFestivalDateRange(
+  festivalContext?: FestivalContext | null,
+) {
+  if (
+    !festivalContext?.event_start_date ||
+    !festivalContext.event_end_date
+  ) {
+    return null;
+  }
+
+  return `${festivalContext.event_start_date}~${festivalContext.event_end_date}`;
+}
+
+export function buildPublicDataFlavorText(params: {
+  marketContext?: MarketContext | null;
+  weatherContext?: WeatherContext | null;
+  festivalContext?: FestivalContext | null;
+  kamisContext?: KamisContext | null;
+  tourismCorpusContext?: TourismCorpusContext | null;
+}) {
+  const {
+    marketContext,
+    weatherContext,
+    festivalContext,
+    kamisContext,
+    tourismCorpusContext,
+  } = params;
+
+  if (festivalContext?.found && festivalContext.verified && festivalContext.title) {
+    return `${festivalContext.title} 무렵 들르기 좋은 분위기까지 함께 전해집니다.`;
+  }
+
+  if (weatherContext?.selected_for_prompt && weatherContext.summary) {
+    return weatherContext.summary.replace(
+      / 활용할 수 있음$/u,
+      " 잘 어울리는 메뉴 분위기입니다.",
+    );
+  }
+
+  if (marketContext?.found && marketContext.market_name) {
+    return `${marketContext.market_name}${marketContext.district ? ` ${marketContext.district}` : ""}에서 자연스럽게 떠오를 만한 한 끼입니다.`;
+  }
+
+  if (kamisContext?.selected_for_prompt && kamisContext.region) {
+    return `${kamisContext.region} 장보기 동선에서도 편하게 떠올리기 좋은 메뉴 톤입니다.`;
+  }
+
+  if (tourismCorpusContext?.selected_for_prompt && tourismCorpusContext.region_scope) {
+    return `${tourismCorpusContext.region_scope} 특유의 정감과 잘 어울리는 메뉴 결을 담았습니다.`;
+  }
+
+  return null;
+}
+
 function buildHashtagCandidates(
   submission: SubmissionForGeneration,
   merchantInsights: MerchantInsights,
@@ -439,21 +494,17 @@ function buildCaptionFallback(
   const appealSentence = cleanedAppeal
     ? `${cleanedAppeal} 매력이 또렷해서 처음 찾는 손님에게도 자신 있게 권하기 좋습니다.`
     : null;
+  const publicDataFlavor = buildPublicDataFlavorText({
+    marketContext,
+    weatherContext,
+    festivalContext,
+    kamisContext,
+    tourismCorpusContext,
+  });
   const contextSentence =
     merchantInsights.targetCustomer
       ? `${merchantInsights.targetCustomer} 손님이 편하게 고르고 만족스럽게 즐기기 좋은 분위기를 함께 담았습니다.`
-      : weatherContext?.selected_for_prompt && weatherContext.summary
-        ? `${weatherContext.summary.replace(/ 활용할 수 있음$/u, " 떠올리기 좋은 분위기입니다.")}`
-      : marketContext?.found && marketContext.market_name
-        ? `${marketContext.market_name}${marketContext.district ? ` ${marketContext.district}` : ""}에서 가볍게 들러도 만족감 있게 즐길 수 있는 메뉴 흐름입니다.`
-        : festivalContext?.found && festivalContext.verified && festivalContext.title
-          ? `${festivalContext.title} 전후로 근처에서 한 끼 즐기기 좋은 메뉴 분위기와도 잘 맞습니다.`
-          : kamisContext?.selected_for_prompt && kamisContext.region
-            ? `${kamisContext.region} 생활 흐름 속에서도 부담 없이 찾기 좋은 메뉴 톤으로 정리했습니다.`
-            : tourismCorpusContext?.selected_for_prompt &&
-                tourismCorpusContext.region_scope
-              ? `${tourismCorpusContext.region_scope} 특유의 정감 있는 분위기와도 잘 어울리는 메뉴 결을 담았습니다.`
-            : null;
+      : publicDataFlavor;
   const closingSentence = cleanedExtra
     ? `${cleanedExtra} 매력까지 함께 느끼고 싶다면 한 번쯤 찾게 되는 메뉴입니다.`
     : pickPrioritySupportMessage(submission, merchantInsights);
@@ -482,6 +533,145 @@ function buildCaptionFallback(
 
 function stripCodeFence(value: string) {
   return value.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+}
+
+function normalizeHashtags(
+  candidate: unknown,
+  fallback: string[],
+) {
+  const normalized = Array.isArray(candidate)
+    ? candidate
+        .filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0)
+        .map((tag) => {
+          const compact = tag.trim().replace(/\s+/g, "");
+          return compact.startsWith("#") ? compact : `#${compact}`;
+        })
+    : [];
+
+  const unique = [...new Set(normalized)].slice(0, 5);
+  return unique.length >= 3 ? unique : fallback;
+}
+
+export function normalizePromoCaptionOutput(
+  candidate: unknown,
+  fallback: { caption: string; hashtags: string[] },
+) {
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+    return fallback;
+  }
+
+  const record = candidate as Record<string, unknown>;
+  const caption =
+    typeof record.caption === "string" && record.caption.trim().length > 0
+      ? record.caption
+          .replace(/\s+/g, " ")
+          .replace(/^(주력 메뉴를 포함한 대표 메뉴 소개|가게만의 특별함)\s*:\s*/gu, "")
+          .trim()
+      : fallback.caption;
+
+  if (caption.length < 20 || caption.length > 240) {
+    return fallback;
+  }
+
+  return {
+    caption,
+    hashtags: normalizeHashtags(record.hashtags, fallback.hashtags),
+  };
+}
+
+async function reviewPromoCaptionDraft(params: {
+  apiKey: string;
+  submission: SubmissionForGeneration;
+  merchantInsights: MerchantInsights;
+  draft: { caption: string; hashtags: string[] };
+  marketContext: MarketContext;
+  weatherContext: WeatherContext;
+  festivalContext: FestivalContext;
+  kamisContext: KamisContext;
+  tourismCorpusContext: TourismCorpusContext;
+}) {
+  const publicDataFlavor = buildPublicDataFlavorText({
+    marketContext: params.marketContext,
+    weatherContext: params.weatherContext,
+    festivalContext: params.festivalContext,
+    kamisContext: params.kamisContext,
+    tourismCorpusContext: params.tourismCorpusContext,
+  });
+
+  const prompt = [
+    "You are the final Korean copy editor for a traditional-market food Instagram ad.",
+    "Rewrite the draft caption so it sounds natural, appetizing, and publishable in Korean.",
+    "Return strict JSON only with keys: caption, hashtags.",
+    "Rules:",
+    "- Keep 3 to 4 Korean sentences.",
+    "- Make the Korean read naturally to real customers.",
+    "- Remove awkward AI-sounding phrasing, label-like wording, and repetition.",
+    "- Merchant facts must stay primary.",
+    "- If verified public-data flavor exists, reflect only one subtle local/timing cue.",
+    "- Public-data flavor must feel natural, not official or report-like.",
+    "- Keep the tone warm, promotional, and trustworthy.",
+    "- Do not invent facts.",
+    `Store: ${params.submission.stores?.store_name ?? "가게"}`,
+    `Market: ${params.submission.stores?.market_name ?? "전통시장"}`,
+    `Menu: ${params.submission.target_menu_name}`,
+    `Appeal point: ${params.submission.appeal_point}`,
+    params.submission.extra_message
+      ? `Extra merchant note: ${params.submission.extra_message}`
+      : null,
+    params.merchantInsights.targetCustomer
+      ? `Target customer: ${params.merchantInsights.targetCustomer}`
+      : null,
+    params.merchantInsights.peakSalesTime
+      ? `Peak sales time: ${params.merchantInsights.peakSalesTime}`
+      : null,
+    publicDataFlavor ? `Verified public-data flavor: ${publicDataFlavor}` : null,
+    params.festivalContext.found && params.festivalContext.verified
+      ? `Verified festival cue: ${params.festivalContext.title}${formatFestivalDateRange(params.festivalContext) ? ` (${formatFestivalDateRange(params.festivalContext)})` : ""}`
+      : null,
+    params.weatherContext.selected_for_prompt && params.weatherContext.summary
+      ? `Verified weather cue: ${params.weatherContext.summary}`
+      : null,
+    params.marketContext.found && params.marketContext.market_name
+      ? `Verified market cue: ${params.marketContext.market_name}`
+      : null,
+    "[DRAFT CAPTION]",
+    params.draft.caption,
+    "[DRAFT HASHTAGS]",
+    JSON.stringify(params.draft.hashtags),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  try {
+    const response = await fetchWithTimeout("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${params.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: PROMO_CAPTION_MODEL,
+        input: prompt,
+      }),
+      timeoutMs: 30_000,
+    });
+
+    if (!response.ok) {
+      return params.draft;
+    }
+
+    const json = (await response.json()) as OpenAiResponsesResponse;
+    const outputText =
+      typeof json.output_text === "string" ? stripCodeFence(json.output_text) : "";
+
+    if (!outputText) {
+      return params.draft;
+    }
+
+    return normalizePromoCaptionOutput(JSON.parse(outputText), params.draft);
+  } catch {
+    return params.draft;
+  }
 }
 
 export async function generateFoodCardNewsPlan(
@@ -723,7 +913,7 @@ export async function generatePromoCaption(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4.1-mini",
+        model: PROMO_CAPTION_MODEL,
         input: prompt,
       }),
       timeoutMs: 30_000,
@@ -741,25 +931,28 @@ export async function generatePromoCaption(
       return fallbackResult;
     }
 
-    const parsed = JSON.parse(outputText) as {
-      caption?: unknown;
-      hashtags?: unknown;
-    };
-
-    const caption =
-      typeof parsed.caption === "string" && parsed.caption.trim().length > 0
-        ? parsed.caption.trim()
-        : fallbackResult.caption;
-    const hashtags = Array.isArray(parsed.hashtags)
-      ? parsed.hashtags
-          .filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0)
-          .map((tag) => (tag.startsWith("#") ? tag.trim() : `#${tag.trim()}`))
-          .slice(0, 5)
-      : fallbackResult.hashtags;
+    const firstPass = normalizePromoCaptionOutput(
+      JSON.parse(outputText),
+      {
+        caption: fallbackResult.caption,
+        hashtags: fallbackResult.hashtags,
+      },
+    );
+    const finalCopy = await reviewPromoCaptionDraft({
+      apiKey,
+      submission,
+      merchantInsights,
+      draft: firstPass,
+      marketContext,
+      weatherContext,
+      festivalContext,
+      kamisContext,
+      tourismCorpusContext,
+    });
 
     return {
-      caption,
-      hashtags: hashtags.length > 0 ? hashtags : fallbackResult.hashtags,
+      caption: finalCopy.caption,
+      hashtags: finalCopy.hashtags,
       marketContext,
       weatherContext,
       festivalContext,
