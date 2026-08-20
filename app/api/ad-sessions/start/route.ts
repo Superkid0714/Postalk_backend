@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
   const supabase = getSupabaseAdminClient();
   const { data: store, error: storeError } = await supabase
     .from("stores")
-    .select("id, market_name, store_name, owner_name, category, description")
+    .select("id, market_name, store_name, owner_name, category, description, location_address")
     .eq("id", body.storeId)
     .single();
 

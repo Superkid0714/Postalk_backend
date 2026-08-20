@@ -8,6 +8,7 @@ import {
   inferPrimarySubjectFromIntro,
   normalizeAdSessionWorkflow,
 } from "../lib/ad-session.ts";
+import { buildDraftSubmissionFromSession } from "../lib/ad-session-preparation.ts";
 
 test("buildSessionWorkflowSeed initializes draft preparation fields", () => {
   const workflow = buildSessionWorkflowSeed(
@@ -177,4 +178,40 @@ test("video prompts are returned as noun phrases for frontend sentence templates
   );
 
   assert.equal(cookingPrompt?.prompt, "제육볶음을 조리하는 모습");
+});
+
+test("buildDraftSubmissionFromSession keeps menu intro and store specialty separate", () => {
+  const workflow = buildSessionWorkflowSeed("combined intro", {
+    adType: "photo",
+    menuIntro: "대표메뉴는 제육볶음 입니다. 불향이 강합니다.",
+    storeSpecialty: "60년 전통의 손맛이 강점입니다.",
+  });
+
+  const submission = buildDraftSubmissionFromSession(
+    {
+      id: "session-1",
+      intro_text:
+        "주력 메뉴를 포함한 대표 메뉴 소개: 대표메뉴는 제육볶음 입니다.\n가게만의 특별함: 60년 전통의 손맛이 강점입니다.",
+      style_preset: "food_card_news",
+      workflow,
+      stores: {
+        market_name: "말바우시장",
+        store_name: "득량만",
+        owner_name: "홍길동",
+        category: "restaurant_food",
+        description: "시장 안 오래된 백반집",
+        location_address: "광주 북구 동문대로",
+      },
+      ad_creation_session_assets: [],
+    },
+    workflow,
+  );
+
+  assert.equal(submission.appeal_point, "대표메뉴는 제육볶음 입니다. 불향이 강합니다.");
+  assert.equal(submission.extra_message, "60년 전통의 손맛이 강점입니다.");
+  assert.deepEqual(submission.ai_metadata?.merchantInsights, {
+    targetCustomer: null,
+    peakSalesTime: null,
+    popularMenuNotes: "대표메뉴는 제육볶음 입니다. 불향이 강합니다.",
+  });
 });

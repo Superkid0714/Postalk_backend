@@ -333,6 +333,92 @@ function pickPrioritySupportMessage(
   return `${submission.target_menu_name} 생각날 때 부담 없이 찾을 수 있는 메뉴 톤으로 정리했습니다.`;
 }
 
+function compactSentence(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const cleaned = value
+    .replace(/^(주력 메뉴를 포함한 대표 메뉴 소개|가게만의 특별함)\s*:\s*/u, "")
+    .replace(/^(대표메뉴|대표 메뉴)(는|가)?\s*/u, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[.。!！?？]+$/u, "");
+
+  return cleaned.length > 0 ? cleaned : null;
+}
+
+function stripRepeatedMenuLead(value: string | null, menuName: string) {
+  if (!value) {
+    return null;
+  }
+
+  const escapedMenu = menuName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const cleaned = value
+    .replace(
+      new RegExp(`^${escapedMenu}(?:입니다|이에요|예요|입니다만)?[.!?。！？]*\\s*`, "u"),
+      "",
+    )
+    .trim();
+
+  return cleaned.length > 0 ? cleaned : value;
+}
+
+function deriveMarketingHashtags(source: string | null | undefined) {
+  const text = source?.replace(/\s+/g, "") ?? "";
+  const tags: string[] = [];
+
+  if (text.includes("불향")) tags.push("#불향가득");
+  if (text.includes("직화")) tags.push("#직화매력");
+  if (text.includes("전통")) tags.push("#전통손맛");
+  if (text.includes("푸짐")) tags.push("#푸짐한한끼");
+  if (text.includes("포장")) tags.push("#포장추천");
+  if (text.includes("매콤")) tags.push("#매콤한한입");
+
+  return tags;
+}
+
+function buildHashtagCandidates(
+  submission: SubmissionForGeneration,
+  merchantInsights: MerchantInsights,
+  marketContext?: MarketContext | null,
+  festivalContext?: FestivalContext | null,
+) {
+  const candidates = [
+    submission.stores?.market_name,
+    submission.stores?.store_name,
+    submission.target_menu_name,
+    marketContext?.district ? `${marketContext.district}맛집` : null,
+    marketContext?.province
+      ? `${marketContext.province.replace(/광역시|특별시|특별자치시|특별자치도|도$/gu, "")}시장`
+      : null,
+    merchantInsights.targetCustomer
+      ? `${merchantInsights.targetCustomer.replace(/\s+/g, "")}추천`
+      : null,
+    merchantInsights.peakSalesTime
+      ? merchantInsights.peakSalesTime.replace(/\s+/g, "")
+      : null,
+    merchantInsights.popularMenuNotes?.includes("포장") ? "포장맛집" : null,
+    merchantInsights.popularMenuNotes?.includes("점심") ? "점심추천" : null,
+    merchantInsights.popularMenuNotes?.includes("저녁") ? "저녁메뉴" : null,
+    festivalContext?.found && festivalContext.verified && festivalContext.title
+      ? festivalContext.title.replace(/\s+/g, "")
+      : null,
+  ];
+
+  return [
+    ...new Set(
+      [
+        ...candidates
+          .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+          .map((value) => `#${value.replace(/\s+/g, "")}`),
+        ...deriveMarketingHashtags(submission.appeal_point),
+        ...deriveMarketingHashtags(submission.extra_message),
+      ],
+    ),
+  ].slice(0, 5);
+}
+
 function buildCaptionFallback(
   submission: SubmissionForGeneration,
   merchantInsights: MerchantInsights,
@@ -342,29 +428,35 @@ function buildCaptionFallback(
   kamisContext?: KamisContext | null,
   tourismCorpusContext?: TourismCorpusContext | null,
 ){
-  const intro = `${submission.target_menu_name}${merchantInsights.peakSalesTime ? ` ${merchantInsights.peakSalesTime}` : ""}에 더 눈길이 가는 메뉴입니다.`;
-  const appealSentence = submission.appeal_point
-    ? `${submission.appeal_point} 매력이 분명해서 한 끼 메뉴로 가볍게 고르기 좋습니다.`
+  const cleanedAppeal = stripRepeatedMenuLead(
+    compactSentence(submission.appeal_point),
+    submission.target_menu_name,
+  );
+  const cleanedExtra = compactSentence(submission.extra_message);
+  const intro = merchantInsights.peakSalesTime
+    ? `${merchantInsights.peakSalesTime.trim()}에 특히 생각나는 ${submission.target_menu_name}입니다.`
+    : `${submission.target_menu_name} 한입이 먼저 떠오르는 메뉴입니다.`;
+  const appealSentence = cleanedAppeal
+    ? `${cleanedAppeal} 맛의 포인트가 분명해서 첫 주문 메뉴로 권하기 좋습니다.`
     : null;
   const contextSentence =
     merchantInsights.targetCustomer
-      ? `${merchantInsights.targetCustomer} 손님들이 자주 찾는 흐름을 자연스럽게 담았습니다.`
+      ? `${merchantInsights.targetCustomer} 손님들이 편하게 고르기 좋은 매력을 자연스럽게 담았습니다.`
       : weatherContext?.selected_for_prompt && weatherContext.summary
-        ? `${weatherContext.summary.replace(/ 활용할 수 있음$/u, " 살리기 좋은 날입니다.")}`
+        ? `${weatherContext.summary.replace(/ 활용할 수 있음$/u, " 잘 어울리는 분위기입니다.")}`
       : marketContext?.found && marketContext.market_name
-        ? `${marketContext.market_name}${marketContext.district ? ` ${marketContext.district}` : ""} 분위기 속에서 편하게 떠올리기 좋은 메뉴입니다.`
+        ? `${marketContext.market_name}${marketContext.district ? ` ${marketContext.district}` : ""}에서 한 끼 메뉴로 기억되기 좋은 구성입니다.`
         : festivalContext?.found && festivalContext.verified && festivalContext.title
-          ? `${festivalContext.title} 일정 전후로 근처에서 들르기 좋은 한 끼 흐름으로도 연결할 수 있습니다.`
+          ? `${festivalContext.title} 전후로 근처에서 가볍게 들르기 좋은 메뉴 흐름으로도 어울립니다.`
           : kamisContext?.selected_for_prompt && kamisContext.region
-            ? `${kamisContext.region} 기준 장바구니 물가 흐름을 참고해도 일상적으로 매력 있게 다가갈 수 있는 메뉴입니다.`
+            ? `${kamisContext.region} 생활 물가 흐름 속에서도 부담 없이 떠올리기 좋은 메뉴 톤입니다.`
             : tourismCorpusContext?.selected_for_prompt &&
                 tourismCorpusContext.region_scope
-              ? `${tourismCorpusContext.region_scope} 지역 분위기를 살린 자연스러운 문장 톤으로 소개하기 좋습니다.`
+              ? `${tourismCorpusContext.region_scope} 특유의 정감 있는 분위기와도 잘 맞는 메뉴입니다.`
             : null;
-  const closingSentence = pickPrioritySupportMessage(
-    submission,
-    merchantInsights,
-  );
+  const closingSentence = cleanedExtra
+    ? `${cleanedExtra} 강점까지 함께 느껴보고 싶은 메뉴입니다.`
+    : pickPrioritySupportMessage(submission, merchantInsights);
 
   const caption = [
     intro,
@@ -375,11 +467,12 @@ function buildCaptionFallback(
     .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
     .join(" ");
 
-  const hashtags = [
-    submission.stores?.market_name ? `#${submission.stores.market_name.replace(/\s+/g, "")}` : null,
-    submission.stores?.store_name ? `#${submission.stores.store_name.replace(/\s+/g, "")}` : null,
-    `#${submission.target_menu_name.replace(/\s+/g, "")}`,
-  ].filter((value): value is string => Boolean(value));
+  const hashtags = buildHashtagCandidates(
+    submission,
+    merchantInsights,
+    marketContext,
+    festivalContext,
+  );
 
   return {
     caption,
@@ -545,7 +638,11 @@ export async function generatePromoCaption(
     "- Sentence 3 may reflect customer group, time-of-day demand, weather context, market context, or nearby festival context only when verified and useful.",
     "- Final sentence should softly encourage a visit or make the store/menu feel easy to remember.",
     "- Sound warm, trustworthy, and appetizing.",
+    "- Make it feel like a real small-business Instagram ad that can be posted today.",
     "- Avoid flat summary style and avoid mechanically repeating field labels.",
+    "- Do not copy input labels such as '주력 메뉴를 포함한 대표 메뉴 소개' or '가게만의 특별함'.",
+    "- Prefer concise, punchy, concrete Korean wording over report-like phrasing.",
+    "- It is okay to omit minor facts to keep the ad attractive.",
     "- Do not try to include every merchant fact. Select only the 1 or 2 most important selling points for the ad.",
     "- If multiple merchant facts exist, prioritize menu appeal first, then one supporting point such as specialty, target customer, timing, or local context.",
     "- Omit less important details instead of forcing everything into the caption.",
@@ -579,6 +676,8 @@ export async function generatePromoCaption(
     "Hashtag rules:",
     "- Return 3 to 5 Korean hashtags.",
     "- Include menu/store/market-related tags when natural.",
+    "- Make hashtags look like real discovery hashtags people might search on Instagram.",
+    "- Prefer a varied mix such as market, store, menu, occasion, district, or use-case hashtags.",
     "- Each hashtag string must start with #.",
     "[WRITING PRIORITY]",
     "- Merchant facts come first.",

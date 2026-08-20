@@ -31,6 +31,7 @@ type SessionPreparationRow = {
         owner_name: string | null;
         category: string | null;
         description: string | null;
+        location_address: string | null;
       }
     | Array<{
         market_name: string;
@@ -38,6 +39,7 @@ type SessionPreparationRow = {
         owner_name: string | null;
         category: string | null;
         description: string | null;
+        location_address: string | null;
       }>
     | null;
   ad_creation_session_assets?: SessionPreparationAssetRow[] | null;
@@ -57,17 +59,21 @@ function normalizeStoreRelation(
     store_name: store?.store_name ?? "가게",
     owner_name: store?.owner_name ?? null,
     category: store?.category ?? null,
-    location_address: store?.description ?? null,
+    location_address: store?.location_address ?? store?.description ?? null,
+    description: store?.description ?? null,
     latitude: null,
     longitude: null,
   };
 }
 
-function buildDraftSubmission(
+export function buildDraftSubmissionFromSession(
   session: SessionPreparationRow,
   workflow: AdSessionWorkflow,
 ) {
   const store = normalizeStoreRelation(session.stores);
+  const menuIntro = workflow.menuIntro?.trim() || session.intro_text.trim();
+  const storeSpecialty =
+    workflow.storeSpecialty?.trim() || (store.description ?? null);
   const assets = (session.ad_creation_session_assets ?? [])
     .filter(
       (asset): asset is SessionPreparationAssetRow & {
@@ -88,12 +94,18 @@ function buildDraftSubmission(
     store_type: store.category ?? "전통시장 점포",
     target_menu_name: workflow.primarySubject?.trim() || "대표 메뉴",
     price_text: null,
-    appeal_point: session.intro_text.trim(),
-    extra_message: store.location_address ?? null,
+    appeal_point: menuIntro,
+    extra_message: storeSpecialty,
     ai_metadata: {
-      merchantInsights: {},
+      merchantInsights: {
+        targetCustomer: null,
+        peakSalesTime: null,
+        popularMenuNotes: menuIntro,
+      },
       adSession: {
         sessionId: session.id,
+        menuIntro,
+        storeSpecialty,
       },
     },
     stores: {
@@ -122,7 +134,8 @@ export async function prepareAdSessionDrafts(sessionId: string) {
         store_name,
         owner_name,
         category,
-        description
+        description,
+        location_address
       ),
       ad_creation_session_assets (
         shot_key,
@@ -140,7 +153,7 @@ export async function prepareAdSessionDrafts(sessionId: string) {
   }
 
   const workflow = normalizeAdSessionWorkflow(session.workflow);
-  const submission = buildDraftSubmission(session, workflow);
+  const submission = buildDraftSubmissionFromSession(session, workflow);
   const captionResult = await generatePromoCaption(submission);
   const foodCardNewsPlan =
     session.style_preset === "food_card_news"
