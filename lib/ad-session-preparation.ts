@@ -24,24 +24,22 @@ type SessionPreparationRow = {
   intro_text: string;
   style_preset: string;
   workflow: unknown;
-  stores:
-    | {
-        market_name: string;
-        store_name: string;
-        owner_name: string | null;
-        category: string | null;
-        description: string | null;
-        location_address: string | null;
-      }
-    | Array<{
-        market_name: string;
-        store_name: string;
-        owner_name: string | null;
-        category: string | null;
-        description: string | null;
-        location_address: string | null;
-      }>
-    | null;
+      stores:
+        | {
+            market_name: string;
+            store_name: string;
+            owner_name: string | null;
+            category: string | null;
+            description: string | null;
+          }
+        | Array<{
+            market_name: string;
+            store_name: string;
+            owner_name: string | null;
+            category: string | null;
+            description: string | null;
+          }>
+        | null;
   ad_creation_session_assets?: SessionPreparationAssetRow[] | null;
 };
 
@@ -59,7 +57,7 @@ function normalizeStoreRelation(
     store_name: store?.store_name ?? "가게",
     owner_name: store?.owner_name ?? null,
     category: store?.category ?? null,
-    location_address: store?.location_address ?? store?.description ?? null,
+    location_address: store?.description ?? null,
     description: store?.description ?? null,
     latitude: null,
     longitude: null,
@@ -134,8 +132,7 @@ export async function prepareAdSessionDrafts(sessionId: string) {
         store_name,
         owner_name,
         category,
-        description,
-        location_address
+        description
       ),
       ad_creation_session_assets (
         shot_key,
