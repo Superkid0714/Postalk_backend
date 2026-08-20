@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildVideoScript,
+  buildWorkingCaptionMarkdown,
+} from "../lib/ai/video.ts";
+import {
   getRequestedShot,
   buildPhotoRequest,
   buildSessionWorkflowSeed,
@@ -214,4 +218,55 @@ test("buildDraftSubmissionFromSession keeps menu intro and store specialty separ
     peakSalesTime: null,
     popularMenuNotes: "대표메뉴는 제육볶음 입니다. 불향이 강합니다.",
   });
+});
+
+test("buildVideoScript separates working captions from promotional caption", () => {
+  const script = buildVideoScript(
+    {
+      storeName: "득량만",
+      marketName: "말바우시장",
+      storeType: "restaurant_food",
+      targetMenuName: "제육볶음",
+      priceText: null,
+      appealPoint: "불향 가득한 직화 맛",
+      extraMessage: "60년 전통의 손맛",
+      targetCustomer: "든든한 한 끼를 찾는 손님",
+      peakSalesTime: "점심시간",
+      popularMenuNotes: "계란말이와 함께 찾는 손님이 많습니다",
+    },
+    "market_story",
+  );
+
+  assert.equal(script.workingCaptions.length, 8);
+  assert.match(script.caption, /^제육볶음 어떠세요\? 불향 가득한 직화 맛 /);
+  assert.match(script.workingCaptions[0]!, /말바우시장/);
+  assert.match(script.workingCaptions[3]!, /제육볶음/);
+});
+
+test("buildWorkingCaptionMarkdown creates 8 cuts and 16 subtitle lines", () => {
+  const markdown = buildWorkingCaptionMarkdown({
+    hookText: "득량만 인기 메뉴",
+    scenes: [
+      { order: 1, text: "득량만 추천 메뉴", focus: "store_intro" },
+      { order: 2, text: "불향 가득한 직화 맛", focus: "food_highlight" },
+      { order: 3, text: "제육볶음", focus: "price_cta" },
+    ],
+    workingCaptions: [
+      "첫 번째 문장입니다.",
+      "두 번째 문장입니다.",
+      "세 번째 문장입니다.",
+      "네 번째 문장입니다.",
+      "다섯 번째 문장입니다.",
+      "여섯 번째 문장입니다.",
+      "일곱 번째 문장입니다.",
+      "여덟 번째 문장입니다.",
+    ],
+    caption: "광고용 캡션",
+    hashtags: ["#말바우시장", "#득량만", "#제육볶음"],
+  });
+
+  assert.equal((markdown.match(/^## \[비디오 컷 /gm) ?? []).length, 8);
+  assert.equal((markdown.match(/자막 \d+:\*\*/g) ?? []).length, 16);
+  assert.match(markdown, /\[00:00 ~ 00:01\] 자막 1/);
+  assert.match(markdown, /\[00:15 ~ 00:16\] 자막 16/);
 });

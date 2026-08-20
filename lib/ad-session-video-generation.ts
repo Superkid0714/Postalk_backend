@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { mergeSubmissionWorkflowMetadata } from "@/lib/ad-creation";
+import { buildWorkingCaptionMarkdown } from "@/lib/ai/video";
 import {
   buildSessionStoreType,
   type AdSessionStore,
@@ -27,25 +28,9 @@ type SessionRow = {
 };
 
 function buildCaptionMarkdown(params: {
-  storeName: string;
-  targetMenuName: string;
   script: ReturnType<typeof buildSubmissionVideoScript>;
 }) {
-  const sceneLines = params.script.scenes
-    .map((scene) => `- ${scene.text}`)
-    .join("\n");
-  const hashtags = params.script.hashtags.join(" ");
-
-  return [
-    `# ${params.script.hookText}`,
-    `${params.storeName} ${params.targetMenuName} 영상 광고`,
-    sceneLines,
-    "",
-    params.script.caption,
-    hashtags,
-  ]
-    .filter((line) => line.trim().length > 0)
-    .join("\n");
+  return buildWorkingCaptionMarkdown(params.script);
 }
 
 export async function createVideoSubmissionAndGenerationJobFromSession(params: {
@@ -75,8 +60,6 @@ export async function createVideoSubmissionAndGenerationJobFromSession(params: {
   };
   const script = buildSubmissionVideoScript(submissionSeed, "market_story");
   const captionMarkdown = buildCaptionMarkdown({
-    storeName: params.store.store_name,
-    targetMenuName,
     script,
   });
 

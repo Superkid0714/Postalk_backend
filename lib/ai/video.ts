@@ -21,6 +21,7 @@ export type VideoGenerationScript = {
     text: string;
     focus: "store_intro" | "food_highlight" | "price_cta";
   }>;
+  workingCaptions: string[];
   caption: string;
   hashtags: string[];
 };
@@ -46,6 +47,101 @@ type VideoFoodProfile = {
   endingShot: string;
   colorMood: string;
 };
+
+function normalizeSentencePart(value: string | null | undefined) {
+  return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+}
+
+function buildWorkingCaptionSentences(
+  submission: SubmissionForVideoPrompt,
+  foodProfile: VideoFoodProfile,
+) {
+  const storeName = normalizeSentencePart(submission.storeName) || "이 가게";
+  const marketName = normalizeSentencePart(submission.marketName) || "전통시장";
+  const targetMenuName =
+    normalizeSentencePart(submission.targetMenuName) || "대표 메뉴";
+  const appealPoint =
+    normalizeSentencePart(submission.appealPoint) || "한 번 더 생각나는 맛";
+  const extraMessage = normalizeSentencePart(submission.extraMessage);
+  const targetCustomer = normalizeSentencePart(submission.targetCustomer);
+  const peakSalesTime = normalizeSentencePart(submission.peakSalesTime);
+  const popularMenuNotes = normalizeSentencePart(submission.popularMenuNotes);
+
+  const specialtyLine = extraMessage
+    ? `${storeName}의 특별함은 ${extraMessage}에 있습니다.`
+    : `${marketName} 안에서 ${storeName}만의 분위기가 살아 있습니다.`;
+  const customerLine = targetCustomer
+    ? `${targetCustomer}에게 특히 잘 어울리는 메뉴로 사랑받고 있습니다.`
+    : `${targetMenuName}을 고르는 순간부터 기대감이 살아납니다.`;
+  const timingLine = peakSalesTime
+    ? `${peakSalesTime}에 가장 먼저 떠오르는 메뉴로 손님을 부릅니다.`
+    : `${targetMenuName} 한 상이 완성되기까지의 흐름이 자연스럽게 이어집니다.`;
+  const sideMenuLine = popularMenuNotes
+    ? `${popularMenuNotes}처럼 곁들이기 좋은 메뉴도 함께 즐길 수 있습니다.`
+    : `함께 곁들이는 메뉴까지 더해져 식탁의 만족감이 커집니다.`;
+
+  return [
+    `${marketName}의 ${storeName}가 먼저 눈길을 끕니다.`,
+    specialtyLine,
+    `메뉴판에서 ${targetMenuName}의 매력을 바로 확인할 수 있습니다.`,
+    `${targetMenuName}의 첫 인상은 ${appealPoint}입니다.`,
+    customerLine,
+    `${targetMenuName}은 ${foodProfile.detailFocus}이 살아 있도록 완성됩니다.`,
+    timingLine,
+    sideMenuLine,
+  ].map((line) => line.replace(/\s+/g, " ").trim());
+}
+
+function splitWorkingCaptionLine(line: string) {
+  const normalized = line.trim().replace(/\s+/g, " ");
+
+  if (normalized.length <= 8) {
+    return [normalized, normalized];
+  }
+
+  const midpoint = Math.floor(normalized.length / 2);
+  const leftSpace = normalized.lastIndexOf(" ", midpoint);
+  const rightSpace = normalized.indexOf(" ", midpoint);
+
+  const splitIndexCandidates = [leftSpace, rightSpace].filter(
+    (value) => value >= 0,
+  );
+  const splitIndex =
+    splitIndexCandidates.length > 0
+      ? splitIndexCandidates.sort(
+          (left, right) => Math.abs(left - midpoint) - Math.abs(right - midpoint),
+        )[0]
+      : midpoint;
+
+  const first = normalized.slice(0, splitIndex).trim();
+  const second = normalized.slice(splitIndex).trim();
+
+  return [first || normalized, second || normalized];
+}
+
+export function buildWorkingCaptionMarkdown(script: VideoGenerationScript) {
+  const subtitleLines = script.workingCaptions.flatMap((sentence) =>
+    splitWorkingCaptionLine(sentence),
+  );
+
+  return script.workingCaptions
+    .map((_, cutIndex) => {
+      const startSecond = cutIndex * 2;
+      const firstLine = subtitleLines[cutIndex * 2] ?? "";
+      const secondLine = subtitleLines[cutIndex * 2 + 1] ?? "";
+      const firstSubtitleIndex = cutIndex * 2 + 1;
+      const secondSubtitleIndex = cutIndex * 2 + 2;
+
+      const formatSecond = (value: number) => String(value).padStart(2, "0");
+
+      return [
+        `## [비디오 컷 ${cutIndex + 1}] (00:${formatSecond(startSecond)} ~ 00:${formatSecond(startSecond + 2)})`,
+        `* **[00:${formatSecond(startSecond)} ~ 00:${formatSecond(startSecond + 1)}] 자막 ${firstSubtitleIndex}:** ${firstLine}`,
+        `* **[00:${formatSecond(startSecond + 1)} ~ 00:${formatSecond(startSecond + 2)}] 자막 ${secondSubtitleIndex}:** ${secondLine}`,
+      ].join("\n");
+    })
+    .join("\n\n");
+}
 
 function getVideoModel() {
   return getGeminiVideoModel() ?? DEFAULT_VIDEO_MODEL;
@@ -187,6 +283,7 @@ export function buildVideoScript(
     submission.storeType,
     submission.targetMenuName,
   );
+  const workingCaptions = buildWorkingCaptionSentences(submission, foodProfile);
   const hookText =
     stylePreset === "premium"
       ? `${submission.targetMenuName}, 오늘 더 특별하게`
@@ -219,6 +316,7 @@ export function buildVideoScript(
         focus: "price_cta",
       },
     ],
+    workingCaptions,
     caption: `${submission.targetMenuName} 어떠세요? ${submission.appealPoint} ${foodProfile.detailFocus}`,
     hashtags: [
       `#${submission.marketName.replace(/\s+/g, "")}`,
