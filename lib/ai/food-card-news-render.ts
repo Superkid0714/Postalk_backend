@@ -16,7 +16,7 @@ const PAPER = "#F0EADD";
 const LINE = "#D8CDB6";
 const ACCENT = "#7E2E24";
 const FONT_STACK =
-  "'Noto Sans CJK KR','Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif";
+  "'Noto Serif CJK KR','Noto Serif KR','Source Han Serif KR','Nanum Myeongjo','Batang','Apple SD Gothic Neo','Malgun Gothic',serif";
 
 export type FoodCardNewsSourceAssets = {
   menuBoard: Buffer;

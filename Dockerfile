@@ -14,6 +14,13 @@ FROM base AS runner
 ENV NODE_ENV=production
 ENV PORT=3000
 
+# Card-news text is rendered server-side through sharp/libvips.
+# Install Korean/CJK fonts so SVG text does not disappear in production.
+RUN apk add --no-cache \
+  fontconfig \
+  ttf-dejavu \
+  font-noto-cjk
+
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
