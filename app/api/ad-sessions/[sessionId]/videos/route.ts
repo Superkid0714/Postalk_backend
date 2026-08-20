@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/response";
@@ -8,6 +9,8 @@ import {
   getRequestedShot,
   normalizeAdSessionWorkflow,
 } from "@/lib/ad-session";
+import { createVideoSubmissionAndGenerationJobFromSession } from "@/lib/ad-session-video-generation";
+import { processVideoJobById } from "@/lib/generation/process-video-job";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isUuid } from "@/lib/validation";
 
@@ -98,6 +101,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       id,
       store_id,
       ad_type,
+      intro_text,
       status,
       workflow,
       stores (
@@ -275,6 +279,28 @@ export async function POST(request: NextRequest, context: RouteContext) {
     );
   }
 
+  const { data: sessionAssets, error: sessionAssetsError } = await supabase
+    .from("ad_creation_session_assets")
+    .select(`
+      shot_key,
+      asset_type,
+      storage_bucket,
+      file_path,
+      file_name,
+      mime_type,
+      file_size,
+      sort_order
+    `)
+    .eq("session_id", session.id)
+    .order("sort_order", { ascending: true });
+
+  if (sessionAssetsError || !sessionAssets) {
+    return errorResponse("Failed to load session assets", 500, {
+      code: "SESSION_ASSET_LOAD_FAILED",
+      details: sessionAssetsError?.message,
+    });
+  }
+
   const readyWorkflow = {
     ...workflow,
     currentShotIndex:
@@ -286,7 +312,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const { error: sessionUpdateError } = await supabase
     .from("ad_creation_sessions")
     .update({
-      status: "ready_for_generation",
+      status: "generating",
       workflow: readyWorkflow,
     })
     .eq("id", session.id);
@@ -298,15 +324,103 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
   }
 
+  let generation;
+
+  try {
+    generation = await createVideoSubmissionAndGenerationJobFromSession({
+      supabase,
+      session: {
+        id: session.id,
+        store_id: session.store_id,
+        intro_text: session.intro_text,
+        ad_type: "video",
+      },
+      store,
+      workflow: readyWorkflow,
+      assets: sessionAssets.filter(
+        (asset): asset is {
+          shot_key: string;
+          asset_type: "video_clip";
+          storage_bucket: string;
+          file_path: string;
+          file_name: string | null;
+          mime_type: string | null;
+          file_size: number | null;
+          sort_order: number;
+        } => asset.asset_type === "video_clip",
+      ),
+    });
+  } catch (generationError) {
+    await supabase
+      .from("ad_creation_sessions")
+      .update({
+        status: "failed",
+        workflow: {
+          ...readyWorkflow,
+          lastFailureReason:
+            generationError instanceof Error
+              ? generationError.message
+              : "Unknown generation error",
+        },
+      })
+      .eq("id", session.id);
+
+    return errorResponse("Failed to start video generation", 500, {
+      code: "GENERATION_BOOTSTRAP_FAILED",
+      details:
+        generationError instanceof Error ? generationError.message : "Unknown error",
+    });
+  }
+
+  await supabase
+    .from("ad_creation_sessions")
+    .update({
+      submission_id: generation.submissionId,
+      generation_job_id: generation.jobId,
+      workflow: {
+        ...readyWorkflow,
+        lastFailureReason: null,
+      },
+    })
+    .eq("id", session.id);
+
+  after(async () => {
+    try {
+      await processVideoJobById(generation.jobId);
+      await supabase
+        .from("ad_creation_sessions")
+        .update({
+          status: "completed",
+        })
+        .eq("id", session.id);
+    } catch (backgroundError) {
+      await supabase
+        .from("ad_creation_sessions")
+        .update({
+          status: "failed",
+          workflow: {
+            ...readyWorkflow,
+            lastFailureReason:
+              backgroundError instanceof Error
+                ? backgroundError.message
+                : "Unknown generation error",
+          },
+        })
+        .eq("id", session.id);
+    }
+  });
+
   return successResponse(
     {
       sessionId: session.id,
       response: "success",
-      status: "ready_for_generation",
+      status: "generating",
       state: "끝",
       store: buildSessionSummary(store, readyWorkflow),
       review,
+      submissionId: generation.submissionId,
+      generationJobId: generation.jobId,
     },
-    "Video accepted and collection completed",
+    "Video accepted and generation started",
   );
 }

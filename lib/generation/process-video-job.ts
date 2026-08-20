@@ -1,3 +1,4 @@
+import { renderQuoteVideo } from "@/lib/ai/quote-video";
 import {
   downloadGeminiVideoFile,
   extractGeneratedVideoFile,
@@ -21,6 +22,8 @@ export async function processVideoJobById(jobId: string) {
       status,
       prompt_text,
       model_name,
+      failure_reason,
+      result_file_path,
       request_payload,
       result_payload,
       submissions (
@@ -47,10 +50,210 @@ export async function processVideoJobById(jobId: string) {
     typeof job.request_payload === "object" && job.request_payload !== null
       ? (job.request_payload as Record<string, unknown>)
       : {};
+  const provider =
+    typeof requestPayload.provider === "string"
+      ? requestPayload.provider
+      : "gemini-veo";
   const providerOperationName =
     typeof requestPayload.providerOperationName === "string"
       ? requestPayload.providerOperationName
       : null;
+
+  if (provider === "render-quote-video") {
+    if (job.status === "completed") {
+      return {
+        jobId: job.id,
+        status: "completed" as const,
+        providerOperationName: null,
+        resultAssetId: null,
+        resultFilePath: job.result_file_path ?? null,
+        completed: true,
+      };
+    }
+
+    if (job.status === "failed") {
+      throw new Error(job.failure_reason ?? "Quote video generation failed");
+    }
+
+    const sourceVideos = Array.isArray(requestPayload.sourceVideos)
+      ? requestPayload.sourceVideos
+      : [];
+    const captionMarkdown =
+      typeof requestPayload.captionMarkdown === "string"
+        ? requestPayload.captionMarkdown
+        : "";
+
+    if (sourceVideos.length === 0) {
+      throw new Error("Source videos are missing");
+    }
+
+    if (!captionMarkdown.trim()) {
+      throw new Error("captionMarkdown is missing");
+    }
+
+    const signedVideoUrls = await Promise.all(
+      sourceVideos.map(async (item) => {
+        if (
+          !item ||
+          typeof item !== "object" ||
+          Array.isArray(item) ||
+          typeof item.storageBucket !== "string" ||
+          typeof item.filePath !== "string"
+        ) {
+          throw new Error("Invalid source video payload");
+        }
+
+        const { data, error } = await supabase.storage
+          .from(item.storageBucket)
+          .createSignedUrl(item.filePath, 60 * 60);
+
+        if (error || !data?.signedUrl) {
+          throw new Error(error?.message ?? "Failed to sign source video");
+        }
+
+        return data.signedUrl;
+      }),
+    );
+
+    try {
+      await supabase
+        .from("generation_jobs")
+        .update({
+          status: "processing",
+          started_at: new Date().toISOString(),
+        })
+        .eq("id", job.id);
+
+      const bytes = await renderQuoteVideo({
+        videoUrls: signedVideoUrls,
+        captionMarkdown,
+      });
+      const filePath = `${job.store_id}/${job.submission_id}/generated/${job.id}.mp4`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("uploads")
+        .upload(filePath, bytes, {
+          contentType: "video/mp4",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        throw new Error(uploadError.message);
+      }
+
+      const { data: asset, error: assetError } = await supabase
+        .from("submission_assets")
+        .insert({
+          submission_id: job.submission_id,
+          asset_type: "generated_video",
+          storage_bucket: "uploads",
+          file_path: filePath,
+          file_name: `${job.id}.mp4`,
+          mime_type: "video/mp4",
+          file_size: bytes.byteLength,
+        })
+        .select("id")
+        .single();
+
+      if (assetError || !asset) {
+        throw new Error(
+          assetError?.message ?? "Failed to save generated video asset",
+        );
+      }
+
+      const completedAt = new Date().toISOString();
+      const currentWorkflow = getSubmissionVideoWorkflowMetadata(
+        submission.ai_metadata ?? null,
+      );
+
+      await supabase
+        .from("generation_jobs")
+        .update({
+          status: "completed",
+          completed_at: completedAt,
+          failure_reason: null,
+          result_asset_id: asset.id,
+          result_storage_bucket: "uploads",
+          result_file_path: filePath,
+          result_payload: {
+            ...(typeof job.result_payload === "object" && job.result_payload !== null
+              ? job.result_payload
+              : {}),
+            provider,
+            sourceVideoCount: signedVideoUrls.length,
+          },
+        })
+        .eq("id", job.id);
+
+      await supabase
+        .from("submissions")
+        .update({
+          ai_metadata: mergeSubmissionVideoWorkflowMetadata(
+            submission.ai_metadata ?? null,
+            {
+              currentJobId: job.id,
+              lastCompletedJobId: job.id,
+              providerOperationName: null,
+              status: "generated",
+              generatedAt: completedAt,
+              lastFailureReason: null,
+              durationSeconds: currentWorkflow.durationSeconds ?? 8,
+              aspectRatio: currentWorkflow.aspectRatio ?? "9:16",
+              resolution: currentWorkflow.resolution ?? "720p",
+              resultStorageBucket: "uploads",
+              resultFilePath: filePath,
+              modelName: "render-quote-video",
+            },
+          ),
+        })
+        .eq("id", submission.id);
+
+      return {
+        jobId: job.id,
+        status: "completed" as const,
+        providerOperationName: null,
+        resultAssetId: asset.id,
+        resultFilePath: filePath,
+        completed: true,
+      };
+    } catch (error) {
+      const failureReason =
+        error instanceof Error ? error.message : "Quote video generation failed";
+
+      await supabase
+        .from("generation_jobs")
+        .update({
+          status: "failed",
+          failure_reason: failureReason,
+          completed_at: new Date().toISOString(),
+          result_payload: {
+            ...(typeof job.result_payload === "object" && job.result_payload !== null
+              ? job.result_payload
+              : {}),
+            provider,
+          },
+        })
+        .eq("id", job.id);
+
+      await supabase
+        .from("submissions")
+        .update({
+          ai_metadata: mergeSubmissionVideoWorkflowMetadata(
+            submission.ai_metadata ?? null,
+            {
+              currentJobId: job.id,
+              providerOperationName: null,
+              status: "draft",
+              lastFailureReason: failureReason,
+              modelName: "render-quote-video",
+            },
+          ),
+        })
+        .eq("id", submission.id);
+
+      throw new Error(failureReason);
+    }
+  }
 
   if (!providerOperationName) {
     throw new Error("Gemini provider operation is missing");

@@ -8,6 +8,10 @@ type OptionalEnvKey =
   | "OPENAI_API_KEY"
   | "GEMINI_API_KEY"
   | "GEMINI_VIDEO_MODEL"
+  | "QUOTE_VIDEO_API_URL"
+  | "QUOTE_VIDEO_API_KEY"
+  | "QUOTE_VIDEO_BGM_URL"
+  | "QUOTE_VIDEO_TIMEOUT_SECONDS"
   | "INSTAGRAM_APP_ID"
   | "INSTAGRAM_APP_SECRET"
   | "INSTAGRAM_ACCESS_TOKEN"
@@ -79,6 +83,18 @@ export function getGeminiApiKey() {
 
 export function getGeminiVideoModel() {
   return readOptionalEnv("GEMINI_VIDEO_MODEL");
+}
+
+export function getQuoteVideoEnv() {
+  return {
+    apiUrl: readOptionalEnv("QUOTE_VIDEO_API_URL"),
+    apiKey: readOptionalEnv("QUOTE_VIDEO_API_KEY"),
+    bgmUrl: readOptionalEnv("QUOTE_VIDEO_BGM_URL"),
+    timeoutSeconds: Number.parseInt(
+      readOptionalEnv("QUOTE_VIDEO_TIMEOUT_SECONDS") ?? "120",
+      10,
+    ),
+  };
 }
 
 export function getInstagramEnv() {

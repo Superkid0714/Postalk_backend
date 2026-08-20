@@ -8,6 +8,7 @@ import {
   normalizeAdSessionWorkflow,
 } from "@/lib/ad-session";
 import { processGenerationJobById } from "@/lib/generation/process-job";
+import { processVideoJobById } from "@/lib/generation/process-video-job";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isUuid } from "@/lib/validation";
 
@@ -74,7 +75,11 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
   if (session.generation_job_id && (session.status === "generating" || session.status === "ready_for_generation")) {
     try {
-      await processGenerationJobById(session.generation_job_id);
+      if (session.ad_type === "video") {
+        await processVideoJobById(session.generation_job_id);
+      } else {
+        await processGenerationJobById(session.generation_job_id);
+      }
     } catch {
       // Persisted state is returned below.
     }
