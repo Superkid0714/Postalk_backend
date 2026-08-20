@@ -12,17 +12,23 @@ import { isUuid } from "@/lib/validation";
 const MAX_FILE_SIZE_BY_TYPE = {
   menu_board: 10 * 1024 * 1024,
   food_photo: 10 * 1024 * 1024,
+  video_clip: 200 * 1024 * 1024,
 } as const;
 
 const MIME_TYPES_BY_ASSET_TYPE: Record<AssetType, string[]> = {
   menu_board: ["image/jpeg", "image/png", "image/webp"],
   food_photo: ["image/jpeg", "image/png", "image/webp"],
+  video_clip: ["video/mp4", "video/quicktime", "video/webm"],
 };
 
 type AssetType = keyof typeof MAX_FILE_SIZE_BY_TYPE;
 
 function isAssetType(value: string): value is AssetType {
-  return value === "menu_board" || value === "food_photo";
+  return (
+    value === "menu_board" ||
+    value === "food_photo" ||
+    value === "video_clip"
+  );
 }
 
 export async function POST(request: NextRequest) {
@@ -41,7 +47,7 @@ export async function POST(request: NextRequest) {
       details: [
         {
           field: "assetType",
-          reason: "assetType must be 'menu_board' or 'food_photo'",
+          reason: "assetType must be 'menu_board', 'food_photo', or 'video_clip'",
         },
       ],
     });
