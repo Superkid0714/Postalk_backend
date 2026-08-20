@@ -30,6 +30,13 @@ type SubmitSessionVideoBody = {
   durationMs?: number | null;
 };
 
+type SessionVideoReviewPayload = {
+  durationSeconds?: number | null;
+  originalShotKey?: string;
+  originalAssetType?: "video_clip";
+  compatibilityMode?: "legacy_video_asset_fallback";
+};
+
 const LEGACY_VIDEO_SHOT_KEY_BY_SHOT: Record<string, string> = {
   video_storefront_sign: "menu_board",
   video_storefront_entry: "signature_menu",
@@ -69,9 +76,7 @@ async function insertSessionVideoAsset(params: {
     score: number;
     summary: string;
     feedback: string[];
-    payload: {
-      durationSeconds: number;
-    };
+    payload: SessionVideoReviewPayload;
   };
 }) {
   const baseInsertPayload = {
@@ -124,12 +129,20 @@ async function insertSessionVideoAsset(params: {
   };
 }
 
-function resolveDurationSeconds(body: SubmitSessionVideoBody) {
-  if (typeof body.durationSeconds === "number" && Number.isFinite(body.durationSeconds)) {
+export function resolveDurationSeconds(body: SubmitSessionVideoBody) {
+  if (
+    typeof body.durationSeconds === "number" &&
+    Number.isFinite(body.durationSeconds) &&
+    body.durationSeconds > 0
+  ) {
     return body.durationSeconds;
   }
 
-  if (typeof body.durationMs === "number" && Number.isFinite(body.durationMs)) {
+  if (
+    typeof body.durationMs === "number" &&
+    Number.isFinite(body.durationMs) &&
+    body.durationMs > 0
+  ) {
     return body.durationMs / 1000;
   }
 
@@ -172,21 +185,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
   }
 
-  if (durationSeconds === null || durationSeconds <= 0) {
-    details.push({
-      field: "durationSeconds",
-      reason: "durationSeconds or durationMs must be provided",
-    });
-  }
-
   if (details.length > 0) {
     return errorResponse("Invalid request body", 400, {
       code: "VALIDATION_ERROR",
       details,
     });
   }
-
-  const validatedDurationSeconds = durationSeconds as number;
 
   const supabase = getSupabaseAdminClient();
   const { data: session, error } = await supabase
@@ -272,8 +276,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       summary: "영상이 정상적으로 승인되었습니다.",
       feedback: [],
       payload: {
-        durationSeconds: validatedDurationSeconds,
-      },
+        ...(durationSeconds !== null ? { durationSeconds } : {}),
+      } satisfies SessionVideoReviewPayload,
     };
 
   const { error: assetInsertError } = await insertSessionVideoAsset({
