@@ -319,18 +319,18 @@ function pickPrioritySupportMessage(
   merchantInsights: MerchantInsights,
 ) {
   if (merchantInsights.targetCustomer?.trim()) {
-    return `${merchantInsights.targetCustomer.trim()} 손님들이 자연스럽게 떠올릴 만한 메뉴 톤으로 정리했습니다.`;
+    return `${merchantInsights.targetCustomer.trim()} 손님이 편하게 찾기 좋은 한 끼로 기억될 수 있게 담았습니다.`;
   }
 
   if (merchantInsights.peakSalesTime?.trim()) {
-    return `${merchantInsights.peakSalesTime.trim()}에 특히 잘 어울리는 메뉴 분위기를 담았습니다.`;
+    return `${merchantInsights.peakSalesTime.trim()}에 자연스럽게 생각나는 메뉴 분위기로 정리했습니다.`;
   }
 
   if (submission.extra_message?.trim()) {
-    return `${submission.extra_message.trim().replace(/[.。!！?？]+$/u, "")} 느낌을 자연스럽게 살렸습니다.`;
+    return `${submission.extra_message.trim().replace(/[.。!！?？]+$/u, "")} 분위기까지 함께 전해지도록 담았습니다.`;
   }
 
-  return `${submission.target_menu_name} 생각날 때 부담 없이 찾을 수 있는 메뉴 톤으로 정리했습니다.`;
+  return `${submission.target_menu_name} 생각나는 날 부담 없이 다시 찾고 싶은 분위기로 정리했습니다.`;
 }
 
 function compactSentence(value: string | null | undefined) {
@@ -434,28 +434,28 @@ function buildCaptionFallback(
   );
   const cleanedExtra = compactSentence(submission.extra_message);
   const intro = merchantInsights.peakSalesTime
-    ? `${merchantInsights.peakSalesTime.trim()}에 특히 생각나는 ${submission.target_menu_name}입니다.`
-    : `${submission.target_menu_name} 한입이 먼저 떠오르는 메뉴입니다.`;
+    ? `${merchantInsights.peakSalesTime.trim()}에 더 당기는 ${submission.target_menu_name}, 든든하게 즐기기 좋은 메뉴입니다.`
+    : `${submission.target_menu_name} 생각나는 날, 먼저 눈길이 가는 한 접시입니다.`;
   const appealSentence = cleanedAppeal
-    ? `${cleanedAppeal} 맛의 포인트가 분명해서 첫 주문 메뉴로 권하기 좋습니다.`
+    ? `${cleanedAppeal} 매력이 또렷해서 처음 찾는 손님에게도 자신 있게 권하기 좋습니다.`
     : null;
   const contextSentence =
     merchantInsights.targetCustomer
-      ? `${merchantInsights.targetCustomer} 손님들이 편하게 고르기 좋은 매력을 자연스럽게 담았습니다.`
+      ? `${merchantInsights.targetCustomer} 손님이 편하게 고르고 만족스럽게 즐기기 좋은 분위기를 함께 담았습니다.`
       : weatherContext?.selected_for_prompt && weatherContext.summary
-        ? `${weatherContext.summary.replace(/ 활용할 수 있음$/u, " 잘 어울리는 분위기입니다.")}`
+        ? `${weatherContext.summary.replace(/ 활용할 수 있음$/u, " 떠올리기 좋은 분위기입니다.")}`
       : marketContext?.found && marketContext.market_name
-        ? `${marketContext.market_name}${marketContext.district ? ` ${marketContext.district}` : ""}에서 한 끼 메뉴로 기억되기 좋은 구성입니다.`
+        ? `${marketContext.market_name}${marketContext.district ? ` ${marketContext.district}` : ""}에서 가볍게 들러도 만족감 있게 즐길 수 있는 메뉴 흐름입니다.`
         : festivalContext?.found && festivalContext.verified && festivalContext.title
-          ? `${festivalContext.title} 전후로 근처에서 가볍게 들르기 좋은 메뉴 흐름으로도 어울립니다.`
+          ? `${festivalContext.title} 전후로 근처에서 한 끼 즐기기 좋은 메뉴 분위기와도 잘 맞습니다.`
           : kamisContext?.selected_for_prompt && kamisContext.region
-            ? `${kamisContext.region} 생활 물가 흐름 속에서도 부담 없이 떠올리기 좋은 메뉴 톤입니다.`
+            ? `${kamisContext.region} 생활 흐름 속에서도 부담 없이 찾기 좋은 메뉴 톤으로 정리했습니다.`
             : tourismCorpusContext?.selected_for_prompt &&
                 tourismCorpusContext.region_scope
-              ? `${tourismCorpusContext.region_scope} 특유의 정감 있는 분위기와도 잘 맞는 메뉴입니다.`
+              ? `${tourismCorpusContext.region_scope} 특유의 정감 있는 분위기와도 잘 어울리는 메뉴 결을 담았습니다.`
             : null;
   const closingSentence = cleanedExtra
-    ? `${cleanedExtra} 강점까지 함께 느껴보고 싶은 메뉴입니다.`
+    ? `${cleanedExtra} 매력까지 함께 느끼고 싶다면 한 번쯤 찾게 되는 메뉴입니다.`
     : pickPrioritySupportMessage(submission, merchantInsights);
 
   const caption = [

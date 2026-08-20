@@ -161,6 +161,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       if (job.result_payload && typeof job.result_payload === "object") {
         const payload = job.result_payload as {
           imageCount?: unknown;
+          templateSlots?: unknown;
           generatedImages?: Array<{
             assetId?: unknown;
             filePath?: unknown;
@@ -211,6 +212,12 @@ export async function GET(_request: NextRequest, context: RouteContext) {
             typeof payload.imageCount === "number" ? payload.imageCount : null,
           resultUrl,
           generatedAssets,
+          templateSlots:
+            payload.templateSlots &&
+            typeof payload.templateSlots === "object" &&
+            !Array.isArray(payload.templateSlots)
+              ? payload.templateSlots
+              : null,
           completedAt: job.completed_at,
         };
       } else {
