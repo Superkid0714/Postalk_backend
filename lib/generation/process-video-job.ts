@@ -4,11 +4,110 @@ import {
   extractGeneratedVideoFile,
   getGeminiVideoOperation,
 } from "@/lib/ai/video";
+import ffmpegStatic from "ffmpeg-static";
+import { spawn } from "node:child_process";
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
   getSubmissionVideoWorkflowMetadata,
   mergeSubmissionVideoWorkflowMetadata,
 } from "@/lib/video-creation";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+
+async function extractVideoThumbnailBytes(videoBytes: Uint8Array) {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "postalk-video-thumb-"));
+  const inputPath = path.join(tempDir, "input.mp4");
+  const outputPath = path.join(tempDir, "thumb.jpg");
+
+  try {
+    await fs.writeFile(inputPath, videoBytes);
+
+    await new Promise<void>((resolve, reject) => {
+      const ffmpeg = spawn(ffmpegStatic ?? "ffmpeg", [
+        "-y",
+        "-ss",
+        "0.1",
+        "-i",
+        inputPath,
+        "-frames:v",
+        "1",
+        "-q:v",
+        "3",
+        outputPath,
+      ]);
+
+      let stderr = "";
+
+      ffmpeg.stderr.on("data", (chunk) => {
+        stderr += chunk.toString();
+      });
+
+      ffmpeg.on("error", (error) => {
+        reject(error);
+      });
+
+      ffmpeg.on("close", (code) => {
+        if (code === 0) {
+          resolve();
+          return;
+        }
+
+        reject(new Error(stderr || `ffmpeg exited with code ${code}`));
+      });
+    });
+
+    return await fs.readFile(outputPath);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function saveGeneratedVideoThumbnail(params: {
+  submissionId: string;
+  jobId: string;
+  filePath: string;
+  videoBytes: Uint8Array;
+}) {
+  const supabase = getSupabaseAdminClient();
+  const thumbnailBytes = await extractVideoThumbnailBytes(params.videoBytes);
+  const thumbnailPath = params.filePath.replace(/\.mp4$/i, ".jpg");
+
+  const { error: uploadError } = await supabase.storage
+    .from("uploads")
+    .upload(thumbnailPath, thumbnailBytes, {
+      contentType: "image/jpeg",
+      upsert: true,
+    });
+
+  if (uploadError) {
+    throw new Error(uploadError.message);
+  }
+
+  const { data: asset, error: assetError } = await supabase
+    .from("submission_assets")
+    .insert({
+      submission_id: params.submissionId,
+      asset_type: "video_thumbnail",
+      storage_bucket: "uploads",
+      file_path: thumbnailPath,
+      file_name: `${params.jobId}.jpg`,
+      mime_type: "image/jpeg",
+      file_size: thumbnailBytes.byteLength,
+      sort_order: 0,
+    })
+    .select("id")
+    .single();
+
+  if (assetError || !asset) {
+    throw new Error(assetError?.message ?? "Failed to save video thumbnail asset");
+  }
+
+  return {
+    assetId: asset.id,
+    filePath: thumbnailPath,
+  };
+}
 
 export async function processVideoJobById(jobId: string) {
   const supabase = getSupabaseAdminClient();
@@ -161,6 +260,31 @@ export async function processVideoJobById(jobId: string) {
         );
       }
 
+      let thumbnail:
+        | {
+            assetId: string;
+            filePath: string;
+          }
+        | null = null;
+
+      try {
+        thumbnail = await saveGeneratedVideoThumbnail({
+          submissionId: job.submission_id,
+          jobId: job.id,
+          filePath,
+          videoBytes: bytes,
+        });
+      } catch (thumbnailError) {
+        console.warn("Failed to generate video thumbnail", {
+          jobId: job.id,
+          submissionId: job.submission_id,
+          error:
+            thumbnailError instanceof Error
+              ? thumbnailError.message
+              : "Unknown thumbnail error",
+        });
+      }
+
       const completedAt = new Date().toISOString();
       const currentWorkflow = getSubmissionVideoWorkflowMetadata(
         submission.ai_metadata ?? null,
@@ -181,6 +305,8 @@ export async function processVideoJobById(jobId: string) {
               : {}),
             provider,
             sourceVideoCount: signedVideoUrls.length,
+            thumbnailAssetId: thumbnail?.assetId ?? null,
+            thumbnailFilePath: thumbnail?.filePath ?? null,
           },
         })
         .eq("id", job.id);
@@ -344,6 +470,31 @@ export async function processVideoJobById(jobId: string) {
     throw new Error(assetError?.message ?? "Failed to save generated video asset");
   }
 
+  let thumbnail:
+    | {
+        assetId: string;
+        filePath: string;
+      }
+    | null = null;
+
+  try {
+    thumbnail = await saveGeneratedVideoThumbnail({
+      submissionId: job.submission_id,
+      jobId: job.id,
+      filePath,
+      videoBytes: bytes,
+    });
+  } catch (thumbnailError) {
+    console.warn("Failed to generate video thumbnail", {
+      jobId: job.id,
+      submissionId: job.submission_id,
+      error:
+        thumbnailError instanceof Error
+          ? thumbnailError.message
+          : "Unknown thumbnail error",
+    });
+  }
+
   const completedAt = new Date().toISOString();
   const currentWorkflow = getSubmissionVideoWorkflowMetadata(
     submission.ai_metadata ?? null,
@@ -361,6 +512,8 @@ export async function processVideoJobById(jobId: string) {
       result_payload: {
         providerOperationName,
         providerVideoUri: generatedVideo.uri,
+        thumbnailAssetId: thumbnail?.assetId ?? null,
+        thumbnailFilePath: thumbnail?.filePath ?? null,
       },
     })
     .eq("id", job.id);
