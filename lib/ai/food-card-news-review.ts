@@ -63,6 +63,14 @@ function compactText(value: string | null | undefined, fallback: string) {
   return value.trim();
 }
 
+function optionalText(value: string | null | undefined) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+
+  return value.trim();
+}
+
 function cleanInlineLabel(value: string | null | undefined) {
   if (!value) {
     return null;
@@ -136,6 +144,12 @@ function splitBodyLines(value: string, maxCharsPerLine: number, maxLines: number
   return trimmed;
 }
 
+function joinCopyParts(...parts: Array<string | null | undefined>) {
+  return parts
+    .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+    .join(" ");
+}
+
 function buildCardCopy(
   card: FoodCardNewsPlanCard,
   submission: SubmissionForGeneration,
@@ -143,7 +157,7 @@ function buildCardCopy(
   const menu = compactText(submission.target_menu_name, "대표 메뉴");
   const market = compactText(submission.stores?.market_name, "전통시장");
   const store = compactText(submission.stores?.store_name, "가게명");
-  const price = compactText(submission.price_text, "가격 문의");
+  const price = optionalText(submission.price_text);
   const appeal = buildPunchyPhrase(submission.appeal_point, `${menu}의 매력`, 28);
   const extra =
     buildPunchyPhrase(
@@ -167,15 +181,23 @@ function buildCardCopy(
       return {
         title: squeezeText(menu, 10),
         subtitle: squeezeText(`${market}의 오늘 한 접시`, 18),
-        body: splitBodyLines(`${appeal} ${price}`, 16, 2),
+        body: splitBodyLines(
+          joinCopyParts(appeal, price ? `지금 ${price}` : "지금 가장 생각나는 한 접시"),
+          16,
+          2,
+        ),
         reason: "표지는 시그니처 메뉴를 한 번에 각인시키는 히어로 컷이 가장 적합",
       };
     case "dark_flatlay_editorial":
       return {
         title: squeezeText("오늘의 포인트", 10),
         subtitle: squeezeText(appeal, 20),
-        body: splitBodyLines(`${marketStore} ${price}`, 16, 2),
-        reason: "플랫레이 카드는 판매 포인트와 가격 정보를 가장 단정하게 정리하기 좋음",
+        body: splitBodyLines(
+          joinCopyParts(marketStore, price ? `가볍게 ${price}` : "기억에 남는 시장 한 끼"),
+          16,
+          2,
+        ),
+        reason: "플랫레이 카드는 판매 포인트와 분위기 정보를 가장 단정하게 정리하기 좋음",
       };
     case "circular_editorial_layout":
       return {
@@ -188,14 +210,14 @@ function buildCardCopy(
       return {
         title: squeezeText("지금 추천", 10),
         subtitle: squeezeText(`${store}에서 고른 한 컷`, 20),
-        body: splitBodyLines(`${appeal} ${extra}`, 16, 2),
+        body: splitBodyLines(joinCopyParts(appeal, extra), 16, 2),
         reason: "세로 띠 카드는 조리 장면과 감성 카피를 묶어 인상을 남기기 좋음",
       };
     case "closing_information":
       return {
         title: squeezeText("저장해둘 한 끼", 10),
         subtitle: squeezeText(menu, 16),
-        body: splitBodyLines(`${caption} ${marketStore}`, 18, 2),
+        body: splitBodyLines(joinCopyParts(caption, marketStore), 18, 2),
         reason: "마감 카드는 다시 떠오를 한 줄과 가게 정보를 깔끔하게 남기는 데 집중",
       };
   }
@@ -338,7 +360,7 @@ export async function reviewFoodCardNewsPlan(params: {
     "You are the second-pass reviewer for a Korean Instagram food card-news system.",
     "Your job is NOT to invent a new campaign. Your job is to refine a first-pass plan so it fits a fixed editorial template cleanly.",
     "Return strict JSON only with keys: concept, tone, cards.",
-    "cards must be length 5 and preserve the original card order.",
+    `cards must be length ${fallback.cards.length} and preserve the original card order.`,
     "Each card must contain: cardKey, title, subtitle, body, selectedSlot, reason.",
     "selectedSlot must be one of: menuBoard, coverPhoto, flatlayPhoto, detailPhoto, cookingPhoto, infoPhoto.",
     "Hard constraints:",

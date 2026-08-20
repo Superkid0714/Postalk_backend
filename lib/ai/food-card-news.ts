@@ -37,6 +37,14 @@ function compactText(value: string | null | undefined, fallback: string) {
   return value.trim();
 }
 
+function optionalText(value: string | null | undefined) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+
+  return value.trim();
+}
+
 function sanitizeLabel(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
@@ -63,7 +71,7 @@ function buildFoodCardNewsContext(submission: SubmissionForGeneration) {
   const marketName = compactText(submission.stores?.market_name, "전통시장");
   const menuName = compactText(submission.target_menu_name, "대표 메뉴");
   const ownerName = compactText(submission.stores?.owner_name, "사장님");
-  const priceText = compactText(submission.price_text, "가격 정보는 후처리로 표기");
+  const priceText = optionalText(submission.price_text);
   const appealPoint = compactText(
     submission.appeal_point,
     "시장 현장에서 바로 먹고 싶어지는 식감과 온도감",
@@ -95,6 +103,18 @@ function buildFoodCardNewsContext(submission: SubmissionForGeneration) {
 
 function buildCommonSpec(submission: SubmissionForGeneration) {
   const context = buildFoodCardNewsContext(submission);
+  const sourceFacts = [
+    `- Store name: ${context.storeName}`,
+    `- Market location label: ${context.marketName}`,
+    `- Owner reference: ${context.ownerName}`,
+    `- Featured menu: ${context.menuName}`,
+    context.priceText ? `- Verified price cue: ${context.priceText}` : null,
+    `- Appeal point from merchant: ${context.appealPoint}`,
+    `- Extra merchant note: ${context.extraMessage}`,
+    `- Caption direction reference: ${context.caption}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   return `
 You are a senior editorial designer specializing in Korean food magazines and cookbook spreads.
@@ -102,14 +122,7 @@ Create exactly one Instagram card image for this turn. Never combine multiple ca
 This series is FOOD ONLY and must look like a refined Korean editorial food campaign.
 
 Series source facts:
-- Store name: ${context.storeName}
-- Market location label: ${context.marketName}
-- Owner reference: ${context.ownerName}
-- Featured menu: ${context.menuName}
-- Price reference: ${context.priceText}
-- Appeal point from merchant: ${context.appealPoint}
-- Extra merchant note: ${context.extraMessage}
-- Caption direction reference: ${context.caption}
+${sourceFacts}
 
 Mandatory production rules:
 - Canvas: 1080 x 1350 vertical, one image only.
@@ -131,6 +144,8 @@ Mandatory production rules:
 - Food must remain realistic, delicious, and premium. No surreal food, no malformed utensils, no fake hands, no collage board.
 - Avoid generic ad-template look. This should feel like an art-directed editorial food card.
 - Keep on-image copy minimal and elegant. Never place long paragraphs everywhere.
+- Never output placeholder copy such as "가격 정보는 후처리", "가격 문의", or invented dummy values.
+- If verified price text is not provided, omit price copy entirely and lean on appetite, craft, atmosphere, and merchant appeal instead.
 - If Korean text rendering quality becomes unreliable, prioritize layout fidelity, realistic food photography mood, and reserved placeholder-like short text treatment rather than broken text noise.
 `.trim();
 }
@@ -141,7 +156,7 @@ export function buildDefaultFoodCardNewsPlan(
   const context = buildFoodCardNewsContext(submission);
 
   return {
-    concept: `${context.marketName}의 ${context.storeName}를 요리책 지면형 인스타그램 카드뉴스 5장으로 구성`,
+    concept: `${context.marketName}의 ${context.storeName}를 요리책 지면형 인스타그램 카드뉴스 3장으로 구성`,
     tone: "전통시장 음식의 따뜻함 위에 고급 요리책 에디토리얼 무드를 덧입힌 톤",
     cards: [
       {
@@ -167,22 +182,6 @@ export function buildDefaultFoodCardNewsPlan(
         copyDirection: "짧은 제목과 소제목, 세로 라벨 중심",
         composition: "밝은 지면, 원형 사진 2개, 좌측 세로 라벨, 넓은 여백",
         forbidden: ["사각형 사진 배열", "과도한 장식", "무거운 레이아웃"],
-      },
-      {
-        key: "vertical_quote_band",
-        title: "속지 C",
-        visualFocus: `${context.ownerName}의 조리 철학을 세로 색띠 인용 지면으로 표현`,
-        copyDirection: "세로쓰기 인용문 한 덩어리",
-        composition: "우측 세로 색띠, 하단 직사각 사진, 좌측 상단 캡션 박스",
-        forbidden: ["구름무늬 남용", "헤드라인 추가", "전단지식 정보 나열"],
-      },
-      {
-        key: "closing_information",
-        title: "마감",
-        visualFocus: `${context.storeName}와 ${context.marketName}의 인상을 남기는 정돈된 클로징`,
-        copyDirection: "가운데 정렬된 마무리 문구와 최소 정보",
-        composition: "밝은 배경, 구름무늬 워터마크, 중앙 정보 블록",
-        forbidden: ["아이콘", "과도한 정보", "복잡한 배경 사진"],
       },
     ],
   };
@@ -228,8 +227,14 @@ export function buildFoodCardNewsPrompts(
   const common = buildCommonSpec(submission);
   const creativePlan = plan ?? buildDefaultFoodCardNewsPlan(submission);
   const context = buildFoodCardNewsContext(submission);
+  const coverPriceCue = context.priceText
+    ? `  - short supporting cue: ${context.priceText}`
+    : "  - omit price copy and keep the supporting cue focused on appetite and atmosphere";
+  const bodyPriceCue = context.priceText
+    ? `  - verified price cue: ${context.priceText}`
+    : "  - no price cue; focus instead on craft, freshness, and the merchant's signature appeal";
 
-  return [
+  const prompts: FoodCardNewsCardPrompt[] = [
     {
       index: 0,
       key: "cover_vertical_still_life",
@@ -248,7 +253,7 @@ Create card 1 only: cover card with vertical still-life composition.
 - Include only very short cover text cues based on:
   - main vertical title: ${context.menuName}
   - market cue: ${context.marketName}
-  - short supporting cue: ${context.priceText}
+${coverPriceCue}
 - Add a small traditional seal-like square accent at lower right in muted deep red.
 - Do not use cloud watermark on this card.
 - The overall result must feel like a premium Korean cookbook-meets-Instagram cover, not a cheap poster.`,
@@ -293,7 +298,7 @@ Create card 3 only: bright editorial page with circular photo cutouts.
 - Add short title and note clusters only, in a calm high-end cookbook tone.
 - Suggested short copy source:
   - menu: ${context.menuName}
-  - price cue: ${context.priceText}
+${bodyPriceCue}
   - merchant appeal: ${context.appealPoint}
 - Include one subtle cloud watermark only in a corner, cropped off the edge, as thin line art.
 - The page must feel airy, balanced, and luxuriously sparse.`,
@@ -338,7 +343,7 @@ Create card 5 only: closing information page without a large photo.
   - store name: ${context.storeName}
   - market name: ${context.marketName}
   - featured menu: ${context.menuName}
-  - price cue: ${context.priceText}
+${bodyPriceCue}
   - closing mood from caption: ${context.caption}
 - Add a refined short closing sentence in Korean based on the merchant's tone, but keep it minimal and elegant.
 - Add one small seal accent near the lower center in deep red.
@@ -346,4 +351,6 @@ Create card 5 only: closing information page without a large photo.
 - Make it feel finished, save-worthy, and brand-consistent with the previous four cards.`,
     },
   ];
+
+  return prompts.slice(0, creativePlan.cards.length);
 }

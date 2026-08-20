@@ -876,7 +876,7 @@ export function choosePromoImageCount(
   stylePreset: GenerationStylePreset,
 ) {
   if (stylePreset === "food_card_news") {
-    return 5;
+    return 3;
   }
 
   const merchantInsights = readMerchantInsights(submission.ai_metadata);
