@@ -13,6 +13,7 @@ import {
   type FoodCardNewsSourceAssets,
 } from "@/lib/ai/food-card-news-render";
 import type { FoodCardNewsCreativePlan } from "@/lib/ai/food-card-news";
+import { reviewFoodCardNewsPlan } from "@/lib/ai/food-card-news-review";
 import {
   getSubmissionWorkflowMetadata,
   mergeSubmissionWorkflowMetadata,
@@ -389,6 +390,16 @@ export async function processGenerationJobById(jobId: string) {
             caption: captionResult.caption,
           }))
         : null;
+    const reviewedFoodCardNewsPlan =
+      job.style_preset === "food_card_news" && foodCardNewsPlan
+        ? await reviewFoodCardNewsPlan({
+            submission: {
+              ...normalizedGenerationSubmission,
+              caption: captionResult.caption,
+            },
+            plan: foodCardNewsPlan,
+          })
+        : null;
     const carouselPrompts = buildPromoCarouselPrompts(
       {
         ...normalizedGenerationSubmission,
@@ -422,11 +433,15 @@ export async function processGenerationJobById(jobId: string) {
               normalizedGenerationSubmission.appeal_point,
           },
           renderedFoodCardNewsAssets.assets,
+          reviewedFoodCardNewsPlan!,
         )
       : null;
 
     for (const carouselPrompt of carouselPrompts) {
       const renderedCard = renderedCards?.find(
+        (card) => card.index === carouselPrompt.index,
+      );
+      const reviewedCard = reviewedFoodCardNewsPlan?.cards.find(
         (card) => card.index === carouselPrompt.index,
       );
       const result = renderedCard
@@ -485,20 +500,9 @@ export async function processGenerationJobById(jobId: string) {
         promptText: carouselPrompt.prompt,
         revisedPrompt: result.revisedPrompt,
         sourceMode: renderedCard ? "template_render" : isMockMode ? "mock" : "ai_generate",
-        sourceShotKey:
-          renderedFoodCardNewsAssets?.slots[
-            renderedCard?.key === "cover"
-              ? "coverPhoto"
-              : renderedCard?.key === "flat_lay"
-                ? "flatlayPhoto"
-                : renderedCard?.key === "circle_layout"
-                  ? "detailPhoto"
-                  : renderedCard?.key === "quote_strip"
-                    ? "cookingPhoto"
-                    : renderedCard?.key === "info_page"
-                      ? "infoPhoto"
-                      : "coverPhoto"
-          ] ?? null,
+        sourceShotKey: reviewedCard
+          ? renderedFoodCardNewsAssets?.slots[reviewedCard.selectedSlot] ?? null
+          : null,
       });
     }
 
@@ -518,6 +522,7 @@ export async function processGenerationJobById(jobId: string) {
           generatedImages,
           mockMode: isMockMode,
           foodCardNewsPlan,
+          reviewedFoodCardNewsPlan,
           templateSlots: renderedFoodCardNewsAssets?.slots ?? null,
         },
       })

@@ -1,6 +1,10 @@
 import sharp from "sharp";
 
 import type { SubmissionForGeneration } from "@/lib/ai/generation";
+import type {
+  FoodCardNewsSourceSlotKey,
+  ReviewedFoodCardNewsPlan,
+} from "@/lib/ai/food-card-news-review";
 
 const CANVAS_WIDTH = 1080;
 const CANVAS_HEIGHT = 1350;
@@ -21,6 +25,13 @@ export type FoodCardNewsSourceAssets = {
   detailPhoto: Buffer;
   cookingPhoto: Buffer;
   infoPhoto: Buffer;
+};
+
+type RenderCardSource = {
+  title: string;
+  subtitle: string;
+  body: string[];
+  selectedSlot: FoodCardNewsSourceSlotKey;
 };
 
 type RenderedFoodCardNewsCard = {
@@ -131,6 +142,13 @@ function svgBuffer(svg: string) {
   return Buffer.from(svg);
 }
 
+function pickSlotBuffer(
+  assets: FoodCardNewsSourceAssets,
+  slot: FoodCardNewsSourceSlotKey,
+) {
+  return assets[slot];
+}
+
 async function coverFoodPhoto(
   source: Buffer,
   width: number,
@@ -235,10 +253,11 @@ function buildCardText(submission: SubmissionForGeneration) {
 async function renderCoverCard(
   submission: SubmissionForGeneration,
   assets: FoodCardNewsSourceAssets,
+  reviewedCard: RenderCardSource,
 ) {
   const text = buildCardText(submission);
   const background = await coverFoodPhoto(
-    assets.coverPhoto,
+    pickSlotBuffer(assets, reviewedCard.selectedSlot),
     CANVAS_WIDTH,
     CANVAS_HEIGHT,
     "south",
@@ -256,7 +275,7 @@ async function renderCoverCard(
       ${buildTextBlockSvg({
         x: 110,
         y: 180,
-        lines: splitKoreanText(text.menu, 6),
+        lines: splitKoreanText(reviewedCard.title || text.menu, 6),
         fontSize: 84,
         lineHeight: 94,
         fill: PAPER,
@@ -265,7 +284,7 @@ async function renderCoverCard(
       ${buildTextBlockSvg({
         x: 116,
         y: 420,
-        lines: [text.market, text.store],
+        lines: [reviewedCard.subtitle || text.market, text.store],
         fontSize: 28,
         lineHeight: 40,
         fill: PAPER,
@@ -274,7 +293,7 @@ async function renderCoverCard(
       ${buildTextBlockSvg({
         x: 116,
         y: 575,
-        lines: truncateLines(splitKoreanText(text.coverSummary, 18), 2),
+        lines: truncateLines(reviewedCard.body.length > 0 ? reviewedCard.body : splitKoreanText(text.coverSummary, 18), 2),
         fontSize: 34,
         lineHeight: 48,
         fill: PAPER,
@@ -310,9 +329,15 @@ async function renderCoverCard(
 async function renderFlatLayCard(
   submission: SubmissionForGeneration,
   assets: FoodCardNewsSourceAssets,
+  reviewedCard: RenderCardSource,
 ) {
   const text = buildCardText(submission);
-  const food = await coverFoodPhoto(assets.flatlayPhoto, 880, 540, "center");
+  const food = await coverFoodPhoto(
+    pickSlotBuffer(assets, reviewedCard.selectedSlot),
+    880,
+    540,
+    "center",
+  );
   const menu = await containPhoto(assets.menuBoard, 250, 320, BRIGHT_BG);
   const baseOverlay = svgBuffer(`
     <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
@@ -337,7 +362,7 @@ async function renderFlatLayCard(
       ${buildTextBlockSvg({
         x: 110,
         y: 225,
-        lines: [text.coverTitle],
+        lines: [reviewedCard.title || text.coverTitle],
         fontSize: 58,
         lineHeight: 56,
         fill: INK,
@@ -346,7 +371,12 @@ async function renderFlatLayCard(
       ${buildTextBlockSvg({
         x: 110,
         y: 308,
-        lines: truncateLines(splitKoreanText(text.detailSummary, 20), 2),
+        lines: truncateLines(
+          reviewedCard.body.length > 0
+            ? reviewedCard.body
+            : splitKoreanText(text.detailSummary, 20),
+          2,
+        ),
         fontSize: 28,
         lineHeight: 40,
         fill: SUBTLE_BRIGHT,
@@ -372,7 +402,7 @@ async function renderFlatLayCard(
       ${buildTextBlockSvg({
         x: 390,
         y: 1182,
-        lines: [buildShortLine(text.appeal, "대표 메뉴의 인상", 18), text.price],
+        lines: [reviewedCard.subtitle || buildShortLine(text.appeal, "대표 메뉴의 인상", 18), text.price],
         fontSize: 26,
         lineHeight: 38,
         fill: SUBTLE_BRIGHT,
@@ -411,9 +441,13 @@ async function renderFlatLayCard(
 async function renderCircleLayoutCard(
   submission: SubmissionForGeneration,
   assets: FoodCardNewsSourceAssets,
+  reviewedCard: RenderCardSource,
 ) {
   const text = buildCardText(submission);
-  const bigCircle = await createCircularPhoto(assets.detailPhoto, 540);
+  const bigCircle = await createCircularPhoto(
+    pickSlotBuffer(assets, reviewedCard.selectedSlot),
+    540,
+  );
   const smallCircle = await createCircularPhoto(assets.cookingPhoto, 220);
   const overlay = svgBuffer(`
     <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
@@ -433,7 +467,7 @@ async function renderCircleLayoutCard(
       ${buildTextBlockSvg({
         x: 110,
         y: 236,
-        lines: [text.coverTitle],
+        lines: [reviewedCard.title || text.coverTitle],
         fontSize: 56,
         lineHeight: 52,
         fill: INK,
@@ -442,7 +476,12 @@ async function renderCircleLayoutCard(
       ${buildTextBlockSvg({
         x: 110,
         y: 320,
-        lines: truncateLines(splitKoreanText(text.detailSummary, 18), 2),
+        lines: truncateLines(
+          reviewedCard.body.length > 0
+            ? reviewedCard.body
+            : splitKoreanText(text.detailSummary, 18),
+          2,
+        ),
         fontSize: 24,
         lineHeight: 36,
         fill: SUBTLE_BRIGHT,
@@ -460,7 +499,7 @@ async function renderCircleLayoutCard(
       ${buildTextBlockSvg({
         x: 150,
         y: 1078,
-        lines: [text.store, `포인트: ${buildShortLine(text.appeal, text.appeal, 16)}`, `가격: ${text.price}`],
+        lines: [text.store, `포인트: ${reviewedCard.subtitle || buildShortLine(text.appeal, text.appeal, 16)}`, `가격: ${text.price}`],
         fontSize: 24,
         lineHeight: 36,
         fill: SUBTLE_BRIGHT,
@@ -496,9 +535,15 @@ async function renderCircleLayoutCard(
 async function renderQuoteStripCard(
   submission: SubmissionForGeneration,
   assets: FoodCardNewsSourceAssets,
+  reviewedCard: RenderCardSource,
 ) {
   const text = buildCardText(submission);
-  const food = await coverFoodPhoto(assets.cookingPhoto, 1080, 640, "center");
+  const food = await coverFoodPhoto(
+    pickSlotBuffer(assets, reviewedCard.selectedSlot),
+    1080,
+    640,
+    "center",
+  );
   const baseOverlay = svgBuffer(`
     <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
       <rect x="0" y="0" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" fill="${BRIGHT_BG}" />
@@ -512,7 +557,7 @@ async function renderQuoteStripCard(
       ${buildTextBlockSvg({
         x: 171,
         y: 765,
-        lines: ["사장님 추천"],
+        lines: [reviewedCard.title || "사장님 추천"],
         fontSize: 20,
         lineHeight: 24,
         fill: PAPER,
@@ -522,7 +567,12 @@ async function renderQuoteStripCard(
       ${buildTextBlockSvg({
         x: 86,
         y: 830,
-        lines: truncateLines(splitKoreanText(text.quote, 19), 3),
+        lines: truncateLines(
+          reviewedCard.body.length > 0
+            ? reviewedCard.body
+            : splitKoreanText(text.quote, 19),
+          3,
+        ),
         fontSize: 44,
         lineHeight: 58,
         fill: INK,
@@ -531,7 +581,7 @@ async function renderQuoteStripCard(
       ${buildTextBlockSvg({
         x: 86,
         y: 1048,
-        lines: [`${text.store} · ${text.market}`, `${text.menu} · ${text.price}`],
+        lines: [reviewedCard.subtitle || `${text.store} · ${text.market}`, `${text.menu} · ${text.price}`],
         fontSize: 26,
         lineHeight: 38,
         fill: SUBTLE_BRIGHT,
@@ -568,9 +618,15 @@ async function renderQuoteStripCard(
 async function renderInfoCard(
   submission: SubmissionForGeneration,
   assets: FoodCardNewsSourceAssets,
+  reviewedCard: RenderCardSource,
 ) {
   const text = buildCardText(submission);
-  const food = await coverFoodPhoto(assets.infoPhoto, 420, 420, "center");
+  const food = await coverFoodPhoto(
+    pickSlotBuffer(assets, reviewedCard.selectedSlot),
+    420,
+    420,
+    "center",
+  );
   const baseOverlay = svgBuffer(`
     <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
       <rect x="0" y="0" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" fill="${BRIGHT_BG}" />
@@ -593,7 +649,7 @@ async function renderInfoCard(
       ${buildTextBlockSvg({
         x: 540,
         y: 250,
-        lines: ["오늘 눈여겨볼 메뉴", text.coverTitle],
+        lines: [reviewedCard.title || "오늘 눈여겨볼 메뉴", reviewedCard.subtitle || text.coverTitle],
         fontSize: 52,
         lineHeight: 70,
         fill: INK,
@@ -603,7 +659,12 @@ async function renderInfoCard(
       ${buildTextBlockSvg({
         x: 540,
         y: 820,
-        lines: truncateLines(splitKoreanText(text.closing, 24), 3),
+        lines: truncateLines(
+          reviewedCard.body.length > 0
+            ? reviewedCard.body
+            : splitKoreanText(text.closing, 24),
+          3,
+        ),
         fontSize: 30,
         lineHeight: 42,
         fill: SUBTLE_BRIGHT,
@@ -649,13 +710,15 @@ async function renderInfoCard(
 export async function renderFoodCardNewsCards(
   submission: SubmissionForGeneration,
   assets: FoodCardNewsSourceAssets,
+  reviewedPlan: ReviewedFoodCardNewsPlan,
 ): Promise<RenderedFoodCardNewsCard[]> {
+  const [cover, flatLay, circleLayout, quoteStrip, infoPage] = reviewedPlan.cards;
   const cards = await Promise.all([
-    renderCoverCard(submission, assets),
-    renderFlatLayCard(submission, assets),
-    renderCircleLayoutCard(submission, assets),
-    renderQuoteStripCard(submission, assets),
-    renderInfoCard(submission, assets),
+    renderCoverCard(submission, assets, cover),
+    renderFlatLayCard(submission, assets, flatLay),
+    renderCircleLayoutCard(submission, assets, circleLayout),
+    renderQuoteStripCard(submission, assets, quoteStrip),
+    renderInfoCard(submission, assets, infoPage),
   ]);
 
   return [
