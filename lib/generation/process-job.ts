@@ -8,10 +8,7 @@ import {
   normalizeStoreRelation,
   normalizeSubmissionRelation,
 } from "@/lib/ai/generation";
-import {
-  renderFoodCardNewsCards,
-  type FoodCardNewsSourceAssets,
-} from "@/lib/ai/food-card-news-render";
+import type { FoodCardNewsSourceAssets } from "@/lib/ai/food-card-news-render";
 import type { FoodCardNewsCreativePlan } from "@/lib/ai/food-card-news";
 import { reviewFoodCardNewsPlan } from "@/lib/ai/food-card-news-review";
 import {
@@ -368,7 +365,6 @@ export async function processGenerationJobById(jobId: string) {
 
     const generatedImages = [];
     const precomputedRequest = readPrecomputedCaptionRequest(job.request_payload);
-    const adSessionId = readAdSessionId(job.request_payload);
     const generatedCaptionResult = await generatePromoCaption(
       normalizedGenerationSubmission,
     );
@@ -415,51 +411,27 @@ export async function processGenerationJobById(jobId: string) {
       job.style_preset,
     );
 
-    const renderedFoodCardNewsAssets =
-      !isMockMode && job.style_preset === "food_card_news" && adSessionId
-        ? await buildFoodCardNewsSourceAssets({
-            supabase,
-            adSessionId,
-          })
-        : null;
-
-    const renderedCards = renderedFoodCardNewsAssets
-      ? await renderFoodCardNewsCards(
-          {
-            ...normalizedGenerationSubmission,
-            caption: captionResult.caption,
-            extra_message:
-              normalizedGenerationSubmission.extra_message ??
-              normalizedGenerationSubmission.appeal_point,
-          },
-          renderedFoodCardNewsAssets.assets,
-          reviewedFoodCardNewsPlan!,
-        )
-      : null;
-
     for (const carouselPrompt of carouselPrompts) {
-      const renderedCard = renderedCards?.find(
-        (card) => card.index === carouselPrompt.index,
-      );
       const reviewedCard = reviewedFoodCardNewsPlan?.cards.find(
         (card) => card.index === carouselPrompt.index,
       );
-      const result = renderedCard
+      const result = isMockMode
         ? {
-            bytes: renderedCard.bytes,
-            revisedPrompt: renderedCard.promptText,
+            bytes: mockBytes!,
+            revisedPrompt: `mock-image-generated-${carouselPrompt.key}`,
           }
-        : isMockMode
-          ? {
-              bytes: mockBytes!,
-              revisedPrompt: `mock-image-generated-${carouselPrompt.key}`,
-            }
-          : await generatePromoImage({
-              prompt: carouselPrompt.prompt,
-              model: job.model_name,
-              size: job.image_size,
-              quality: job.quality,
-            });
+        : await generatePromoImage({
+            prompt: carouselPrompt.prompt,
+            model: job.model_name,
+            size:
+              job.style_preset === "food_card_news"
+                ? "1024x1536"
+                : job.image_size,
+            quality:
+              job.style_preset === "food_card_news"
+                ? "high"
+                : job.quality,
+          });
 
       const filePath = `${job.store_id}/${job.submission_id}/generated/${job.id}-${carouselPrompt.index + 1}.png`;
 
@@ -499,10 +471,9 @@ export async function processGenerationJobById(jobId: string) {
         promptKey: carouselPrompt.key,
         promptText: carouselPrompt.prompt,
         revisedPrompt: result.revisedPrompt,
-        sourceMode: renderedCard ? "template_render" : isMockMode ? "mock" : "ai_generate",
-        sourceShotKey: reviewedCard
-          ? renderedFoodCardNewsAssets?.slots[reviewedCard.selectedSlot] ?? null
-          : null,
+        sourceMode: isMockMode ? "mock" : "ai_generate",
+        sourceShotKey: null,
+        plannedSlotKey: reviewedCard?.selectedSlot ?? null,
       });
     }
 
@@ -521,9 +492,15 @@ export async function processGenerationJobById(jobId: string) {
           imageCount,
           generatedImages,
           mockMode: isMockMode,
+          renderStrategy:
+            job.style_preset === "food_card_news"
+              ? "serial_ai_generate"
+              : isMockMode
+                ? "mock"
+                : "ai_generate",
           foodCardNewsPlan,
           reviewedFoodCardNewsPlan,
-          templateSlots: renderedFoodCardNewsAssets?.slots ?? null,
+          templateSlots: null,
         },
       })
       .eq("id", job.id);
