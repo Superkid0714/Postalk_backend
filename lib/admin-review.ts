@@ -19,6 +19,7 @@ export type ReviewAssetRecord = SubmissionAssetRecord & {
   file_name?: string | null;
   mime_type?: string | null;
   file_size?: number | null;
+  created_at?: string | null;
 };
 
 export type ReviewSubmissionRecord = Omit<
@@ -228,6 +229,16 @@ export function normalizeReviewStore(
   return store;
 }
 
+function extractGeneratedImageBatchKey(asset: ReviewAssetRecord) {
+  const fileName = asset.file_name ?? asset.file_path.split("/").pop() ?? "";
+  const match =
+    /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-\d+\.(?:png|jpg|jpeg|webp)$/i.exec(
+      fileName,
+    );
+
+  return match?.[1] ?? null;
+}
+
 export function selectReviewDisplayAssets(
   assets: ReviewAssetRecord[] | null | undefined,
 ) {
@@ -235,10 +246,73 @@ export function selectReviewDisplayAssets(
     return [];
   }
 
+  const generatedAssets = assets.filter((asset) =>
+    REVIEW_GENERATED_ASSET_TYPES.has(asset.asset_type),
+  );
+
+  if (generatedAssets.length === 0) {
+    return [];
+  }
+
+  const sortByNewest = (left: ReviewAssetRecord, right: ReviewAssetRecord) => {
+    const leftCreatedAt = left.created_at ? Date.parse(left.created_at) : 0;
+    const rightCreatedAt = right.created_at ? Date.parse(right.created_at) : 0;
+
+    if (leftCreatedAt !== rightCreatedAt) {
+      return rightCreatedAt - leftCreatedAt;
+    }
+
+    if (left.sort_order !== right.sort_order) {
+      return left.sort_order - right.sort_order;
+    }
+
+    return left.file_path.localeCompare(right.file_path);
+  };
+
+  const latestAsset = [...generatedAssets].sort(sortByNewest)[0] ?? null;
+
+  if (!latestAsset) {
+    return [];
+  }
+
+  const latestFamily =
+    latestAsset.asset_type === "generated_image" ? "image" : "video";
+
+  let scopedAssets: ReviewAssetRecord[] = [];
+
+  if (latestFamily === "image") {
+    const imageAssets = generatedAssets.filter(
+      (asset) => asset.asset_type === "generated_image",
+    );
+    const latestImageAsset = [...imageAssets].sort(sortByNewest)[0] ?? null;
+    const latestBatchKey =
+      latestImageAsset ? extractGeneratedImageBatchKey(latestImageAsset) : null;
+
+    scopedAssets = latestBatchKey
+      ? imageAssets.filter(
+          (asset) => extractGeneratedImageBatchKey(asset) === latestBatchKey,
+        )
+      : latestImageAsset
+        ? [latestImageAsset]
+        : [];
+  } else {
+    const latestVideo =
+      [...generatedAssets]
+        .filter((asset) => asset.asset_type === "generated_video")
+        .sort(sortByNewest)[0] ?? null;
+    const latestThumbnail =
+      [...generatedAssets]
+        .filter((asset) => asset.asset_type === "video_thumbnail")
+        .sort(sortByNewest)[0] ?? null;
+
+    scopedAssets = [latestThumbnail, latestVideo].filter(
+      (asset): asset is ReviewAssetRecord => asset !== null,
+    );
+  }
+
   const seen = new Set<string>();
 
-  return assets
-    .filter((asset) => REVIEW_GENERATED_ASSET_TYPES.has(asset.asset_type))
+  return scopedAssets
     .sort((left, right) => {
       if (left.sort_order !== right.sort_order) {
         return left.sort_order - right.sort_order;

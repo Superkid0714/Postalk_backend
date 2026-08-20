@@ -68,6 +68,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
           file_name,
           mime_type,
           file_size,
+          created_at,
           sort_order
         )
       `,
