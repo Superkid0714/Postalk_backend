@@ -34,6 +34,7 @@ type OpenAiResponsesResponse = {
 export type SubmissionForVideoPrompt = {
   storeName: string;
   marketName: string;
+  ownerName?: string | null;
   storeType: string;
   targetMenuName: string;
   priceText: string | null;
@@ -49,12 +50,106 @@ type VideoFoodProfile = {
   openingShot: string;
   motionStyle: string;
   detailFocus: string;
+  detailFocusKorean: string;
   endingShot: string;
   colorMood: string;
 };
 
 function normalizeSentencePart(value: string | null | undefined) {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+}
+
+function hasLatinCharacters(value: string) {
+  return /[A-Za-z]/.test(value);
+}
+
+function compactComparableText(value: string | null | undefined) {
+  return normalizeSentencePart(value).replace(/\s+/g, "");
+}
+
+function includesOwnerName(value: string, ownerName: string | null | undefined) {
+  const comparableOwnerName = compactComparableText(ownerName);
+
+  if (comparableOwnerName.length < 2) {
+    return false;
+  }
+
+  return compactComparableText(value).includes(comparableOwnerName);
+}
+
+function sanitizeVideoCaptionPart(
+  value: string | null | undefined,
+  fallback: string,
+  ownerName: string | null | undefined,
+) {
+  const normalized = normalizeSentencePart(value);
+
+  if (
+    !normalized ||
+    hasLatinCharacters(normalized) ||
+    includesOwnerName(normalized, ownerName)
+  ) {
+    return fallback;
+  }
+
+  return normalized;
+}
+
+function sanitizeOptionalVideoCaptionPart(
+  value: string | null | undefined,
+  ownerName: string | null | undefined,
+) {
+  const normalized = normalizeSentencePart(value);
+
+  if (
+    !normalized ||
+    hasLatinCharacters(normalized) ||
+    includesOwnerName(normalized, ownerName)
+  ) {
+    return null;
+  }
+
+  return normalized;
+}
+
+function buildSafeVideoCaptionContext(submission: SubmissionForVideoPrompt) {
+  const ownerName = normalizeSentencePart(submission.ownerName);
+
+  return {
+    storeName: sanitizeVideoCaptionPart(submission.storeName, "이 가게", ownerName),
+    marketName: sanitizeVideoCaptionPart(
+      submission.marketName,
+      "전통시장",
+      ownerName,
+    ),
+    targetMenuName: sanitizeVideoCaptionPart(
+      submission.targetMenuName,
+      "대표 메뉴",
+      ownerName,
+    ),
+    appealPoint: sanitizeVideoCaptionPart(
+      submission.appealPoint,
+      "한 번 더 생각나는 맛",
+      ownerName,
+    ),
+    extraMessage: sanitizeOptionalVideoCaptionPart(
+      submission.extraMessage,
+      ownerName,
+    ),
+    targetCustomer: sanitizeOptionalVideoCaptionPart(
+      submission.targetCustomer,
+      ownerName,
+    ),
+    peakSalesTime: sanitizeOptionalVideoCaptionPart(
+      submission.peakSalesTime,
+      ownerName,
+    ),
+    popularMenuNotes: sanitizeOptionalVideoCaptionPart(
+      submission.popularMenuNotes,
+      ownerName,
+    ),
+    ownerName,
+  };
 }
 
 function stripCodeFence(value: string) {
@@ -102,16 +197,15 @@ function buildWorkingCaptionSentences(
   submission: SubmissionForVideoPrompt,
   foodProfile: VideoFoodProfile,
 ) {
-  const storeName = normalizeSentencePart(submission.storeName) || "이 가게";
-  const marketName = normalizeSentencePart(submission.marketName) || "전통시장";
-  const targetMenuName =
-    normalizeSentencePart(submission.targetMenuName) || "대표 메뉴";
-  const appealPoint =
-    normalizeSentencePart(submission.appealPoint) || "한 번 더 생각나는 맛";
-  const extraMessage = normalizeSentencePart(submission.extraMessage);
-  const targetCustomer = normalizeSentencePart(submission.targetCustomer);
-  const peakSalesTime = normalizeSentencePart(submission.peakSalesTime);
-  const popularMenuNotes = normalizeSentencePart(submission.popularMenuNotes);
+  const safeContext = buildSafeVideoCaptionContext(submission);
+  const storeName = safeContext.storeName;
+  const marketName = safeContext.marketName;
+  const targetMenuName = safeContext.targetMenuName;
+  const appealPoint = safeContext.appealPoint;
+  const extraMessage = safeContext.extraMessage ?? "";
+  const targetCustomer = safeContext.targetCustomer ?? "";
+  const peakSalesTime = safeContext.peakSalesTime ?? "";
+  const popularMenuNotes = safeContext.popularMenuNotes ?? "";
 
   const specialtyLine = extraMessage
     ? `${storeName}의 특별함은 ${extraMessage}에 있습니다.`
@@ -132,7 +226,7 @@ function buildWorkingCaptionSentences(
     `메뉴판에서 ${targetMenuName}의 매력을 바로 확인할 수 있습니다.`,
     `${targetMenuName}의 첫 인상은 ${appealPoint}입니다.`,
     customerLine,
-    `${targetMenuName}은 ${foodProfile.detailFocus}이 살아 있도록 완성됩니다.`,
+    `${targetMenuName}은 ${foodProfile.detailFocusKorean} 살아 있도록 완성됩니다.`,
     timingLine,
     sideMenuLine,
   ].map((line) => line.replace(/\s+/g, " ").trim());
@@ -155,6 +249,8 @@ function buildAiWorkingCaptionPrompt(params: {
     "- Each caption should feel natural when shown alone for about 1 to 2 seconds.",
     "- Keep each caption short, readable, promotional, and conversational.",
     "- No hashtags, no emojis, no markdown, no bullet points, no numbering.",
+    "- Do not use any English letters or English words in the caption lines.",
+    "- Do not mention any owner name or owner identity.",
     "- Do not mention that this is an ad, prompt, template, or caption.",
     "- Avoid robotic repetition and avoid report-style phrasing.",
     "- Ground the wording in the actual store, menu, taste, atmosphere, and customer appeal.",
@@ -191,6 +287,9 @@ function buildAiWorkingCaptionPrompt(params: {
 export function normalizeAiWorkingCaptions(
   candidate: unknown,
   fallbackCaptions: string[],
+  options?: {
+    ownerName?: string | null;
+  },
 ) {
   const rawCaptions = Array.isArray(candidate)
     ? candidate
@@ -213,7 +312,15 @@ export function normalizeAiWorkingCaptions(
     return sanitizeWorkingCaptionLine(item);
   });
 
-  if (normalized.some((item) => item.length < 4 || item.length > 32)) {
+  if (
+    normalized.some(
+      (item) =>
+        item.length < 4 ||
+        item.length > 32 ||
+        hasLatinCharacters(item) ||
+        includesOwnerName(item, options?.ownerName),
+    )
+  ) {
     return fallbackCaptions;
   }
 
@@ -301,6 +408,7 @@ function inferVideoFoodProfile(
       openingShot: "clean premium reveal of the plated seafood with crisp freshness",
       motionStyle: "slow push-in and gentle lateral pan",
       detailFocus: "knife-cut texture, moist highlights, garnish detail, premium freshness",
+      detailFocusKorean: "신선한 결과 촉촉한 식감이",
       endingShot: "elegant hero hold with concise brand or menu emphasis",
       colorMood: "cool clean highlights with restrained wood and green accents",
     };
@@ -312,6 +420,7 @@ function inferVideoFoodProfile(
       openingShot: "steam-heavy reveal from the bowl surface",
       motionStyle: "slow push-in with subtle steam movement and bowl orbit",
       detailFocus: "broth depth, noodles or toppings lifting, warmth and comfort",
+      detailFocusKorean: "국물의 깊이와 따뜻한 온기가",
       endingShot: "comforting hero hold with warm call-to-action",
       colorMood: "warm amber highlights with cozy contrast",
     };
@@ -323,6 +432,7 @@ function inferVideoFoodProfile(
       openingShot: "high-impact crunchy close-up with bold texture",
       motionStyle: "snappy macro reveal followed by a smooth hero lock",
       detailFocus: "golden crust, crunch texture, juicy interior, seasoning detail",
+      detailFocusKorean: "바삭한 결와 속의 촉촉함이",
       endingShot: "confident product close with energetic payoff",
       colorMood: "deep warm contrast with glossy golden highlights",
     };
@@ -334,6 +444,7 @@ function inferVideoFoodProfile(
       openingShot: "rich savory reveal with char and glaze",
       motionStyle: "cinematic push-in and slow drift across the meat surface",
       detailFocus: "grill marks, glaze, juicy fibers, smoke or heat",
+      detailFocusKorean: "불향과 진한 육즙이",
       endingShot: "luxurious hero frame with premium food-commercial finish",
       colorMood: "bronze, deep brown, and warm smoky highlights",
     };
@@ -344,6 +455,7 @@ function inferVideoFoodProfile(
     openingShot: "strong appetizing hero reveal of the featured dish",
     motionStyle: "smooth premium short-form ad camera movement",
     detailFocus: "texture, freshness, serving size, and believable appeal",
+    detailFocusKorean: "먹음직스러운 결와 온기가",
     endingShot: "clean hero hold with short call-to-action finish",
     colorMood: "balanced warm palette with modern contrast",
   };
@@ -411,6 +523,7 @@ export function buildVideoScript(
   submission: SubmissionForVideoPrompt,
   stylePreset: VideoStylePreset,
 ): VideoGenerationScript {
+  const safeContext = buildSafeVideoCaptionContext(submission);
   const foodProfile = inferVideoFoodProfile(
     submission.storeType,
     submission.targetMenuName,
@@ -418,8 +531,8 @@ export function buildVideoScript(
   const workingCaptions = buildWorkingCaptionSentences(submission, foodProfile);
   const hookText =
     stylePreset === "premium"
-      ? `${submission.targetMenuName}, 오늘 더 특별하게`
-      : `${submission.storeName} 인기 메뉴`;
+      ? `${safeContext.targetMenuName}, 오늘 더 특별하게`
+      : `${safeContext.storeName} 인기 메뉴`;
 
   return {
     hookText,
@@ -428,28 +541,28 @@ export function buildVideoScript(
         order: 1,
         text:
           stylePreset === "market_story"
-            ? `${submission.storeName} 추천 메뉴`
-            : `${submission.storeName} 대표 메뉴`,
+            ? `${safeContext.storeName} 추천 메뉴`
+            : `${safeContext.storeName} 대표 메뉴`,
         focus: "store_intro",
       },
       {
         order: 2,
         text:
-          submission.appealPoint.length > 24
-            ? `${submission.targetMenuName}의 진한 매력`
-            : submission.appealPoint,
+          safeContext.appealPoint.length > 24
+            ? `${safeContext.targetMenuName}의 진한 매력`
+            : safeContext.appealPoint,
         focus: "food_highlight",
       },
       {
         order: 3,
         text: submission.priceText
-          ? `${submission.targetMenuName} ${submission.priceText}`
-          : submission.targetMenuName,
+          ? `${safeContext.targetMenuName} ${submission.priceText}`
+          : safeContext.targetMenuName,
         focus: "price_cta",
       },
     ],
     workingCaptions,
-    caption: `${submission.targetMenuName} 어떠세요? ${submission.appealPoint} ${foodProfile.detailFocus}`,
+    caption: `${safeContext.targetMenuName} 어떠세요? ${safeContext.appealPoint} ${foodProfile.detailFocus}`,
     hashtags: [
       `#${submission.marketName.replace(/\s+/g, "")}`,
       `#${submission.storeName.replace(/\s+/g, "")}`,
@@ -508,6 +621,9 @@ export async function buildVideoScriptWithAi(
     const workingCaptions = normalizeAiWorkingCaptions(
       JSON.parse(outputText),
       fallbackScript.workingCaptions,
+      {
+        ownerName: submission.ownerName,
+      },
     );
 
     return {

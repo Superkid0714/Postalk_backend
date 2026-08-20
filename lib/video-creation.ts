@@ -170,6 +170,7 @@ export function buildSubmissionVideoPrompt(
     {
       storeName: store?.store_name ?? "가게",
       marketName: store?.market_name ?? "전통시장",
+      ownerName: store?.owner_name ?? null,
       storeType: submission.store_type,
       targetMenuName: submission.target_menu_name,
       priceText: submission.price_text,
@@ -194,6 +195,7 @@ export async function buildSubmissionVideoScript(
     {
       storeName: store?.store_name ?? "가게",
       marketName: store?.market_name ?? "전통시장",
+      ownerName: store?.owner_name ?? null,
       storeType: submission.store_type,
       targetMenuName: submission.target_menu_name,
       priceText: submission.price_text,

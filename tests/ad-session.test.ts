@@ -226,6 +226,7 @@ test("buildVideoScript separates working captions from promotional caption", () 
     {
       storeName: "득량만",
       marketName: "말바우시장",
+      ownerName: "홍길동",
       storeType: "restaurant_food",
       targetMenuName: "제육볶음",
       priceText: null,
@@ -356,6 +357,72 @@ test("normalizeAiWorkingCaptions falls back when AI captions are duplicated or i
       workingCaptions: Array.from({ length: 8 }, () => "제육볶음"),
     },
     fallback,
+  );
+
+  assert.deepEqual(normalized, fallback);
+});
+
+test("buildVideoScript removes owner names and English from on-video captions", () => {
+  const script = buildVideoScript(
+    {
+      storeName: "BBQ HOUSE",
+      marketName: "ABC마켓",
+      ownerName: "홍길동",
+      storeType: "restaurant_food",
+      targetMenuName: "BBQ 플래터",
+      priceText: null,
+      appealPoint: "HOT한 직화 풍미",
+      extraMessage: "홍길동 사장님의 정성",
+      targetCustomer: "MZ 손님",
+      peakSalesTime: "LUNCH TIME",
+      popularMenuNotes: "set menu 인기가 많습니다",
+    },
+    "market_story",
+  );
+
+  assert.doesNotMatch(script.hookText, /[A-Za-z]/);
+  assert.doesNotMatch(script.hookText, /홍길동/);
+
+  for (const scene of script.scenes) {
+    assert.doesNotMatch(scene.text, /[A-Za-z]/);
+    assert.doesNotMatch(scene.text, /홍길동/);
+  }
+
+  for (const line of script.workingCaptions) {
+    assert.doesNotMatch(line, /[A-Za-z]/);
+    assert.doesNotMatch(line, /홍길동/);
+  }
+});
+
+test("normalizeAiWorkingCaptions falls back when AI captions contain English or owner names", () => {
+  const fallback = [
+    "기본 자막 하나",
+    "기본 자막 둘",
+    "기본 자막 셋",
+    "기본 자막 넷",
+    "기본 자막 다섯",
+    "기본 자막 여섯",
+    "기본 자막 일곱",
+    "기본 자막 여덟",
+  ];
+
+  const normalized = normalizeAiWorkingCaptions(
+    {
+      workingCaptions: [
+        "홍길동 사장님 가게예요",
+        "가게 분위기 너무 GOOD",
+        "제육볶음 향이 살아나요",
+        "한입부터 만족스러워요",
+        "점심시간에 더 생각나요",
+        "든든하게 즐기기 좋아요",
+        "다시 찾고 싶어져요",
+        "오늘도 편하게 들러보세요",
+      ],
+    },
+    fallback,
+    {
+      ownerName: "홍길동",
+    },
   );
 
   assert.deepEqual(normalized, fallback);
