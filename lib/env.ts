@@ -8,6 +8,8 @@ type OptionalEnvKey =
   | "OPENAI_API_KEY"
   | "GEMINI_API_KEY"
   | "GEMINI_VIDEO_MODEL"
+  | "NEXT_PUBLIC_APP_URL"
+  | "PUBLIC_APP_URL"
   | "QUOTE_VIDEO_API_URL"
   | "QUOTE_VIDEO_API_KEY"
   | "QUOTE_VIDEO_BGM_URL"
@@ -83,6 +85,25 @@ export function getGeminiApiKey() {
 
 export function getGeminiVideoModel() {
   return readOptionalEnv("GEMINI_VIDEO_MODEL");
+}
+
+export function getPublicAppUrl() {
+  const explicit =
+    readOptionalEnv("NEXT_PUBLIC_APP_URL") ??
+    readOptionalEnv("PUBLIC_APP_URL") ??
+    process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim() ??
+    process.env.VERCEL_URL?.trim() ??
+    null;
+
+  if (!explicit) {
+    return null;
+  }
+
+  if (explicit.startsWith("http://") || explicit.startsWith("https://")) {
+    return explicit;
+  }
+
+  return `https://${explicit}`;
 }
 
 export function getQuoteVideoEnv() {
