@@ -85,6 +85,35 @@ type SessionSourceAssetRow = {
   sort_order: number;
 };
 
+async function mapWithConcurrency<TInput, TOutput>(
+  items: TInput[],
+  concurrency: number,
+  worker: (item: TInput, index: number) => Promise<TOutput>,
+) {
+  const safeConcurrency = Math.max(1, Math.min(concurrency, items.length || 1));
+  const results = new Array<TOutput>(items.length);
+  let nextIndex = 0;
+
+  async function runWorker() {
+    while (true) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+
+      if (currentIndex >= items.length) {
+        return;
+      }
+
+      results[currentIndex] = await worker(items[currentIndex], currentIndex);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: safeConcurrency }, () => runWorker()),
+  );
+
+  return results;
+}
+
 function pickAssetByShot(
   assets: SessionSourceAssetRow[],
   shotKey: string,
@@ -411,75 +440,93 @@ export async function processGenerationJobById(jobId: string) {
       job.style_preset,
     );
 
-    for (const carouselPrompt of carouselPrompts) {
-      const reviewedCard = reviewedFoodCardNewsPlan?.cards.find(
-        (card) => card.index === carouselPrompt.index,
-      );
-      const result = isMockMode
-        ? {
-            bytes: mockBytes!,
-            revisedPrompt: `mock-image-generated-${carouselPrompt.key}`,
-          }
-        : await generatePromoImage({
-            prompt: carouselPrompt.prompt,
-            model: job.model_name,
-            size:
-              job.style_preset === "food_card_news"
-                ? "1024x1536"
-                : job.image_size,
-            quality:
-              job.style_preset === "food_card_news"
-                ? "high"
-                : job.quality,
-            timeoutMs:
-              job.style_preset === "food_card_news"
-                ? 300_000
-                : 120_000,
+    const generatedImageEntries = await mapWithConcurrency<
+      (typeof carouselPrompts)[number],
+      {
+        assetId: string;
+        filePath: string;
+        promptKey: string;
+        promptText: string;
+        revisedPrompt: string | null;
+        sourceMode: "mock" | "ai_generate";
+        sourceShotKey: null;
+        plannedSlotKey: string | null;
+      }
+    >(
+      carouselPrompts,
+      job.style_preset === "food_card_news" && !isMockMode ? 2 : 1,
+      async (carouselPrompt) => {
+        const reviewedCard = reviewedFoodCardNewsPlan?.cards.find(
+          (card) => card.index === carouselPrompt.index,
+        );
+        const result = isMockMode
+          ? {
+              bytes: mockBytes!,
+              revisedPrompt: `mock-image-generated-${carouselPrompt.key}`,
+            }
+          : await generatePromoImage({
+              prompt: carouselPrompt.prompt,
+              model: job.model_name,
+              size:
+                job.style_preset === "food_card_news"
+                  ? "1024x1536"
+                  : job.image_size,
+              quality:
+                job.style_preset === "food_card_news"
+                  ? "high"
+                  : job.quality,
+              timeoutMs:
+                job.style_preset === "food_card_news"
+                  ? 300_000
+                  : 120_000,
+            });
+
+        const filePath = `${job.store_id}/${job.submission_id}/generated/${job.id}-${carouselPrompt.index + 1}.png`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("uploads")
+          .upload(filePath, result.bytes, {
+            contentType: "image/png",
+            upsert: true,
           });
 
-      const filePath = `${job.store_id}/${job.submission_id}/generated/${job.id}-${carouselPrompt.index + 1}.png`;
+        if (uploadError) {
+          throw new Error(uploadError.message);
+        }
 
-      const { error: uploadError } = await supabase.storage
-        .from("uploads")
-        .upload(filePath, result.bytes, {
-          contentType: "image/png",
-          upsert: true,
-        });
+        const { data: asset, error: assetInsertError } = await supabase
+          .from("submission_assets")
+          .insert({
+            submission_id: job.submission_id,
+            asset_type: "generated_image",
+            storage_bucket: "uploads",
+            file_path: filePath,
+            file_name: `${job.id}-${carouselPrompt.index + 1}.png`,
+            mime_type: "image/png",
+            file_size: result.bytes.byteLength,
+            sort_order: carouselPrompt.index,
+          })
+          .select("id, file_path")
+          .single();
 
-      if (uploadError) {
-        throw new Error(uploadError.message);
-      }
+        if (assetInsertError || !asset) {
+          throw new Error(assetInsertError?.message ?? "Asset insert failed");
+        }
 
-      const { data: asset, error: assetInsertError } = await supabase
-        .from("submission_assets")
-        .insert({
-          submission_id: job.submission_id,
-          asset_type: "generated_image",
-          storage_bucket: "uploads",
-          file_path: filePath,
-          file_name: `${job.id}-${carouselPrompt.index + 1}.png`,
-          mime_type: "image/png",
-          file_size: result.bytes.byteLength,
-          sort_order: carouselPrompt.index,
-        })
-        .select("id, file_path")
-        .single();
+        return {
+          assetId: asset.id,
+          filePath: asset.file_path,
+          promptKey: carouselPrompt.key,
+          promptText: carouselPrompt.prompt,
+          revisedPrompt: result.revisedPrompt,
+          sourceMode: isMockMode ? "mock" : "ai_generate",
+          sourceShotKey: null,
+          plannedSlotKey: reviewedCard?.selectedSlot ?? null,
+        };
+      },
+    );
 
-      if (assetInsertError || !asset) {
-        throw new Error(assetInsertError?.message ?? "Asset insert failed");
-      }
-
-      generatedImages.push({
-        assetId: asset.id,
-        filePath: asset.file_path,
-        promptKey: carouselPrompt.key,
-        promptText: carouselPrompt.prompt,
-        revisedPrompt: result.revisedPrompt,
-        sourceMode: isMockMode ? "mock" : "ai_generate",
-        sourceShotKey: null,
-        plannedSlotKey: reviewedCard?.selectedSlot ?? null,
-      });
-    }
+    generatedImages.push(...generatedImageEntries);
 
     const completedAt = new Date().toISOString();
 
@@ -498,7 +545,7 @@ export async function processGenerationJobById(jobId: string) {
           mockMode: isMockMode,
           renderStrategy:
             job.style_preset === "food_card_news"
-              ? "serial_ai_generate"
+              ? "parallel_ai_generate_x2"
               : isMockMode
                 ? "mock"
                 : "ai_generate",
