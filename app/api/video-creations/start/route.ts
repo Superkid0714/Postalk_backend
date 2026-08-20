@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
 
   const imageBytes = Buffer.from(await imageData.arrayBuffer()).toString("base64");
   const promptText = buildSubmissionVideoPrompt(submission, stylePreset);
-  const script = buildSubmissionVideoScript(submission, stylePreset);
+  const script = await buildSubmissionVideoScript(submission, stylePreset);
 
   if (body.mockMode === true) {
     const createdAt = new Date().toISOString();

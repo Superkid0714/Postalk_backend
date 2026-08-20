@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildVideoScript,
   buildWorkingCaptionMarkdown,
+  normalizeAiWorkingCaptions,
 } from "../lib/ai/video.ts";
 import {
   getRequestedShot,
@@ -269,4 +270,93 @@ test("buildWorkingCaptionMarkdown creates 8 cuts and 16 subtitle lines", () => {
   assert.equal((markdown.match(/자막 \d+:\*\*/g) ?? []).length, 16);
   assert.match(markdown, /\[00:00 ~ 00:01\] 자막 1/);
   assert.match(markdown, /\[00:15 ~ 00:16\] 자막 16/);
+});
+
+test("buildWorkingCaptionMarkdown splits compact short captions without duplicating the same word", () => {
+  const markdown = buildWorkingCaptionMarkdown({
+    hookText: "득량만 인기 메뉴",
+    scenes: [
+      { order: 1, text: "득량만 추천 메뉴", focus: "store_intro" },
+      { order: 2, text: "불향 가득한 직화 맛", focus: "food_highlight" },
+      { order: 3, text: "제육볶음", focus: "price_cta" },
+    ],
+    workingCaptions: [
+      "제육볶음",
+      "두 번째 문장입니다.",
+      "세 번째 문장입니다.",
+      "네 번째 문장입니다.",
+      "다섯 번째 문장입니다.",
+      "여섯 번째 문장입니다.",
+      "일곱 번째 문장입니다.",
+      "여덟 번째 문장입니다.",
+    ],
+    caption: "광고용 캡션",
+    hashtags: ["#말바우시장", "#득량만", "#제육볶음"],
+  });
+
+  assert.match(markdown, /자막 1:\*\* 제육/);
+  assert.match(markdown, /자막 2:\*\* 볶음/);
+  assert.doesNotMatch(markdown, /자막 1:\*\* 제육볶음[\s\S]*자막 2:\*\* 제육볶음/);
+});
+
+test("normalizeAiWorkingCaptions keeps valid 8-line AI captions", () => {
+  const fallback = [
+    "기본 자막 하나",
+    "기본 자막 둘",
+    "기본 자막 셋",
+    "기본 자막 넷",
+    "기본 자막 다섯",
+    "기본 자막 여섯",
+    "기본 자막 일곱",
+    "기본 자막 여덟",
+  ];
+
+  const normalized = normalizeAiWorkingCaptions(
+    {
+      workingCaptions: [
+        "시장 안에서 먼저 눈에 들어와요",
+        "가게 분위기부터 편하게 다가오고",
+        "제육볶음 향이 금방 식욕을 깨우고",
+        "불향이 입안 가득 살아납니다",
+        "든든한 한 끼 찾을 때 딱 좋고",
+        "점심시간에 더 자주 생각나고",
+        "곁들이는 반찬까지 손이 가고",
+        "오늘 한 끼로 기억되기 충분해요",
+      ],
+    },
+    fallback,
+  );
+
+  assert.deepEqual(normalized, [
+    "시장 안에서 먼저 눈에 들어와요",
+    "가게 분위기부터 편하게 다가오고",
+    "제육볶음 향이 금방 식욕을 깨우고",
+    "불향이 입안 가득 살아납니다",
+    "든든한 한 끼 찾을 때 딱 좋고",
+    "점심시간에 더 자주 생각나고",
+    "곁들이는 반찬까지 손이 가고",
+    "오늘 한 끼로 기억되기 충분해요",
+  ]);
+});
+
+test("normalizeAiWorkingCaptions falls back when AI captions are duplicated or invalid", () => {
+  const fallback = [
+    "기본 자막 하나",
+    "기본 자막 둘",
+    "기본 자막 셋",
+    "기본 자막 넷",
+    "기본 자막 다섯",
+    "기본 자막 여섯",
+    "기본 자막 일곱",
+    "기본 자막 여덟",
+  ];
+
+  const normalized = normalizeAiWorkingCaptions(
+    {
+      workingCaptions: Array.from({ length: 8 }, () => "제육볶음"),
+    },
+    fallback,
+  );
+
+  assert.deepEqual(normalized, fallback);
 });

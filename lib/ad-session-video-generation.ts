@@ -1,7 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { mergeSubmissionWorkflowMetadata } from "@/lib/ad-creation";
-import { buildWorkingCaptionMarkdown } from "@/lib/ai/video";
+import {
+  buildWorkingCaptionMarkdown,
+  type VideoGenerationScript,
+} from "@/lib/ai/video";
 import {
   buildSessionStoreType,
   type AdSessionStore,
@@ -28,7 +31,7 @@ type SessionRow = {
 };
 
 function buildCaptionMarkdown(params: {
-  script: ReturnType<typeof buildSubmissionVideoScript>;
+  script: VideoGenerationScript;
 }) {
   return buildWorkingCaptionMarkdown(params.script);
 }
@@ -58,7 +61,7 @@ export async function createVideoSubmissionAndGenerationJobFromSession(params: {
       owner_name: params.store.owner_name,
     },
   };
-  const script = buildSubmissionVideoScript(submissionSeed, "market_story");
+  const script = await buildSubmissionVideoScript(submissionSeed, "market_story");
   const captionMarkdown = buildCaptionMarkdown({
     script,
   });

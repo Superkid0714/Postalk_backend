@@ -1,8 +1,9 @@
-import { getGeminiApiKey, getGeminiVideoModel } from "@/lib/env";
+import { getGeminiApiKey, getGeminiVideoModel, getOpenAiApiKey } from "@/lib/env";
 import { fetchWithTimeout } from "@/lib/http";
 
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 const DEFAULT_VIDEO_MODEL = "veo-3.1-generate-preview";
+const VIDEO_CAPTION_REVIEW_MODEL = "gpt-4.1-mini";
 
 export type VideoAspectRatio = "9:16" | "16:9";
 export type VideoResolution = "720p" | "1080p";
@@ -24,6 +25,10 @@ export type VideoGenerationScript = {
   workingCaptions: string[];
   caption: string;
   hashtags: string[];
+};
+
+type OpenAiResponsesResponse = {
+  output_text?: string;
 };
 
 export type SubmissionForVideoPrompt = {
@@ -50,6 +55,47 @@ type VideoFoodProfile = {
 
 function normalizeSentencePart(value: string | null | undefined) {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+}
+
+function stripCodeFence(value: string) {
+  return value.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+}
+
+function sanitizeWorkingCaptionLine(value: string) {
+  return value
+    .replace(/[*#`_[\]{}<>]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function splitCompactCaptionText(text: string) {
+  const normalized = text.trim();
+
+  if (normalized.length <= 2) {
+    return [normalized, normalized];
+  }
+
+  const midpoint = Math.floor(normalized.length / 2);
+  const first = normalized.slice(0, midpoint).trim();
+  const second = normalized.slice(midpoint).trim();
+
+  return [first || normalized, second || normalized];
+}
+
+function pickBalancedSplitIndex(text: string) {
+  const midpoint = Math.floor(text.length / 2);
+  const candidateIndexes = Array.from(
+    text.matchAll(/[,:;.!?~·]| /g),
+    (match) => match.index ?? -1,
+  ).filter((index) => index > 2 && index < text.length - 2);
+
+  if (candidateIndexes.length === 0) {
+    return -1;
+  }
+
+  return candidateIndexes.sort(
+    (left, right) => Math.abs(left - midpoint) - Math.abs(right - midpoint),
+  )[0]!;
 }
 
 function buildWorkingCaptionSentences(
@@ -92,31 +138,117 @@ function buildWorkingCaptionSentences(
   ].map((line) => line.replace(/\s+/g, " ").trim());
 }
 
+function buildAiWorkingCaptionPrompt(params: {
+  submission: SubmissionForVideoPrompt;
+  stylePreset: VideoStylePreset;
+  foodProfile: VideoFoodProfile;
+  fallbackCaptions: string[];
+}) {
+  const { submission, stylePreset, foodProfile, fallbackCaptions } = params;
+
+  return [
+    "You rewrite Korean working captions for a real food advertisement video.",
+    "These are internal production subtitles for the video timeline, not the public Instagram caption.",
+    "Return strict JSON only in this shape: {\"workingCaptions\":[\"...\", \"...\", ...]}",
+    "Rules:",
+    "- Write exactly 8 Korean working captions.",
+    "- Each caption should feel natural when shown alone for about 1 to 2 seconds.",
+    "- Keep each caption short, readable, promotional, and conversational.",
+    "- No hashtags, no emojis, no markdown, no bullet points, no numbering.",
+    "- Do not mention that this is an ad, prompt, template, or caption.",
+    "- Avoid robotic repetition and avoid report-style phrasing.",
+    "- Ground the wording in the actual store, menu, taste, atmosphere, and customer appeal.",
+    "- Keep each caption ideally under 24 Korean characters if possible.",
+    "- The 8 lines should flow like a coherent short video: hook, atmosphere, menu appeal, taste detail, audience fit, timing/value, and closing attraction.",
+    `Visual style preset: ${stylePreset}`,
+    `Food category: ${foodProfile.category}`,
+    `Store name: ${submission.storeName}`,
+    `Market name: ${submission.marketName}`,
+    `Store type: ${submission.storeType}`,
+    `Featured menu: ${submission.targetMenuName}`,
+    submission.priceText ? `Price info: ${submission.priceText}` : "Price info: 없음",
+    `Appeal point: ${submission.appealPoint}`,
+    submission.extraMessage
+      ? `Merchant note: ${submission.extraMessage}`
+      : "Merchant note: 없음",
+    submission.targetCustomer
+      ? `Target customer: ${submission.targetCustomer}`
+      : "Target customer: 없음",
+    submission.peakSalesTime
+      ? `Best timing: ${submission.peakSalesTime}`
+      : "Best timing: 없음",
+    submission.popularMenuNotes
+      ? `Popular menu notes: ${submission.popularMenuNotes}`
+      : "Popular menu notes: 없음",
+    `Food detail focus: ${foodProfile.detailFocus}`,
+    "Use these fallback lines only as a reference for facts and order, but rewrite them more naturally:",
+    JSON.stringify(fallbackCaptions, null, 2),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+export function normalizeAiWorkingCaptions(
+  candidate: unknown,
+  fallbackCaptions: string[],
+) {
+  const rawCaptions = Array.isArray(candidate)
+    ? candidate
+    : candidate &&
+        typeof candidate === "object" &&
+        !Array.isArray(candidate) &&
+        Array.isArray((candidate as { workingCaptions?: unknown }).workingCaptions)
+      ? (candidate as { workingCaptions: unknown[] }).workingCaptions
+      : null;
+
+  if (!rawCaptions || rawCaptions.length !== fallbackCaptions.length) {
+    return fallbackCaptions;
+  }
+
+  const normalized = rawCaptions.map((item) => {
+    if (typeof item !== "string") {
+      return "";
+    }
+
+    return sanitizeWorkingCaptionLine(item);
+  });
+
+  if (normalized.some((item) => item.length < 4 || item.length > 32)) {
+    return fallbackCaptions;
+  }
+
+  const uniqueCount = new Set(
+    normalized.map((item) => item.replace(/\s+/g, "")),
+  ).size;
+
+  if (uniqueCount < 6) {
+    return fallbackCaptions;
+  }
+
+  return normalized;
+}
+
 function splitWorkingCaptionLine(line: string) {
   const normalized = line.trim().replace(/\s+/g, " ");
 
   if (normalized.length <= 8) {
-    return [normalized, normalized];
+    return splitCompactCaptionText(normalized);
   }
 
-  const midpoint = Math.floor(normalized.length / 2);
-  const leftSpace = normalized.lastIndexOf(" ", midpoint);
-  const rightSpace = normalized.indexOf(" ", midpoint);
+  const splitIndex = pickBalancedSplitIndex(normalized);
 
-  const splitIndexCandidates = [leftSpace, rightSpace].filter(
-    (value) => value >= 0,
-  );
-  const splitIndex =
-    splitIndexCandidates.length > 0
-      ? splitIndexCandidates.sort(
-          (left, right) => Math.abs(left - midpoint) - Math.abs(right - midpoint),
-        )[0]
-      : midpoint;
+  if (splitIndex < 0) {
+    return splitCompactCaptionText(normalized);
+  }
 
   const first = normalized.slice(0, splitIndex).trim();
-  const second = normalized.slice(splitIndex).trim();
+  const second = normalized.slice(splitIndex + 1).trim();
 
-  return [first || normalized, second || normalized];
+  if (!first || !second) {
+    return splitCompactCaptionText(normalized);
+  }
+
+  return [first, second];
 }
 
 export function buildWorkingCaptionMarkdown(script: VideoGenerationScript) {
@@ -324,6 +456,67 @@ export function buildVideoScript(
       `#${submission.targetMenuName.replace(/\s+/g, "")}`,
     ],
   };
+}
+
+export async function buildVideoScriptWithAi(
+  submission: SubmissionForVideoPrompt,
+  stylePreset: VideoStylePreset,
+) {
+  const fallbackScript = buildVideoScript(submission, stylePreset);
+  const apiKey = getOpenAiApiKey();
+
+  if (!apiKey) {
+    return fallbackScript;
+  }
+
+  const foodProfile = inferVideoFoodProfile(
+    submission.storeType,
+    submission.targetMenuName,
+  );
+
+  try {
+    const response = await fetchWithTimeout("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: VIDEO_CAPTION_REVIEW_MODEL,
+        input: buildAiWorkingCaptionPrompt({
+          submission,
+          stylePreset,
+          foodProfile,
+          fallbackCaptions: fallbackScript.workingCaptions,
+        }),
+      }),
+      timeoutMs: 30_000,
+    });
+
+    if (!response.ok) {
+      return fallbackScript;
+    }
+
+    const json = (await response.json()) as OpenAiResponsesResponse;
+    const outputText =
+      typeof json.output_text === "string" ? stripCodeFence(json.output_text) : "";
+
+    if (!outputText) {
+      return fallbackScript;
+    }
+
+    const workingCaptions = normalizeAiWorkingCaptions(
+      JSON.parse(outputText),
+      fallbackScript.workingCaptions,
+    );
+
+    return {
+      ...fallbackScript,
+      workingCaptions,
+    };
+  } catch {
+    return fallbackScript;
+  }
 }
 
 export async function startGeminiVideoOperation(params: {

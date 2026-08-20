@@ -1,8 +1,9 @@
 import {
   buildVideoPrompt,
-  buildVideoScript,
+  buildVideoScriptWithAi,
   type VideoAspectRatio,
   type VideoDurationSeconds,
+  type VideoGenerationScript,
   type VideoResolution,
   type VideoStylePreset,
 } from "@/lib/ai/video";
@@ -32,7 +33,7 @@ export type SubmissionVideoWorkflowMetadata = {
   resultFilePath?: string | null;
   modelName?: string | null;
   mockMode?: boolean;
-  script?: ReturnType<typeof buildVideoScript> | null;
+  script?: VideoGenerationScript | null;
 };
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -182,14 +183,14 @@ export function buildSubmissionVideoPrompt(
   );
 }
 
-export function buildSubmissionVideoScript(
+export async function buildSubmissionVideoScript(
   submission: VideoSubmissionRow,
   stylePreset: VideoStylePreset,
 ) {
   const store = normalizeVideoStore(submission.stores);
   const merchantInsights = readMerchantInsights(submission.ai_metadata);
 
-  return buildVideoScript(
+  return buildVideoScriptWithAi(
     {
       storeName: store?.store_name ?? "가게",
       marketName: store?.market_name ?? "전통시장",
