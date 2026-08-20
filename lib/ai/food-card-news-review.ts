@@ -75,6 +75,14 @@ function cleanInlineLabel(value: string | null | undefined) {
     .replace(/[.。!！?？]+$/u, "");
 }
 
+function stripReportTone(value: string) {
+  return value
+    .replace(/(주력 메뉴를 포함한 대표 메뉴 소개|가게만의 특별함|대표 메뉴|특별함)\s*[:：]?\s*/gu, "")
+    .replace(/(입니다|합니다)(\s*[.。!！?？])?$/u, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function squeezeText(value: string, maxLength: number) {
   const normalized = value.replace(/\s+/g, " ").trim();
 
@@ -83,6 +91,15 @@ function squeezeText(value: string, maxLength: number) {
   }
 
   return `${normalized.slice(0, Math.max(1, maxLength - 1)).trim()}…`;
+}
+
+function buildPunchyPhrase(
+  value: string | null | undefined,
+  fallback: string,
+  maxLength: number,
+) {
+  const cleaned = stripReportTone(cleanInlineLabel(value) ?? fallback);
+  return squeezeText(cleaned || fallback, maxLength);
 }
 
 function splitBodyLines(value: string, maxCharsPerLine: number, maxLines: number) {
@@ -127,49 +144,59 @@ function buildCardCopy(
   const market = compactText(submission.stores?.market_name, "전통시장");
   const store = compactText(submission.stores?.store_name, "가게명");
   const price = compactText(submission.price_text, "가격 문의");
-  const appeal = cleanInlineLabel(submission.appeal_point) ?? `${menu}의 매력`;
+  const appeal = buildPunchyPhrase(submission.appeal_point, `${menu}의 매력`, 28);
   const extra =
-    cleanInlineLabel(submission.extra_message) ??
+    buildPunchyPhrase(
+      submission.extra_message,
+      "가게 분위기까지 함께 기억되는 한 끼",
+      28,
+    ) ??
     "가게 분위기까지 함께 기억되는 한 끼";
   const caption =
-    cleanInlineLabel(submission.caption) ??
+    buildPunchyPhrase(
+      submission.caption,
+      `${menu} 생각나는 날 다시 찾고 싶은 한 끼`,
+      34,
+    ) ??
     `${menu} 생각나는 날 다시 찾고 싶은 한 끼`;
+  const marketStore = squeezeText(`${market} ${store}`, 18);
+  const premiumCue = squeezeText(`${menu} 한 입의 인상`, 12);
 
   switch (card.key) {
     case "cover_vertical_still_life":
       return {
-        title: squeezeText(menu, 12),
-        subtitle: squeezeText(`${market} · ${store}`, 24),
-        body: splitBodyLines(appeal, 18, 2),
-        reason: "표지는 대표 메뉴가 가장 또렷하게 보이는 컷으로 고정",
+        title: squeezeText(menu, 10),
+        subtitle: squeezeText(`${market}의 오늘 한 접시`, 18),
+        body: splitBodyLines(`${appeal} ${price}`, 16, 2),
+        reason: "표지는 시그니처 메뉴를 한 번에 각인시키는 히어로 컷이 가장 적합",
       };
     case "dark_flatlay_editorial":
       return {
-        title: squeezeText("대표 메뉴", 12),
-        subtitle: squeezeText(extra, 24),
-        body: splitBodyLines(`${market} ${store} ${price}`, 18, 2),
-        reason: "정보성 속지는 메뉴 구성과 가격 흐름을 함께 전달",
+        title: squeezeText("오늘의 포인트", 10),
+        subtitle: squeezeText(appeal, 20),
+        body: splitBodyLines(`${marketStore} ${price}`, 16, 2),
+        reason: "플랫레이 카드는 판매 포인트와 가격 정보를 가장 단정하게 정리하기 좋음",
       };
     case "circular_editorial_layout":
       return {
-        title: squeezeText(menu, 12),
-        subtitle: squeezeText("한 입 포인트", 24),
-        body: splitBodyLines(appeal, 18, 2),
-        reason: "클로즈업 카드에는 질감과 포인트 문구를 우선 배치",
+        title: squeezeText(premiumCue, 10),
+        subtitle: squeezeText(extra, 20),
+        body: splitBodyLines(`${menu} ${appeal}`, 16, 2),
+        reason: "클로즈업 카드에는 질감과 여운이 남는 짧은 카피가 가장 잘 어울림",
       };
     case "vertical_quote_band":
       return {
-        title: squeezeText("사장님 추천", 12),
-        subtitle: squeezeText(`${store} · ${market}`, 24),
-        body: splitBodyLines(extra, 18, 2),
-        reason: "세로 띠 카드는 조리 장면과 추천 문장을 연결",
+        title: squeezeText("지금 추천", 10),
+        subtitle: squeezeText(`${store}에서 고른 한 컷`, 20),
+        body: splitBodyLines(`${appeal} ${extra}`, 16, 2),
+        reason: "세로 띠 카드는 조리 장면과 감성 카피를 묶어 인상을 남기기 좋음",
       };
     case "closing_information":
       return {
-        title: squeezeText("오늘 눈여겨볼 메뉴", 12),
-        subtitle: squeezeText(menu, 24),
-        body: splitBodyLines(`${caption} ${price}`, 20, 2),
-        reason: "마감 카드는 저장하고 싶은 요약 정보만 남김",
+        title: squeezeText("저장해둘 한 끼", 10),
+        subtitle: squeezeText(menu, 16),
+        body: splitBodyLines(`${caption} ${marketStore}`, 18, 2),
+        reason: "마감 카드는 다시 떠오를 한 줄과 가게 정보를 깔끔하게 남기는 데 집중",
       };
   }
 }
@@ -318,6 +345,8 @@ export async function reviewFoodCardNewsPlan(params: {
     "- title: 8 to 12 Korean characters max when possible.",
     "- subtitle: 18 to 24 Korean characters max when possible.",
     "- body: array of 1 or 2 short lines only.",
+    "- Text must feel premium, sensory, and promotional. Avoid generic report tone.",
+    "- Prefer concrete appetite-triggering wording over abstract descriptions.",
     "- Avoid repeated wording across cards.",
     "- Avoid assigning the same selectedSlot to every card unless absolutely necessary.",
     "- cover card should prefer coverPhoto or detailPhoto.",

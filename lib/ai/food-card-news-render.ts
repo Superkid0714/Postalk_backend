@@ -341,9 +341,10 @@ async function renderFlatLayCard(
   const menu = await containPhoto(assets.menuBoard, 250, 320, BRIGHT_BG);
   const baseOverlay = svgBuffer(`
     <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
-      <rect x="0" y="0" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" fill="${BRIGHT_BG}" />
-      <rect x="70" y="70" width="940" height="1210" rx="44" fill="#FBF7EF" />
-      <rect x="110" y="970" width="860" height="220" rx="30" fill="${PAPER}" />
+      <rect x="0" y="0" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" fill="${DARK_BG}" />
+      <rect x="70" y="70" width="940" height="1210" rx="44" fill="#2B241F" />
+      <rect x="110" y="970" width="860" height="220" rx="30" fill="#312924" />
+      <line x1="110" y1="350" x2="970" y2="350" stroke="#5C5046" stroke-width="1.5" opacity="0.7" />
     </svg>
   `);
   const textOverlay = svgBuffer(`
@@ -365,7 +366,7 @@ async function renderFlatLayCard(
         lines: [reviewedCard.title || text.coverTitle],
         fontSize: 58,
         lineHeight: 56,
-        fill: INK,
+        fill: PAPER,
         fontWeight: 700,
       })}
       ${buildTextBlockSvg({
@@ -379,7 +380,7 @@ async function renderFlatLayCard(
         ),
         fontSize: 28,
         lineHeight: 40,
-        fill: SUBTLE_BRIGHT,
+        fill: "#C9BCAE",
       })}
       ${buildTextBlockSvg({
         x: 390,
@@ -387,7 +388,7 @@ async function renderFlatLayCard(
         lines: ["가게 정보"],
         fontSize: 24,
         lineHeight: 28,
-        fill: SUBTLE_BRIGHT,
+        fill: "#B8AA9A",
         fontWeight: 700,
       })}
       ${buildTextBlockSvg({
@@ -396,7 +397,7 @@ async function renderFlatLayCard(
         lines: [text.market, text.store],
         fontSize: 34,
         lineHeight: 42,
-        fill: INK,
+        fill: PAPER,
         fontWeight: 600,
       })}
       ${buildTextBlockSvg({
@@ -405,7 +406,7 @@ async function renderFlatLayCard(
         lines: [reviewedCard.subtitle || buildShortLine(text.appeal, "대표 메뉴의 인상", 18), text.price],
         fontSize: 26,
         lineHeight: 38,
-        fill: SUBTLE_BRIGHT,
+        fill: "#C9BCAE",
         fontWeight: 600,
       })}
       ${buildTextBlockSvg({
@@ -414,7 +415,7 @@ async function renderFlatLayCard(
         lines: ["02"],
         fontSize: 24,
         lineHeight: 26,
-        fill: SUBTLE_BRIGHT,
+        fill: "#B8AA9A",
         letterSpacing: 3,
       })}
     </svg>
@@ -453,6 +454,8 @@ async function renderCircleLayoutCard(
     <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
       <rect x="0" y="0" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" fill="${BRIGHT_BG}" />
       <rect x="76" y="74" width="928" height="1202" rx="42" fill="#FBF7EF" />
+      <circle cx="700" cy="490" r="292" fill="none" stroke="#E5DAC6" stroke-width="2" />
+      <circle cx="840" cy="1025" r="126" fill="none" stroke="#E5DAC6" stroke-width="2" />
       <rect x="110" y="106" width="184" height="48" rx="24" fill="${INK}" />
       ${buildTextBlockSvg({
         x: 202,
@@ -631,6 +634,8 @@ async function renderInfoCard(
     <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
       <rect x="0" y="0" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" fill="${BRIGHT_BG}" />
       <rect x="80" y="80" width="920" height="1190" rx="44" fill="#FBF7EF" />
+      <circle cx="170" cy="170" r="120" fill="none" stroke="#E8DCC8" stroke-width="1.5" opacity="0.9" />
+      <circle cx="920" cy="1180" r="140" fill="none" stroke="#E8DCC8" stroke-width="1.5" opacity="0.9" />
     </svg>
   `);
   const textOverlay = svgBuffer(`
