@@ -8,6 +8,10 @@ import {
   normalizeStoreRelation,
   normalizeSubmissionRelation,
 } from "@/lib/ai/generation";
+import {
+  renderFoodCardNewsCards,
+  type FoodCardNewsSourceAssets,
+} from "@/lib/ai/food-card-news-render";
 import type { FoodCardNewsCreativePlan } from "@/lib/ai/food-card-news";
 import {
   getSubmissionWorkflowMetadata,
@@ -63,6 +67,149 @@ function readPrecomputedCaptionRequest(value: unknown) {
     caption,
     hashtags,
     foodCardNewsPlan,
+  };
+}
+
+function readAdSessionId(value: unknown) {
+  if (!isObject(value)) {
+    return null;
+  }
+
+  return typeof value.adSessionId === "string" && value.adSessionId.trim().length > 0
+    ? value.adSessionId
+    : null;
+}
+
+type SessionSourceAssetRow = {
+  shot_key: string;
+  storage_bucket: string;
+  file_path: string;
+  sort_order: number;
+};
+
+function pickAssetByShot(
+  assets: SessionSourceAssetRow[],
+  shotKey: string,
+) {
+  return (
+    assets
+      .filter((asset) => asset.shot_key === shotKey)
+      .sort((left, right) => left.sort_order - right.sort_order)[0] ?? null
+  );
+}
+
+function pickFirstAvailableAsset(
+  assets: SessionSourceAssetRow[],
+  shotKeys: string[],
+) {
+  for (const shotKey of shotKeys) {
+    const matched = pickAssetByShot(assets, shotKey);
+
+    if (matched) {
+      return matched;
+    }
+  }
+
+  return assets.slice().sort((left, right) => left.sort_order - right.sort_order)[0] ?? null;
+}
+
+async function downloadAssetBytes(
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+  asset: SessionSourceAssetRow,
+) {
+  const { data, error } = await supabase.storage
+    .from(asset.storage_bucket)
+    .download(asset.file_path);
+
+  if (error || !data) {
+    throw new Error(error?.message ?? `Failed to download ${asset.file_path}`);
+  }
+
+  return Buffer.from(await data.arrayBuffer());
+}
+
+async function buildFoodCardNewsSourceAssets(params: {
+  supabase: ReturnType<typeof getSupabaseAdminClient>;
+  adSessionId: string;
+}) {
+  const { data: sessionAssets, error } = await params.supabase
+    .from("ad_creation_session_assets")
+    .select("shot_key, storage_bucket, file_path, sort_order")
+    .eq("session_id", params.adSessionId)
+    .order("sort_order", { ascending: true });
+
+  if (error || !sessionAssets || sessionAssets.length === 0) {
+    return null;
+  }
+
+  const assets = sessionAssets as SessionSourceAssetRow[];
+  const menuBoardAsset = pickFirstAvailableAsset(assets, ["menu_board"]);
+  const coverAsset = pickFirstAvailableAsset(assets, [
+    "signature_menu",
+    "flatlay_menu",
+    "detail_closeup",
+    "cooking_scene",
+    "menu_board",
+  ]);
+  const flatlayAsset = pickFirstAvailableAsset(assets, [
+    "flatlay_menu",
+    "signature_menu",
+    "detail_closeup",
+  ]);
+  const detailAsset = pickFirstAvailableAsset(assets, [
+    "detail_closeup",
+    "signature_menu",
+    "flatlay_menu",
+  ]);
+  const cookingAsset = pickFirstAvailableAsset(assets, [
+    "cooking_scene",
+    "detail_closeup",
+    "signature_menu",
+  ]);
+  const infoAsset = pickFirstAvailableAsset(assets, [
+    "signature_menu",
+    "flatlay_menu",
+    "menu_board",
+    "detail_closeup",
+  ]);
+
+  if (!menuBoardAsset || !coverAsset || !flatlayAsset || !detailAsset || !cookingAsset || !infoAsset) {
+    return null;
+  }
+
+  const [
+    menuBoard,
+    coverPhoto,
+    flatlayPhoto,
+    detailPhoto,
+    cookingPhoto,
+    infoPhoto,
+  ] = await Promise.all([
+    downloadAssetBytes(params.supabase, menuBoardAsset),
+    downloadAssetBytes(params.supabase, coverAsset),
+    downloadAssetBytes(params.supabase, flatlayAsset),
+    downloadAssetBytes(params.supabase, detailAsset),
+    downloadAssetBytes(params.supabase, cookingAsset),
+    downloadAssetBytes(params.supabase, infoAsset),
+  ]);
+
+  return {
+    assets: {
+      menuBoard,
+      coverPhoto,
+      flatlayPhoto,
+      detailPhoto,
+      cookingPhoto,
+      infoPhoto,
+    } satisfies FoodCardNewsSourceAssets,
+    slots: {
+      menuBoard: menuBoardAsset.shot_key,
+      coverPhoto: coverAsset.shot_key,
+      flatlayPhoto: flatlayAsset.shot_key,
+      detailPhoto: detailAsset.shot_key,
+      cookingPhoto: cookingAsset.shot_key,
+      infoPhoto: infoAsset.shot_key,
+    },
   };
 }
 
@@ -220,6 +367,7 @@ export async function processGenerationJobById(jobId: string) {
 
     const generatedImages = [];
     const precomputedRequest = readPrecomputedCaptionRequest(job.request_payload);
+    const adSessionId = readAdSessionId(job.request_payload);
     const generatedCaptionResult = await generatePromoCaption(
       normalizedGenerationSubmission,
     );
@@ -256,18 +404,47 @@ export async function processGenerationJobById(jobId: string) {
       job.style_preset,
     );
 
+    const renderedFoodCardNewsAssets =
+      !isMockMode && job.style_preset === "food_card_news" && adSessionId
+        ? await buildFoodCardNewsSourceAssets({
+            supabase,
+            adSessionId,
+          })
+        : null;
+
+    const renderedCards = renderedFoodCardNewsAssets
+      ? await renderFoodCardNewsCards(
+          {
+            ...normalizedGenerationSubmission,
+            caption: captionResult.caption,
+            extra_message:
+              normalizedGenerationSubmission.extra_message ??
+              normalizedGenerationSubmission.appeal_point,
+          },
+          renderedFoodCardNewsAssets.assets,
+        )
+      : null;
+
     for (const carouselPrompt of carouselPrompts) {
-      const result = isMockMode
+      const renderedCard = renderedCards?.find(
+        (card) => card.index === carouselPrompt.index,
+      );
+      const result = renderedCard
         ? {
-            bytes: mockBytes!,
-            revisedPrompt: `mock-image-generated-${carouselPrompt.key}`,
+            bytes: renderedCard.bytes,
+            revisedPrompt: renderedCard.promptText,
           }
-        : await generatePromoImage({
-            prompt: carouselPrompt.prompt,
-            model: job.model_name,
-            size: job.image_size,
-            quality: job.quality,
-          });
+        : isMockMode
+          ? {
+              bytes: mockBytes!,
+              revisedPrompt: `mock-image-generated-${carouselPrompt.key}`,
+            }
+          : await generatePromoImage({
+              prompt: carouselPrompt.prompt,
+              model: job.model_name,
+              size: job.image_size,
+              quality: job.quality,
+            });
 
       const filePath = `${job.store_id}/${job.submission_id}/generated/${job.id}-${carouselPrompt.index + 1}.png`;
 
@@ -307,6 +484,21 @@ export async function processGenerationJobById(jobId: string) {
         promptKey: carouselPrompt.key,
         promptText: carouselPrompt.prompt,
         revisedPrompt: result.revisedPrompt,
+        sourceMode: renderedCard ? "template_render" : isMockMode ? "mock" : "ai_generate",
+        sourceShotKey:
+          renderedFoodCardNewsAssets?.slots[
+            renderedCard?.key === "cover"
+              ? "coverPhoto"
+              : renderedCard?.key === "flat_lay"
+                ? "flatlayPhoto"
+                : renderedCard?.key === "circle_layout"
+                  ? "detailPhoto"
+                  : renderedCard?.key === "quote_strip"
+                    ? "cookingPhoto"
+                    : renderedCard?.key === "info_page"
+                      ? "infoPhoto"
+                      : "coverPhoto"
+          ] ?? null,
       });
     }
 
@@ -326,6 +518,7 @@ export async function processGenerationJobById(jobId: string) {
           generatedImages,
           mockMode: isMockMode,
           foodCardNewsPlan,
+          templateSlots: renderedFoodCardNewsAssets?.slots ?? null,
         },
       })
       .eq("id", job.id);

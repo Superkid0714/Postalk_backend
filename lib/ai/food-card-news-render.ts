@@ -14,9 +14,13 @@ const ACCENT = "#7E2E24";
 const FONT_STACK =
   "'Noto Sans CJK KR','Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif";
 
-type FoodCardNewsSourceAssets = {
-  foodPhoto: Buffer;
+export type FoodCardNewsSourceAssets = {
   menuBoard: Buffer;
+  coverPhoto: Buffer;
+  flatlayPhoto: Buffer;
+  detailPhoto: Buffer;
+  cookingPhoto: Buffer;
+  infoPhoto: Buffer;
 };
 
 type RenderedFoodCardNewsCard = {
@@ -42,6 +46,16 @@ function compactText(value: string | null | undefined, fallback: string) {
   }
 
   return value.trim();
+}
+
+function buildShortLine(value: string | null | undefined, fallback: string, maxLength: number) {
+  const cleaned = compactText(value, fallback).replace(/\s+/g, " ").trim();
+
+  if (cleaned.length <= maxLength) {
+    return cleaned;
+  }
+
+  return `${cleaned.slice(0, Math.max(1, maxLength - 1)).trim()}…`;
 }
 
 function splitKoreanText(text: string, maxChars: number) {
@@ -186,13 +200,21 @@ function buildCardText(submission: SubmissionForGeneration) {
   const menu = compactText(submission.target_menu_name, "대표 메뉴");
   const market = compactText(submission.stores?.market_name, "전통시장");
   const store = compactText(submission.stores?.store_name, "가게명");
-  const appeal = compactText(submission.appeal_point, "정직한 맛");
-  const extra = compactText(submission.extra_message, "현장에서 바로 즐기기 좋은 한 끼");
+  const appeal = compactText(submission.appeal_point, "시장 한복판에서 눈길이 가는 대표 메뉴");
+  const extra = compactText(
+    submission.extra_message,
+    "가게만의 인상과 분위기가 자연스럽게 느껴지는 한 끼",
+  );
   const caption = compactText(
     submission.caption,
     `${menu} 어떠세요? ${appeal} ${extra}`,
   );
   const price = compactText(submission.price_text, "가격 문의");
+  const coverTitle = buildShortLine(menu, "대표 메뉴", 10);
+  const coverSummary = buildShortLine(appeal, "시장 한복판에서 먼저 눈길이 가는 메뉴", 24);
+  const detailSummary = buildShortLine(extra, "가게만의 매력이 자연스럽게 느껴지는 한 접시", 26);
+  const quote = buildShortLine(`${appeal}. ${extra}`, "정직한 한 끼의 매력이 남는 메뉴입니다", 34);
+  const closing = buildShortLine(caption, `${menu}이 생각나는 순간 다시 찾고 싶은 한 끼`, 36);
 
   return {
     menu,
@@ -202,6 +224,11 @@ function buildCardText(submission: SubmissionForGeneration) {
     extra,
     caption,
     price,
+    coverTitle,
+    coverSummary,
+    detailSummary,
+    quote,
+    closing,
   };
 }
 
@@ -211,7 +238,7 @@ async function renderCoverCard(
 ) {
   const text = buildCardText(submission);
   const background = await coverFoodPhoto(
-    assets.foodPhoto,
+    assets.coverPhoto,
     CANVAS_WIDTH,
     CANVAS_HEIGHT,
     "south",
@@ -247,7 +274,7 @@ async function renderCoverCard(
       ${buildTextBlockSvg({
         x: 116,
         y: 575,
-        lines: splitKoreanText(text.caption, 18).slice(0, 3),
+        lines: truncateLines(splitKoreanText(text.coverSummary, 18), 2),
         fontSize: 34,
         lineHeight: 48,
         fill: PAPER,
@@ -257,7 +284,7 @@ async function renderCoverCard(
       ${buildTextBlockSvg({
         x: 226,
         y: 1172,
-        lines: [text.appeal],
+        lines: [buildShortLine(text.appeal, "정직한 손맛", 10)],
         fontSize: 30,
         lineHeight: 34,
         fill: PAPER,
@@ -285,7 +312,7 @@ async function renderFlatLayCard(
   assets: FoodCardNewsSourceAssets,
 ) {
   const text = buildCardText(submission);
-  const food = await coverFoodPhoto(assets.foodPhoto, 880, 540, "center");
+  const food = await coverFoodPhoto(assets.flatlayPhoto, 880, 540, "center");
   const menu = await containPhoto(assets.menuBoard, 250, 320, BRIGHT_BG);
   const baseOverlay = svgBuffer(`
     <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
@@ -310,7 +337,7 @@ async function renderFlatLayCard(
       ${buildTextBlockSvg({
         x: 110,
         y: 225,
-        lines: [text.menu],
+        lines: [text.coverTitle],
         fontSize: 58,
         lineHeight: 56,
         fill: INK,
@@ -319,7 +346,7 @@ async function renderFlatLayCard(
       ${buildTextBlockSvg({
         x: 110,
         y: 308,
-        lines: truncateLines(splitKoreanText(text.caption, 20), 2),
+        lines: truncateLines(splitKoreanText(text.detailSummary, 20), 2),
         fontSize: 28,
         lineHeight: 40,
         fill: SUBTLE_BRIGHT,
@@ -345,7 +372,7 @@ async function renderFlatLayCard(
       ${buildTextBlockSvg({
         x: 390,
         y: 1182,
-        lines: [text.appeal, text.price],
+        lines: [buildShortLine(text.appeal, "대표 메뉴의 인상", 18), text.price],
         fontSize: 26,
         lineHeight: 38,
         fill: SUBTLE_BRIGHT,
@@ -386,8 +413,8 @@ async function renderCircleLayoutCard(
   assets: FoodCardNewsSourceAssets,
 ) {
   const text = buildCardText(submission);
-  const bigCircle = await createCircularPhoto(assets.foodPhoto, 540);
-  const smallCircle = await createCircularPhoto(assets.menuBoard, 220);
+  const bigCircle = await createCircularPhoto(assets.detailPhoto, 540);
+  const smallCircle = await createCircularPhoto(assets.cookingPhoto, 220);
   const overlay = svgBuffer(`
     <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
       <rect x="0" y="0" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" fill="${BRIGHT_BG}" />
@@ -406,7 +433,7 @@ async function renderCircleLayoutCard(
       ${buildTextBlockSvg({
         x: 110,
         y: 236,
-        lines: [text.menu],
+        lines: [text.coverTitle],
         fontSize: 56,
         lineHeight: 52,
         fill: INK,
@@ -415,7 +442,7 @@ async function renderCircleLayoutCard(
       ${buildTextBlockSvg({
         x: 110,
         y: 320,
-        lines: truncateLines(splitKoreanText(text.caption, 18), 2),
+        lines: truncateLines(splitKoreanText(text.detailSummary, 18), 2),
         fontSize: 24,
         lineHeight: 36,
         fill: SUBTLE_BRIGHT,
@@ -433,7 +460,7 @@ async function renderCircleLayoutCard(
       ${buildTextBlockSvg({
         x: 150,
         y: 1078,
-        lines: [text.store, `매력: ${text.appeal}`, `가격: ${text.price}`],
+        lines: [text.store, `포인트: ${buildShortLine(text.appeal, text.appeal, 16)}`, `가격: ${text.price}`],
         fontSize: 24,
         lineHeight: 36,
         fill: SUBTLE_BRIGHT,
@@ -471,7 +498,7 @@ async function renderQuoteStripCard(
   assets: FoodCardNewsSourceAssets,
 ) {
   const text = buildCardText(submission);
-  const food = await coverFoodPhoto(assets.foodPhoto, 1080, 640, "center");
+  const food = await coverFoodPhoto(assets.cookingPhoto, 1080, 640, "center");
   const baseOverlay = svgBuffer(`
     <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
       <rect x="0" y="0" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" fill="${BRIGHT_BG}" />
@@ -495,7 +522,7 @@ async function renderQuoteStripCard(
       ${buildTextBlockSvg({
         x: 86,
         y: 830,
-        lines: truncateLines(splitKoreanText(text.caption, 19), 3),
+        lines: truncateLines(splitKoreanText(text.quote, 19), 3),
         fontSize: 44,
         lineHeight: 58,
         fill: INK,
@@ -543,7 +570,7 @@ async function renderInfoCard(
   assets: FoodCardNewsSourceAssets,
 ) {
   const text = buildCardText(submission);
-  const food = await coverFoodPhoto(assets.foodPhoto, 420, 420, "center");
+  const food = await coverFoodPhoto(assets.infoPhoto, 420, 420, "center");
   const baseOverlay = svgBuffer(`
     <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
       <rect x="0" y="0" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" fill="${BRIGHT_BG}" />
@@ -566,7 +593,7 @@ async function renderInfoCard(
       ${buildTextBlockSvg({
         x: 540,
         y: 250,
-        lines: ["오늘 눈여겨볼 메뉴", text.menu],
+        lines: ["오늘 눈여겨볼 메뉴", text.coverTitle],
         fontSize: 52,
         lineHeight: 70,
         fill: INK,
@@ -576,7 +603,7 @@ async function renderInfoCard(
       ${buildTextBlockSvg({
         x: 540,
         y: 820,
-        lines: truncateLines(splitKoreanText(text.caption, 24), 3),
+        lines: truncateLines(splitKoreanText(text.closing, 24), 3),
         fontSize: 30,
         lineHeight: 42,
         fill: SUBTLE_BRIGHT,

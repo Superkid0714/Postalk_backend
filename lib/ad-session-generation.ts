@@ -45,6 +45,9 @@ export async function createSubmissionAndGenerationJobFromSession(params: {
   const targetMenuName = params.workflow.primarySubject?.trim() || "대표 메뉴";
   const storeType = buildSessionStoreType(params.store);
   const generationRequestedAt = new Date().toISOString();
+  const menuIntro = params.workflow.menuIntro?.trim() || params.session.intro_text.trim();
+  const storeSpecialty =
+    params.workflow.storeSpecialty?.trim() || params.store.description?.trim() || null;
   const draftCaption = params.workflow.draftCaption?.trim() || null;
   const draftHashtags = (params.workflow.draftHashtags ?? []).filter(
     (item): item is string => typeof item === "string" && item.trim().length > 0,
@@ -62,8 +65,8 @@ export async function createSubmissionAndGenerationJobFromSession(params: {
       store_type: storeType,
       target_menu_name: targetMenuName,
       price_text: "",
-      appeal_point: params.session.intro_text.trim(),
-      extra_message: params.store.location_address ?? null,
+      appeal_point: menuIntro,
+      extra_message: storeSpecialty,
       title: `${params.store.store_name} 카드뉴스`,
       caption: draftCaption,
       hashtags: draftHashtags,
@@ -73,6 +76,13 @@ export async function createSubmissionAndGenerationJobFromSession(params: {
           adSession: {
             sessionId: params.session.id,
             primarySubject: targetMenuName,
+            menuIntro,
+            storeSpecialty,
+          },
+          merchantInsights: {
+            targetCustomer: null,
+            peakSalesTime: null,
+            popularMenuNotes: menuIntro,
           },
         },
         {
