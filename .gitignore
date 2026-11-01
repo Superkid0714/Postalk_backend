@@ -37,8 +37,13 @@ dev-server.log
 *.md
 !README.md
 !docs/
-!docs/**/*.md
+!docs/API_CHANGES.md
+!docs/AWS_MEDIA_MIGRATION.md
+!docs/OPERATIONS.md
+!docs/CHANGELOG.md
 /migration-reports/
+/tmp/
+/public/merchant-*.png
 
 # env files (can opt-in for committing if needed)
 .env*
