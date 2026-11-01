@@ -1,3 +1,6 @@
+import { verifyStoreUpload } from "@/lib/files/verify-upload";
+import { requireStoreAccess } from "@/lib/auth/store-access";
+import { readRequestBody } from "@/lib/api/request-body";
 import { after } from "next/server";
 import type { NextRequest } from "next/server";
 
@@ -13,7 +16,7 @@ import { createSubmissionAndGenerationJobFromSession } from "@/lib/ad-session-ge
 import { prepareAdSessionDrafts } from "@/lib/ad-session-preparation";
 import { reviewPhotoAsset } from "@/lib/ai/photo-review";
 import { processGenerationJobById } from "@/lib/generation/process-job";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isUuid } from "@/lib/validation";
 
 type RouteContext = {
@@ -42,7 +45,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   let body: SubmitSessionPhotoBody;
 
   try {
-    body = (await request.json()) as SubmitSessionPhotoBody;
+    body = (await readRequestBody(request)) as SubmitSessionPhotoBody;
   } catch {
     return errorResponse("Invalid JSON body", 400, {
       code: "VALIDATION_ERROR",
@@ -72,7 +75,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
   }
 
-  const supabase = getSupabaseAdminClient();
+  const accessError = await requireStoreAccess(request, { sessionId });
+  if (accessError) return accessError;
+
+  const supabase = getSupabaseServiceClient();
   const { data: session, error } = await supabase
     .from("ad_creation_sessions")
     .select(`
@@ -152,6 +158,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
       code: "SESSION_MEDIA_TYPE_MISMATCH",
     });
   }
+
+  const fileError = await verifyStoreUpload(supabase, session.store_id, body, currentRequest.assetType);
+  if (fileError) return fileError;
 
   let review;
 
@@ -373,7 +382,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   after(async () => {
     try {
-      await processGenerationJobById(generation.jobId);
+      const processed = await processGenerationJobById(generation.jobId);
+      if (processed.status !== "completed") return;
       await supabase
         .from("ad_creation_sessions")
         .update({

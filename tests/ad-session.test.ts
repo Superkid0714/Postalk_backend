@@ -205,7 +205,6 @@ test("buildDraftSubmissionFromSession keeps menu intro and store specialty separ
         owner_name: "홍길동",
         category: "restaurant_food",
         description: "시장 안 오래된 백반집",
-        location_address: "광주 북구 동문대로",
       },
       ad_creation_session_assets: [],
     },

@@ -67,7 +67,7 @@ export async function resolveActivatedStoreFromQrToken(
 ) {
   const qrResult = await loadMerchantQrByToken(supabase, qrToken);
 
-  if (qrResult.error || !qrResult.data || !qrResult.data.assigned_store_id) {
+  if (qrResult.error || !qrResult.data || qrResult.data.status !== "activated" || !qrResult.data.assigned_store_id) {
     return {
       qr: qrResult.data ?? null,
       store: null as MerchantQrStoreRecord | null,
@@ -98,7 +98,7 @@ export function mapMerchantQrResponse(
     status: record.status,
     isAssigned: Boolean(record.assigned_store_id),
     entryUrl: buildMerchantQrEntryUrl(origin, record.qr_token),
-    qrImageUrl: `${origin}/api/admin/merchant-qrs/${record.qr_token}/image`,
+    qrImageUrl: `${origin}/api/merchant-qrs/${record.qr_token}/image`,
     assignedAt: record.assigned_at,
     createdAt: record.created_at,
     updatedAt: record.updated_at,

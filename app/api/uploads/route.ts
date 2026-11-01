@@ -1,3 +1,4 @@
+import { requireStoreAccess } from "@/lib/auth/store-access";
 import { randomUUID } from "node:crypto";
 
 import type { NextRequest } from "next/server";
@@ -5,7 +6,7 @@ import type { NextRequest } from "next/server";
 import { errorResponse, successResponse } from "@/lib/api/response";
 import { sanitizeFileName } from "@/lib/files";
 import { resolveActivatedStoreFromQrToken } from "@/lib/merchant-qr";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { resolveStore } from "@/lib/stores";
 import { isUuid } from "@/lib/validation";
 
@@ -88,12 +89,16 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const supabase = getSupabaseAdminClient();
+  const supabase = getSupabaseServiceClient();
 
   const activatedQrStoreLookup =
     typeof qrTokenValue === "string" && qrTokenValue.trim()
       ? await resolveActivatedStoreFromQrToken(supabase, qrTokenValue.trim())
       : null;
+
+  if (typeof qrTokenValue === "string" && qrTokenValue.trim() && !activatedQrStoreLookup?.store) {
+    return errorResponse("Invalid or inactive merchant QR", 401, { code: "UNAUTHORIZED" });
+  }
 
   const storeLookup =
     activatedQrStoreLookup?.store
@@ -135,6 +140,10 @@ export async function POST(request: NextRequest) {
       code: "STORE_NOT_FOUND",
     });
   }
+
+
+  const accessError = await requireStoreAccess(request, { storeId: storeLookup.data.id }, typeof qrTokenValue === "string" ? qrTokenValue : undefined);
+  if (accessError) return accessError;
 
   const assetId = randomUUID();
   const safeFileName = sanitizeFileName(fileValue.name);

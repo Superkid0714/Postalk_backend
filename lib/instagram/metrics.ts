@@ -1,6 +1,6 @@
 import { getInstagramEnv } from "@/lib/env";
 import { fetchWithTimeout } from "@/lib/http";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 import { getInstagramPublishMetadata } from "./publish";
 
@@ -99,54 +99,15 @@ function getInstagramMetricsMetadata(
   return aiMetadata.instagramMetrics as InstagramMetricsMetadata;
 }
 
-function mergeInstagramMetricsMetadata(
-  aiMetadata: Record<string, unknown> | null | undefined,
-  updates: Partial<InstagramMetricsMetadata>,
-) {
-  const base = isObject(aiMetadata) ? aiMetadata : {};
-  const current = getInstagramMetricsMetadata(aiMetadata);
-
-  return {
-    ...base,
-    instagramMetrics: {
-      ...current,
-      ...updates,
-    },
-  };
-}
-
-async function updateInstagramMetricsMetadata(
-  submissionId: string,
-  updates: Partial<InstagramMetricsMetadata>,
-) {
-  const supabase = getSupabaseAdminClient();
-  const { data: currentSubmission, error: currentSubmissionError } = await supabase
-    .from("submissions")
-    .select("id, ai_metadata")
-    .eq("id", submissionId)
-    .single();
-
-  if (currentSubmissionError || !currentSubmission) {
-    throw new Error("Submission not found");
-  }
-
-  const { error } = await supabase
-    .from("submissions")
-    .update({
-      ai_metadata: mergeInstagramMetricsMetadata(
-        currentSubmission.ai_metadata as Record<string, unknown> | null,
-        updates,
-      ),
-    })
-    .eq("id", submissionId);
-
-  if (error) {
-    throw new Error(error.message);
-  }
+async function updateInstagramMetricsMetadata(submissionId: string, updates: Partial<InstagramMetricsMetadata>) {
+  const { error } = await getSupabaseServiceClient().rpc("update_submission_instagram_metadata", {
+    p_submission_id: submissionId, p_section: "instagramMetrics", p_updates: updates,
+  });
+  if (error) throw new Error(error.message);
 }
 
 async function loadSubmission(submissionId: string) {
-  const supabase = getSupabaseAdminClient();
+  const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase
     .from("submissions")
     .select("id, ai_metadata")

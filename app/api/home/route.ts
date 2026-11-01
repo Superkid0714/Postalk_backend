@@ -1,3 +1,4 @@
+import { requireStoreAccess } from "@/lib/auth/store-access";
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/response";
@@ -9,7 +10,7 @@ import {
   type SubmissionAssetRecord,
   type SubmissionHomeRecord,
 } from "@/lib/submissions/home";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isUuid } from "@/lib/validation";
 
 type StoreRecord = {
@@ -25,7 +26,7 @@ type SubmissionAssetRow = SubmissionAssetRecord & {
 type AttentionSubmissionRecord = SubmissionHomeRecord;
 type MyAdSubmissionRecord = SubmissionHomeRecord;
 type SubmissionStatusRecord = {
-  status: "pending_review" | "approved" | "rejected";
+  status: "draft" | "published";
 };
 
 function attachSubmissionAssets<
@@ -64,7 +65,7 @@ async function getSignedThumbnailUrl(asset: SubmissionAssetRecord | null) {
     return null;
   }
 
-  const supabase = getSupabaseAdminClient();
+  const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase.storage
     .from(asset.storage_bucket)
     .createSignedUrl(asset.file_path, 60 * 60);
@@ -93,7 +94,10 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const supabase = getSupabaseAdminClient();
+  const accessError = await requireStoreAccess(request, { storeId });
+  if (accessError) return accessError;
+
+  const supabase = getSupabaseServiceClient();
 
   const [
     { data: store, error: storeError },
@@ -124,7 +128,7 @@ export async function GET(request: NextRequest) {
         `,
       )
       .eq("store_id", storeId)
-      .in("status", ["pending_review", "rejected"])
+      .eq("status", "draft")
       .order("updated_at", { ascending: false })
       .limit(5)
       .returns<AttentionSubmissionRecord[]>(),
@@ -269,12 +273,8 @@ export async function GET(request: NextRequest) {
   const myAdsWithAssets = attachSubmissionAssets(myAds ?? [], submissionAssets ?? []);
   const normalizedSubmissionStatuses = submissionStatuses ?? [];
 
-  const normalizedPendingReviewCount = normalizedSubmissionStatuses.filter(
-    (submission) => submission.status === "pending_review",
-  ).length;
-  const normalizedNeedsFixCount = normalizedSubmissionStatuses.filter(
-    (submission) => submission.status === "rejected",
-  ).length;
+  const draftCount = normalizedSubmissionStatuses.filter(submission => submission.status === "draft").length;
+  const publishedCount = normalizedSubmissionStatuses.filter(submission => submission.status === "published").length;
 
   const attentionItems = await Promise.all(
     attentionSubmissionsWithAssets.map(async (submission) => {
@@ -316,10 +316,9 @@ export async function GET(request: NextRequest) {
       summary: {
         ownerName: store.owner_name ?? "사장님",
         storeName: store.store_name,
-        pendingReviewCount: normalizedPendingReviewCount,
-        needsFixCount: normalizedNeedsFixCount,
-        totalAttentionCount:
-          normalizedPendingReviewCount + normalizedNeedsFixCount,
+        draftCount,
+        publishedCount,
+        totalCount: draftCount + publishedCount,
       },
       attentionItems,
       myAds: myAdItems,

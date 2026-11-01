@@ -21,3 +21,19 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+
+  generation-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      GENERATION_WORKER_BASE_URL: http://postalk-web:3000
+    command: ["node", "scripts/generation-worker.mjs"]
+    depends_on:
+      postalk-web:
+        condition: service_healthy
+    healthcheck:
+      disable: true

@@ -8,7 +8,7 @@ import {
 } from "@/lib/merchant-qr";
 import { getPhotoGuideByCategory } from "@/lib/photo-guides";
 import { isStoreCategoryCode, STORE_CATEGORY_OPTIONS } from "@/lib/store-categories";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +24,7 @@ export async function GET(
     });
   }
 
-  const supabase = getSupabaseAdminClient();
+  const supabase = getSupabaseServiceClient();
   const { data: qr, error } = await loadMerchantQrByToken(supabase, qrToken);
 
   if (error || !qr) {

@@ -1,7 +1,8 @@
+import { requireStoreAccess } from "@/lib/auth/store-access";
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/response";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isUuid } from "@/lib/validation";
 
 type RouteContext = {
@@ -10,7 +11,7 @@ type RouteContext = {
   }>;
 };
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
 
   if (!isUuid(id)) {
@@ -19,7 +20,10 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     });
   }
 
-  const supabase = getSupabaseAdminClient();
+  const accessError = await requireStoreAccess(request, { jobId: id });
+  if (accessError) return accessError;
+
+  const supabase = getSupabaseServiceClient();
 
   const { data: job, error } = await supabase
     .from("generation_jobs")

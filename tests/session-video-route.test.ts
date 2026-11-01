@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { resolveDurationSeconds } from "../app/api/ad-sessions/[sessionId]/videos/route.ts";
+import { resolveDurationSeconds } from "../lib/files/video-duration.ts";
 
 test("resolveDurationSeconds accepts any positive durationSeconds value", () => {
   assert.equal(resolveDurationSeconds({ durationSeconds: 0.7 }), 0.7);

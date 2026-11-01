@@ -1,6 +1,7 @@
+import { withPublishLock } from "@/lib/instagram/publish-lock";
 import { getInstagramEnv } from "@/lib/env";
 import { fetchWithTimeout } from "@/lib/http";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 type InstagramMediaType = "photo" | "video";
 
@@ -28,7 +29,7 @@ export type InstagramPublishMetadata = {
 
 type InstagramSubmissionRow = {
   id: string;
-  status: "pending_review" | "approved" | "rejected";
+  status: "draft" | "published";
   caption: string | null;
   hashtags: string[] | null;
   target_menu_name: string;
@@ -288,38 +289,15 @@ async function fetchPublishedMediaPermalink(mediaId: string) {
   return response.permalink ?? null;
 }
 
-async function updateInstagramMetadata(
-  submissionId: string,
-  updates: Partial<InstagramPublishMetadata>,
-) {
-  const supabase = getSupabaseAdminClient();
-  const { data: currentSubmission, error: currentSubmissionError } = await supabase
-    .from("submissions")
-    .select("id, ai_metadata")
-    .eq("id", submissionId)
-    .single();
-
-  if (currentSubmissionError || !currentSubmission) {
-    throw new Error("Submission not found");
-  }
-
-  const { error } = await supabase
-    .from("submissions")
-    .update({
-      ai_metadata: mergeInstagramPublishMetadata(
-        currentSubmission.ai_metadata as Record<string, unknown> | null,
-        updates,
-      ),
-    })
-    .eq("id", submissionId);
-
-  if (error) {
-    throw new Error(error.message);
-  }
+async function updateInstagramMetadata(submissionId: string, updates: Partial<InstagramPublishMetadata>) {
+  const { error } = await getSupabaseServiceClient().rpc("update_submission_instagram_metadata", {
+    p_submission_id: submissionId, p_section: "instagramPublish", p_updates: updates,
+  });
+  if (error) throw new Error(error.message);
 }
 
 async function loadSubmission(submissionId: string) {
-  const supabase = getSupabaseAdminClient();
+  const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase
     .from("submissions")
     .select(
@@ -375,11 +353,11 @@ function resolveInstagramMediaType(
   const videoStatus = getVideoPublishRequestStatus(submission.ai_metadata);
   const photoStatus = getPhotoPublishRequestStatus(submission.ai_metadata);
 
-  if (videoStatus === "requested_publish" || videoStatus === "approved") {
+  if (videoStatus === "publishing" || videoStatus === "published") {
     return "video";
   }
 
-  if (photoStatus === "requested_publish" || photoStatus === "approved") {
+  if (photoStatus === "publishing" || photoStatus === "published") {
     return "photo";
   }
 
@@ -440,12 +418,13 @@ function resolveCarouselAssetsFromJob(
         null
       );
     })
-    .filter((asset): asset is InstagramPublishAsset => Boolean(asset));
+    .filter((asset): asset is InstagramPublishAsset => Boolean(asset) && asset?.asset_type === "generated_image");
 
-  return resolvedAssets.length > 1 ? resolvedAssets : null;
+  return resolvedAssets.length === generatedImages.length && new Set(resolvedAssets.map(asset => asset.id)).size === generatedImages.length
+    ? resolvedAssets : null;
 }
 
-function pickAssetsForInstagram(
+export function pickAssetsForInstagram(
   submission: InstagramSubmissionRow,
   mediaType: InstagramMediaType,
 ): InstagramPublishAssetSelection | null {
@@ -460,8 +439,8 @@ function pickAssetsForInstagram(
     }
 
     return mediaType === "video"
-      ? job.model_name.startsWith("veo")
-      : !job.model_name.startsWith("veo");
+      ? job.model_name.startsWith("veo") || job.model_name === "render-quote-video"
+      : !job.model_name.startsWith("veo") && job.model_name !== "render-quote-video";
   });
 
   if (mediaType === "photo") {
@@ -474,10 +453,12 @@ function pickAssetsForInstagram(
         sourceJobId: relevantJob?.id ?? null,
       };
     }
+    const plannedImages = relevantJob?.result_payload?.generatedImages;
+    if (Array.isArray(plannedImages) && plannedImages.length > 1) return null;
   }
 
   if (relevantJob?.result_asset_id) {
-    const matchedAsset = assets.find((asset) => asset.id === relevantJob.result_asset_id);
+    const matchedAsset = assets.find((asset) => asset.id === relevantJob.result_asset_id && asset.asset_type === (mediaType === "video" ? "generated_video" : "generated_image"));
     if (matchedAsset) {
       return {
         publishMode: "single",
@@ -487,24 +468,11 @@ function pickAssetsForInstagram(
     }
   }
 
-  const targetAssetType = mediaType === "video" ? "generated_video" : "generated_image";
-  const fallbackAsset = [...assets]
-    .filter((asset) => asset.asset_type === targetAssetType)
-    .sort((left, right) => right.created_at.localeCompare(left.created_at))[0] ?? null;
-
-  if (!fallbackAsset) {
-    return null;
-  }
-
-  return {
-    publishMode: "single",
-    assets: [fallbackAsset],
-    sourceJobId: null,
-  };
+  return null;
 }
 
 async function createSignedAssetUrl(bucket: string, filePath: string) {
-  const supabase = getSupabaseAdminClient();
+  const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase.storage
     .from(bucket)
     .createSignedUrl(filePath, 60 * 60 * 6);
@@ -734,7 +702,7 @@ export function isInstagramConfigured() {
   return Boolean(getInstagramConfig());
 }
 
-export async function startInstagramPublishForSubmission(
+async function startClaimedInstagramPublish(
   submissionId: string,
   options?: {
     mediaType?: InstagramMediaType;
@@ -747,8 +715,9 @@ export async function startInstagramPublishForSubmission(
 
   const submission = await loadSubmission(submissionId);
 
-  if (submission.status !== "approved") {
-    throw new Error("Only approved submissions can be published to Instagram");
+  const existing = getInstagramPublishMetadata(submission.ai_metadata);
+  if (existing.status === "published" || existing.publishedMediaId || existing.status === "processing") {
+    return getStoredInstagramPublishForSubmission(submissionId);
   }
 
   const mediaType = resolveInstagramMediaType(submission, options?.mediaType);
@@ -857,7 +826,7 @@ export async function startInstagramPublishForSubmission(
   }
 }
 
-export async function syncInstagramPublishForSubmission(
+async function syncClaimedInstagramPublish(
   submissionId: string,
 ): Promise<InstagramPublishResult> {
   if (!isInstagramConfigured()) {
@@ -930,4 +899,22 @@ export async function waitForInstagramPublishCompletion(
   }
 
   return latestResult;
+}
+
+export async function getStoredInstagramPublishForSubmission(submissionId: string): Promise<InstagramPublishResult> {
+  const submission = await loadSubmission(submissionId);
+  const state = getInstagramPublishMetadata(submission.ai_metadata);
+  if (!state.status || !state.mediaType) throw new Error("Instagram publish job not found");
+  return { ok: state.status !== "failed", submissionId, mediaType: state.mediaType, status: state.status,
+    containerId: state.containerId ?? null, publishedMediaId: state.publishedMediaId ?? null,
+    permalink: state.permalink ?? null, caption: state.caption ?? null, lastError: state.lastError ?? null,
+    publishMode: state.publishMode ?? "single", carouselItemCount: state.carouselItemCount ?? undefined };
+}
+
+export async function startInstagramPublishForSubmission(submissionId: string, options?: { mediaType?: InstagramMediaType; captionOverride?: string }) {
+  return withPublishLock(submissionId, () => startClaimedInstagramPublish(submissionId, options));
+}
+
+export async function syncInstagramPublishForSubmission(submissionId: string) {
+  return withPublishLock(submissionId, () => syncClaimedInstagramPublish(submissionId));
 }

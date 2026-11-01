@@ -1,3 +1,5 @@
+import { readRequestBody } from "@/lib/api/request-body";
+import { requireStoreAccess } from "@/lib/auth/store-access";
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/response";
@@ -14,7 +16,7 @@ import {
   type StoreCategoryCode,
 } from "@/lib/store-categories";
 import { resolveStore } from "@/lib/stores";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 type ActivateMerchantQrBody = {
   marketName?: string;
@@ -39,7 +41,7 @@ export async function POST(
   let body: ActivateMerchantQrBody;
 
   try {
-    body = (await request.json()) as ActivateMerchantQrBody;
+    body = (await readRequestBody(request)) as ActivateMerchantQrBody;
   } catch {
     return errorResponse("Invalid JSON body", 400, {
       code: "VALIDATION_ERROR",
@@ -83,7 +85,7 @@ export async function POST(
     });
   }
 
-  const supabase = getSupabaseAdminClient();
+  const supabase = getSupabaseServiceClient();
   const { data: qr, error: qrError } = await loadMerchantQrByToken(supabase, qrToken);
 
   if (qrError || !qr) {
@@ -154,6 +156,11 @@ export async function POST(
 
     let assignedStoreId = existingStoreResult.data?.id ?? null;
 
+    if (assignedStoreId) {
+      const accessError = await requireStoreAccess(request, { storeId: assignedStoreId });
+      if (accessError) return accessError;
+    }
+
     if (!assignedStoreId) {
       const { data: createdStore, error: createdStoreError } = await supabase
         .from("stores")
@@ -210,6 +217,13 @@ export async function POST(
 
     const storeResult = await loadMerchantQrStore(supabase, assignedStoreId);
     store = storeResult.data ?? null;
+  }
+
+  if (qr.assigned_store_id && qr.status === "ready" && store) {
+    const { error: activationError } = await supabase.from("merchant_qr_tokens")
+      .update({ status: "activated", assigned_at: new Date().toISOString() })
+      .eq("id", qr.id).eq("status", "ready");
+    if (activationError) return errorResponse("Unable to activate merchant QR", 503, { code: "MERCHANT_QR_ACTIVATE_FAILED" });
   }
 
   const { data: finalQr, error: finalQrError } = await loadMerchantQrByToken(

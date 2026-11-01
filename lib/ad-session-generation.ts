@@ -94,7 +94,7 @@ export async function createSubmissionAndGenerationJobFromSession(params: {
           lastFailureReason: null,
         },
       ),
-      status: "pending_review",
+      status: "draft",
     })
     .select(`
       id,

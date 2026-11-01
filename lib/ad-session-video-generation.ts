@@ -100,7 +100,7 @@ export async function createVideoSubmissionAndGenerationJobFromSession(params: {
           lastFailureReason: null,
         },
       },
-      status: "pending_review",
+      status: "draft",
     })
     .select("id, ai_metadata")
     .single();

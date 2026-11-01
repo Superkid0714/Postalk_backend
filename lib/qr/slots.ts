@@ -44,30 +44,4 @@ export function buildQrEntryUrl(origin: string, slotKey: string) {
   return `${origin}/api/qr-entry/${slotKey}`;
 }
 
-export function mapQrSlotResponse(
-  slot: QrSlotRecord,
-  origin: string,
-  store?: StoreSummary | null,
-) {
-  return {
-    id: slot.id,
-    storeId: slot.store_id,
-    store: store
-      ? {
-          id: store.id,
-          marketName: store.market_name,
-          storeName: store.store_name,
-        }
-      : null,
-    slotKey: slot.slot_key,
-    label: buildQrSlotLabel(),
-    isActive: slot.is_active,
-    qrValue: buildQrEntryUrl(origin, slot.slot_key),
-    qrImageUrl: `${origin}/api/admin/qr-slots/${slot.slot_key}/image`,
-    metadata: slot.metadata ?? {},
-    createdAt: slot.created_at,
-    updatedAt: slot.updated_at,
-  };
-}
-
 export type { QrSlotRecord, StoreSummary };

@@ -1,8 +1,8 @@
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/response";
-import { getAdminApiKey } from "@/lib/env";
-import { processGenerationJobById } from "@/lib/generation/process-job";
+import { requireInternalWorkerKey } from "@/lib/auth/internal-worker";
+import { processAnyGenerationJob } from "@/lib/generation/process-any-job";
 import { isUuid } from "@/lib/validation";
 
 type RouteContext = {
@@ -11,22 +11,9 @@ type RouteContext = {
   }>;
 };
 
-function isAuthorized(request: NextRequest) {
-  const adminApiKey = getAdminApiKey();
-
-  if (!adminApiKey) {
-    return false;
-  }
-
-  return request.headers.get("x-admin-key") === adminApiKey;
-}
-
 export async function POST(request: NextRequest, context: RouteContext) {
-  if (!isAuthorized(request)) {
-    return errorResponse("Unauthorized", 401, {
-      code: "UNAUTHORIZED",
-    });
-  }
+  const authError = requireInternalWorkerKey(request);
+  if (authError) return authError;
 
   const { id } = await context.params;
 
@@ -37,7 +24,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   try {
-    const result = await processGenerationJobById(id);
+    const result = await processAnyGenerationJob(id);
 
     return successResponse(result, "Generation job processed");
   } catch (error) {

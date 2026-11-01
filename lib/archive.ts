@@ -1,4 +1,4 @@
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 import {
   getSubmissionTitle,
@@ -7,12 +7,7 @@ import {
 } from "@/lib/submissions/home";
 
 export const ARCHIVE_MEDIA_TYPES = ["photo", "video"] as const;
-export const ARCHIVE_STATUSES = [
-  "all",
-  "pending_review",
-  "rejected",
-  "approved",
-] as const;
+export const ARCHIVE_STATUSES = ["all", "draft", "published"] as const;
 export const VIDEO_ASSET_TYPES = ["generated_video", "video_thumbnail"] as const;
 
 export type ArchiveMediaType = (typeof ARCHIVE_MEDIA_TYPES)[number];
@@ -86,19 +81,8 @@ export function attachArchiveSubmissionAssets<
   }));
 }
 
-export function getArchiveStatusLabel(status: ArchiveStatus | "approved") {
-  switch (status) {
-    case "pending_review":
-      return "승인 대기중";
-    case "rejected":
-      return "보충 필요";
-    case "approved":
-      return "게시 완료";
-    case "all":
-      return "전체";
-    default:
-      return status;
-  }
+export function getArchiveStatusLabel(status: ArchiveStatus) {
+  return status === "all" ? "전체" : status === "published" ? "게시 완료" : "보관 중";
 }
 
 export async function getArchiveThumbnailUrl(
@@ -108,7 +92,7 @@ export async function getArchiveThumbnailUrl(
     return null;
   }
 
-  const supabase = getSupabaseAdminClient();
+  const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase.storage
     .from(asset.storage_bucket)
     .createSignedUrl(asset.file_path, 60 * 60);

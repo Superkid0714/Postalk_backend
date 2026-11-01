@@ -1,12 +1,12 @@
+import { requireStoreAccess } from "@/lib/auth/store-access";
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/response";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isUuid } from "@/lib/validation";
 import {
   getSubmissionVideoWorkflowMetadata,
 } from "@/lib/video-creation";
-import { processVideoJobById } from "@/lib/generation/process-video-job";
 
 type RouteContext = {
   params: Promise<{
@@ -14,7 +14,7 @@ type RouteContext = {
   }>;
 };
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(request: NextRequest, context: RouteContext) {
   const { jobId } = await context.params;
 
   if (!isUuid(jobId)) {
@@ -23,13 +23,10 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     });
   }
 
-  try {
-    await processVideoJobById(jobId);
-  } catch {
-    // The persisted job state is still returned below.
-  }
+  const accessError = await requireStoreAccess(request, { jobId });
+  if (accessError) return accessError;
 
-  const supabase = getSupabaseAdminClient();
+  const supabase = getSupabaseServiceClient();
   const { data: job, error } = await supabase
     .from("generation_jobs")
     .select(`
@@ -86,6 +83,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
         code: "VIDEO_JOB_NOT_FOUND",
       });
     }
+
+    const legacyAccessError = await requireStoreAccess(request, { submissionId: matchedSubmission.id });
+    if (legacyAccessError) return legacyAccessError;
 
     const workflow = getSubmissionVideoWorkflowMetadata(
       (matchedSubmission.ai_metadata as Record<string, unknown> | null) ?? null,

@@ -1,3 +1,6 @@
+import { generationConflictResponse } from "@/lib/generation/conflict";
+import { requireStoreAccess } from "@/lib/auth/store-access";
+import { readRequestBody } from "@/lib/api/request-body";
 import { after } from "next/server";
 import type { NextRequest } from "next/server";
 
@@ -11,7 +14,7 @@ import {
 } from "@/lib/ad-creation";
 import { type GenerationStylePreset } from "@/lib/ai/generation";
 import { processGenerationJobById } from "@/lib/generation/process-job";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isUuid } from "@/lib/validation";
 
 type RouteContext = {
@@ -48,9 +51,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
   let body: RegenerateBody = {};
 
   try {
-    body = (await request.json()) as RegenerateBody;
+    body = request.body ? (await readRequestBody(request)) as RegenerateBody : {};
   } catch {
-    body = {};
+    return errorResponse("Invalid JSON body", 400, { code: "VALIDATION_ERROR" });
   }
 
   if (body.stylePreset && !ALLOWED_STYLE_PRESETS.includes(body.stylePreset)) {
@@ -59,7 +62,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
   }
 
-  const supabase = getSupabaseAdminClient();
+  const accessError = await requireStoreAccess(request, { jobId });
+  if (accessError) return accessError;
+
+  const supabase = getSupabaseServiceClient();
 
   const { data: existingJob, error: existingJobError } = await supabase
     .from("generation_jobs")
@@ -154,6 +160,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
     })
     .select("id, status, created_at")
     .single();
+
+  const conflict = generationConflictResponse(newJobError);
+  if (conflict) return conflict;
 
   if (newJobError || !newJob) {
     return errorResponse("Failed to create regeneration job", 500, {

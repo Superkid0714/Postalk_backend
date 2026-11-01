@@ -43,8 +43,8 @@ export default function Home() {
           <h2 className="text-xl font-semibold text-white">다음 권장 순서</h2>
           <ol className="mt-4 list-decimal space-y-3 pl-5 text-stone-200">
             <li>Supabase 프로젝트 생성 및 환경 변수 설정</li>
-            <li>업로드, 관리자 검수, 인사이트 API 구현</li>
-            <li>STT/LLM 작업을 별도 워커로 분리</li>
+            <li>가게 QR 연결 후 콘텐츠 업로드 및 생성</li>
+            <li>생성 결과 확인 및 상인 직접 게시</li>
             <li>VPS 또는 클라우드에 Docker Compose로 배포</li>
           </ol>
         </section>

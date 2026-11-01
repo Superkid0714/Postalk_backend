@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 
 import { errorResponse } from "@/lib/api/response";
 import { loadMerchantQrByToken } from "@/lib/merchant-qr";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 type LegacyQrSlotRecord = {
   id: string;
@@ -72,7 +72,7 @@ export async function GET(
     });
   }
 
-  const supabase = getSupabaseAdminClient();
+  const supabase = getSupabaseServiceClient();
   const { data: merchantQr } = await loadMerchantQrByToken(supabase, slotKey);
 
   if (merchantQr) {

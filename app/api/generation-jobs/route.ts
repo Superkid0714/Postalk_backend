@@ -1,3 +1,6 @@
+import { generationConflictResponse } from "@/lib/generation/conflict";
+import { requireStoreAccess } from "@/lib/auth/store-access";
+import { readRequestBody } from "@/lib/api/request-body";
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/response";
@@ -7,7 +10,7 @@ import {
   validateStylePresetForSubmission,
   type GenerationStylePreset,
 } from "@/lib/ai/generation";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { resolveStore } from "@/lib/stores";
 import { isUuid } from "@/lib/validation";
 
@@ -69,7 +72,7 @@ export async function POST(request: NextRequest) {
   let body: CreateGenerationJobBody;
 
   try {
-    body = (await request.json()) as CreateGenerationJobBody;
+    body = (await readRequestBody(request)) as CreateGenerationJobBody;
   } catch {
     return errorResponse("Invalid JSON body", 400, {
       code: "VALIDATION_ERROR",
@@ -85,7 +88,10 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const supabase = getSupabaseAdminClient();
+  const accessError = await requireStoreAccess(request, { submissionId: body.submissionId! });
+  if (accessError) return accessError;
+
+  const supabase = getSupabaseServiceClient();
   const stylePreset = body.stylePreset ?? "menu_highlight";
 
   const { data: submission, error: submissionError } = await supabase
@@ -194,6 +200,9 @@ export async function POST(request: NextRequest) {
     })
     .select("id, status, created_at")
     .single();
+
+  const conflict = generationConflictResponse(insertError);
+  if (conflict) return conflict;
 
   if (insertError || !job) {
     return errorResponse("Failed to create generation job", 500, {

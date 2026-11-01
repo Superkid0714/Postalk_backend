@@ -1,8 +1,11 @@
+import { verifyStoreUpload } from "@/lib/files/verify-upload";
+import { requireStoreAccess } from "@/lib/auth/store-access";
+import { readRequestBody } from "@/lib/api/request-body";
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/response";
 import { resolveActivatedStoreFromQrToken } from "@/lib/merchant-qr";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { resolveStore } from "@/lib/stores";
 import { isUuid } from "@/lib/validation";
 
@@ -161,7 +164,7 @@ export async function POST(request: NextRequest) {
   let body: CreateSubmissionBody;
 
   try {
-    body = (await request.json()) as CreateSubmissionBody;
+    body = (await readRequestBody(request)) as CreateSubmissionBody;
   } catch {
     return errorResponse("Invalid JSON body", 400, {
       code: "VALIDATION_ERROR",
@@ -177,12 +180,16 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const supabase = getSupabaseAdminClient();
+  const supabase = getSupabaseServiceClient();
 
   const activatedQrStoreLookup =
     body.qrToken?.trim()
       ? await resolveActivatedStoreFromQrToken(supabase, body.qrToken.trim())
       : null;
+
+  if (body.qrToken?.trim() && !activatedQrStoreLookup?.store) {
+    return errorResponse("Invalid or inactive merchant QR", 401, { code: "UNAUTHORIZED" });
+  }
 
   const storeLookup =
     activatedQrStoreLookup?.store
@@ -208,6 +215,15 @@ export async function POST(request: NextRequest) {
     });
   }
 
+
+  const accessError = await requireStoreAccess(request, { storeId: storeLookup.data.id }, body.qrToken);
+  if (accessError) return accessError;
+
+  for (const asset of body.assets!) {
+    const fileError = await verifyStoreUpload(supabase, storeLookup.data.id, asset, asset.assetType);
+    if (fileError) return fileError;
+  }
+
   const { data: submission, error: submissionError } = await supabase
     .from("submissions")
     .insert({
@@ -225,7 +241,7 @@ export async function POST(request: NextRequest) {
       hashtags: body.hashtags ?? [],
       transcript: body.transcript?.trim() || null,
       ai_metadata: buildSubmissionAiMetadata(body),
-      status: "pending_review",
+      status: "draft",
     })
     .select("id, status, created_at")
     .single();

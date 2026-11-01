@@ -1,3 +1,4 @@
+import { withGenerationJobLease } from "@/lib/generation/job-lease";
 import {
   buildPromoCarouselPrompts,
   buildPromoPrompt,
@@ -8,14 +9,13 @@ import {
   normalizeStoreRelation,
   normalizeSubmissionRelation,
 } from "@/lib/ai/generation";
-import type { FoodCardNewsSourceAssets } from "@/lib/ai/food-card-news-render";
 import type { FoodCardNewsCreativePlan } from "@/lib/ai/food-card-news";
 import { reviewFoodCardNewsPlan } from "@/lib/ai/food-card-news-review";
 import {
   getSubmissionWorkflowMetadata,
   mergeSubmissionWorkflowMetadata,
 } from "@/lib/ad-creation";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -68,23 +68,6 @@ function readPrecomputedCaptionRequest(value: unknown) {
   };
 }
 
-function readAdSessionId(value: unknown) {
-  if (!isObject(value)) {
-    return null;
-  }
-
-  return typeof value.adSessionId === "string" && value.adSessionId.trim().length > 0
-    ? value.adSessionId
-    : null;
-}
-
-type SessionSourceAssetRow = {
-  shot_key: string;
-  storage_bucket: string;
-  file_path: string;
-  sort_order: number;
-};
-
 async function mapWithConcurrency<TInput, TOutput>(
   items: TInput[],
   concurrency: number,
@@ -107,137 +90,13 @@ async function mapWithConcurrency<TInput, TOutput>(
     }
   }
 
-  await Promise.all(
+  const workers = await Promise.allSettled(
     Array.from({ length: safeConcurrency }, () => runWorker()),
   );
+  const failure = workers.find(result => result.status === "rejected");
+  if (failure?.status === "rejected") throw failure.reason;
 
   return results;
-}
-
-function pickAssetByShot(
-  assets: SessionSourceAssetRow[],
-  shotKey: string,
-) {
-  return (
-    assets
-      .filter((asset) => asset.shot_key === shotKey)
-      .sort((left, right) => left.sort_order - right.sort_order)[0] ?? null
-  );
-}
-
-function pickFirstAvailableAsset(
-  assets: SessionSourceAssetRow[],
-  shotKeys: string[],
-) {
-  for (const shotKey of shotKeys) {
-    const matched = pickAssetByShot(assets, shotKey);
-
-    if (matched) {
-      return matched;
-    }
-  }
-
-  return assets.slice().sort((left, right) => left.sort_order - right.sort_order)[0] ?? null;
-}
-
-async function downloadAssetBytes(
-  supabase: ReturnType<typeof getSupabaseAdminClient>,
-  asset: SessionSourceAssetRow,
-) {
-  const { data, error } = await supabase.storage
-    .from(asset.storage_bucket)
-    .download(asset.file_path);
-
-  if (error || !data) {
-    throw new Error(error?.message ?? `Failed to download ${asset.file_path}`);
-  }
-
-  return Buffer.from(await data.arrayBuffer());
-}
-
-async function buildFoodCardNewsSourceAssets(params: {
-  supabase: ReturnType<typeof getSupabaseAdminClient>;
-  adSessionId: string;
-}) {
-  const { data: sessionAssets, error } = await params.supabase
-    .from("ad_creation_session_assets")
-    .select("shot_key, storage_bucket, file_path, sort_order")
-    .eq("session_id", params.adSessionId)
-    .order("sort_order", { ascending: true });
-
-  if (error || !sessionAssets || sessionAssets.length === 0) {
-    return null;
-  }
-
-  const assets = sessionAssets as SessionSourceAssetRow[];
-  const menuBoardAsset = pickFirstAvailableAsset(assets, ["menu_board"]);
-  const coverAsset = pickFirstAvailableAsset(assets, [
-    "signature_menu",
-    "flatlay_menu",
-    "detail_closeup",
-    "cooking_scene",
-    "menu_board",
-  ]);
-  const flatlayAsset = pickFirstAvailableAsset(assets, [
-    "flatlay_menu",
-    "signature_menu",
-    "detail_closeup",
-  ]);
-  const detailAsset = pickFirstAvailableAsset(assets, [
-    "detail_closeup",
-    "signature_menu",
-    "flatlay_menu",
-  ]);
-  const cookingAsset = pickFirstAvailableAsset(assets, [
-    "cooking_scene",
-    "detail_closeup",
-    "signature_menu",
-  ]);
-  const infoAsset = pickFirstAvailableAsset(assets, [
-    "signature_menu",
-    "flatlay_menu",
-    "menu_board",
-    "detail_closeup",
-  ]);
-
-  if (!menuBoardAsset || !coverAsset || !flatlayAsset || !detailAsset || !cookingAsset || !infoAsset) {
-    return null;
-  }
-
-  const [
-    menuBoard,
-    coverPhoto,
-    flatlayPhoto,
-    detailPhoto,
-    cookingPhoto,
-    infoPhoto,
-  ] = await Promise.all([
-    downloadAssetBytes(params.supabase, menuBoardAsset),
-    downloadAssetBytes(params.supabase, coverAsset),
-    downloadAssetBytes(params.supabase, flatlayAsset),
-    downloadAssetBytes(params.supabase, detailAsset),
-    downloadAssetBytes(params.supabase, cookingAsset),
-    downloadAssetBytes(params.supabase, infoAsset),
-  ]);
-
-  return {
-    assets: {
-      menuBoard,
-      coverPhoto,
-      flatlayPhoto,
-      detailPhoto,
-      cookingPhoto,
-      infoPhoto,
-    } satisfies FoodCardNewsSourceAssets,
-    slots: {
-      menuBoard: menuBoardAsset.shot_key,
-      coverPhoto: coverAsset.shot_key,
-      flatlayPhoto: flatlayAsset.shot_key,
-      detailPhoto: detailAsset.shot_key,
-      cookingPhoto: cookingAsset.shot_key,
-      infoPhoto: infoAsset.shot_key,
-    },
-  };
 }
 
 function pickMockSourceAsset(
@@ -267,7 +126,11 @@ function pickMockSourceAsset(
 }
 
 export async function processGenerationJobById(jobId: string) {
-  const supabase = getSupabaseAdminClient();
+  return withGenerationJobLease(jobId, () => processClaimedJob(jobId));
+}
+
+async function processClaimedJob(jobId: string) {
+  const supabase = getSupabaseServiceClient();
 
   const { data: job, error: jobError } = await supabase
     .from("generation_jobs")
@@ -311,14 +174,6 @@ export async function processGenerationJobById(jobId: string) {
 
   if (jobError || !job) {
     throw new Error("Generation job not found");
-  }
-
-  if (job.status === "processing") {
-    return {
-      jobId: job.id,
-      status: job.status,
-      alreadyProcessing: true,
-    };
   }
 
   if (job.status === "completed") {

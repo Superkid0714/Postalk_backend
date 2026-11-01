@@ -10,9 +10,9 @@ export type PublishRequestStatus =
   | "draft"
   | "generating"
   | "generated"
-  | "requested_publish"
-  | "approved"
-  | "rejected";
+  | "publishing"
+  | "published"
+  | "publish_failed";
 
 export type SubmissionWorkflowMetadata = {
   adType?: AdType;

@@ -4,7 +4,7 @@ type EnvKey =
   | "SUPABASE_SERVICE_ROLE_KEY";
 
 type OptionalEnvKey =
-  | "ADMIN_API_KEY"
+  | "INTERNAL_WORKER_API_KEY"
   | "OPENAI_API_KEY"
   | "GEMINI_API_KEY"
   | "GEMINI_VIDEO_MODEL"
@@ -64,15 +64,15 @@ export function getSupabaseEnv() {
   };
 }
 
-export function getSupabaseAdminEnv() {
+export function getSupabaseServiceEnv() {
   return {
     url: readEnv("NEXT_PUBLIC_SUPABASE_URL"),
     serviceRoleKey: readEnv("SUPABASE_SERVICE_ROLE_KEY"),
   };
 }
 
-export function getAdminApiKey() {
-  return readOptionalEnv("ADMIN_API_KEY");
+export function getInternalWorkerApiKey() {
+  return readOptionalEnv("INTERNAL_WORKER_API_KEY");
 }
 
 export function getOpenAiApiKey() {

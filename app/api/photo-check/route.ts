@@ -1,3 +1,6 @@
+import { verifyStoreUpload } from "@/lib/files/verify-upload";
+import { requireStoreAccess } from "@/lib/auth/store-access";
+import { readRequestBody } from "@/lib/api/request-body";
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/response";
@@ -5,7 +8,7 @@ import { reviewPhotoAsset } from "@/lib/ai/photo-review";
 import { findPhotoGuideShot } from "@/lib/photo-guides";
 import { resolveActivatedStoreFromQrToken } from "@/lib/merchant-qr";
 import { resolveStore } from "@/lib/stores";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import {
   isStoreCategoryCode,
   type StoreCategoryCode,
@@ -34,7 +37,7 @@ export async function POST(request: NextRequest) {
   let body: PhotoCheckBody;
 
   try {
-    body = (await request.json()) as PhotoCheckBody;
+    body = (await readRequestBody(request)) as PhotoCheckBody;
   } catch {
     return errorResponse("Invalid JSON body", 400, {
       code: "VALIDATION_ERROR",
@@ -111,12 +114,16 @@ export async function POST(request: NextRequest) {
   }
 
   const category = body.category!.trim() as StoreCategoryCode;
-  const supabase = getSupabaseAdminClient();
+  const supabase = getSupabaseServiceClient();
 
   const activatedQrStoreLookup =
     body.qrToken?.trim()
       ? await resolveActivatedStoreFromQrToken(supabase, body.qrToken.trim())
       : null;
+
+  if (body.qrToken?.trim() && !activatedQrStoreLookup?.store) {
+    return errorResponse("Invalid or inactive merchant QR", 401, { code: "UNAUTHORIZED" });
+  }
 
   const storeLookup =
     activatedQrStoreLookup?.store
@@ -140,6 +147,13 @@ export async function POST(request: NextRequest) {
       code: "STORE_NOT_FOUND",
     });
   }
+
+  const accessError = await requireStoreAccess(request, { storeId: storeLookup.data.id }, body.qrToken);
+  if (accessError) return accessError;
+  const fileError = await verifyStoreUpload(supabase, storeLookup.data.id, body, body.assetType);
+  if (fileError) return fileError;
+
+
 
   const expectedPrefix = `stores/${storeLookup.data.id}/`;
 

@@ -1,9 +1,9 @@
+import { requireStoreAccess } from "@/lib/auth/store-access";
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/response";
 import {
   ARCHIVE_STATUSES,
-  VIDEO_ASSET_TYPES,
   attachArchiveSubmissionAssets,
   buildArchiveItem,
   isArchiveMediaType,
@@ -12,7 +12,7 @@ import {
   type ArchiveStatus,
   type ArchiveSubmissionRecord,
 } from "@/lib/archive";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isUuid } from "@/lib/validation";
 
 function buildArchiveQuery(params: {
@@ -21,7 +21,7 @@ function buildArchiveQuery(params: {
   status: ArchiveStatus;
   submissionIds?: string[] | null;
 }) {
-  const supabase = getSupabaseAdminClient();
+  const supabase = getSupabaseServiceClient();
 
   let query = supabase
     .from("submissions")
@@ -67,7 +67,7 @@ function buildCountQuery(params: {
   status: Exclude<ArchiveStatus, "all">;
   submissionIds?: string[] | null;
 }) {
-  const supabase = getSupabaseAdminClient();
+  const supabase = getSupabaseServiceClient();
 
   let query = supabase
     .from("submissions")
@@ -84,12 +84,12 @@ function buildCountQuery(params: {
   return query;
 }
 
-async function getVideoSubmissionIds(storeId: string) {
-  const supabase = getSupabaseAdminClient();
+async function getMediaSubmissionIds(storeId: string, mediaType: "photo" | "video") {
+  const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase
     .from("submission_assets")
     .select("submission_id, submissions!inner(store_id)")
-    .in("asset_type", [...VIDEO_ASSET_TYPES])
+    .eq("asset_type", mediaType === "photo" ? "generated_image" : "generated_video")
     .eq("submissions.store_id", storeId);
 
   if (error) {
@@ -148,10 +148,13 @@ export async function GET(request: NextRequest) {
 
   const limit =
     typeof limitParam === "string" && Number.isFinite(Number(limitParam))
-      ? Math.min(Math.max(Number(limitParam), 1), 50)
+      ? Math.min(Math.max(Math.trunc(Number(limitParam)), 1), 50)
       : 20;
 
-  const supabase = getSupabaseAdminClient();
+  const accessError = await requireStoreAccess(request, { storeId });
+  if (accessError) return accessError;
+
+  const supabase = getSupabaseServiceClient();
 
   const { data: store, error: storeError } = await supabase
     .from("stores")
@@ -165,42 +168,21 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const videoSubmissionIdsResult =
-    mediaTypeValue === "video" ? await getVideoSubmissionIds(storeId) : null;
-
-  if (videoSubmissionIdsResult?.error) {
-    return errorResponse("Failed to load archive data", 500, {
-      code: "ARCHIVE_LOAD_FAILED",
-      details: {
-        videoSubmissionIdsError: videoSubmissionIdsResult.error.message,
-      },
-    });
-  }
-
-  const mediaSubmissionIds =
-    mediaTypeValue === "video" ? (videoSubmissionIdsResult?.data ?? []) : null;
+  const mediaIds = await getMediaSubmissionIds(storeId, mediaTypeValue);
+  if (mediaIds.error) return errorResponse("Unable to load archive assets", 503, { code: "ARCHIVE_LOAD_FAILED" });
+  const mediaSubmissionIds = mediaIds.data ?? [];
 
   const [
-    { count: pendingReviewCount, error: pendingReviewError },
-    { count: rejectedCount, error: rejectedError },
-    { count: approvedCount, error: approvedError },
+    { count: draftCount, error: draftError },
+    { count: publishedCount, error: publishedError },
     { data: submissions, error: submissionsError },
   ] = await Promise.all([
     buildCountQuery({
       storeId,
-      status: "pending_review",
+      status: "draft",
       submissionIds: mediaSubmissionIds,
     }),
-    buildCountQuery({
-      storeId,
-      status: "rejected",
-      submissionIds: mediaSubmissionIds,
-    }),
-    buildCountQuery({
-      storeId,
-      status: "approved",
-      submissionIds: mediaSubmissionIds,
-    }),
+    buildCountQuery({ storeId, status: "published", submissionIds: mediaSubmissionIds }),
     buildArchiveQuery({
       storeId,
       status: statusValue,
@@ -210,17 +192,15 @@ export async function GET(request: NextRequest) {
   ]);
 
   if (
-    pendingReviewError ||
-    rejectedError ||
-    approvedError ||
+    draftError ||
+    publishedError ||
     submissionsError
   ) {
     return errorResponse("Failed to load archive data", 500, {
       code: "ARCHIVE_LOAD_FAILED",
       details: {
-        pendingReviewError: pendingReviewError?.message ?? null,
-        rejectedError: rejectedError?.message ?? null,
-        approvedError: approvedError?.message ?? null,
+        draftError: draftError?.message ?? null,
+        publishedError: publishedError?.message ?? null,
         submissionsError: submissionsError?.message ?? null,
       },
     });
@@ -273,13 +253,9 @@ export async function GET(request: NextRequest) {
         mediaType: mediaTypeValue,
         selectedStatus: statusValue,
         counts: {
-          all:
-            (pendingReviewCount ?? 0) +
-            (rejectedCount ?? 0) +
-            (approvedCount ?? 0),
-          pendingReview: pendingReviewCount ?? 0,
-          rejected: rejectedCount ?? 0,
-          approved: approvedCount ?? 0,
+          all: (draftCount ?? 0) + (publishedCount ?? 0),
+          draft: draftCount ?? 0,
+          published: publishedCount ?? 0,
         },
       },
       items,

@@ -1,7 +1,10 @@
-import type { NextRequest } from "next/server";
+import { requireStoreAccess } from "@/lib/auth/store-access";
+import { readRequestBody } from "@/lib/api/request-body";
+import { NextRequest } from "next/server";
+import { POST as startVideoCreation } from "@/app/api/video-creations/start/route";
 
 import { errorResponse } from "@/lib/api/response";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isUuid } from "@/lib/validation";
 import { getSubmissionVideoWorkflowMetadata } from "@/lib/video-creation";
 
@@ -15,6 +18,15 @@ type RegenerateVideoBody = {
   mockMode?: boolean;
 };
 
+function forwardedHeaders(request: NextRequest) {
+  const headers = new Headers({ "Content-Type": "application/json" });
+  for (const name of ["x-merchant-qr-token"]) {
+    const value = request.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+  return headers;
+}
+
 export async function POST(request: NextRequest, context: RouteContext) {
   const { jobId } = await context.params;
 
@@ -27,12 +39,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
   let body: RegenerateVideoBody = {};
 
   try {
-    body = (await request.json()) as RegenerateVideoBody;
+    body = request.body ? (await readRequestBody(request)) as RegenerateVideoBody : {};
   } catch {
-    body = {};
+    return errorResponse("Invalid JSON body", 400, { code: "VALIDATION_ERROR" });
   }
 
-  const supabase = getSupabaseAdminClient();
+  const accessError = await requireStoreAccess(request, { jobId });
+  if (accessError) return accessError;
+
+  const supabase = getSupabaseServiceClient();
   const { data: job, error } = await supabase
     .from("generation_jobs")
     .select("submission_id, style_preset, image_size, quality")
@@ -79,13 +94,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       mockMode: body.mockMode === true || workflow.mockMode === true,
     };
 
-    return fetch(new URL("/api/video-creations/start", request.url), {
+    return startVideoCreation(new NextRequest(new URL("/api/video-creations/start", request.url), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: forwardedHeaders(request),
       body: JSON.stringify(forwardedBody),
-    });
+    }));
   }
 
   const forwardedBody = {
@@ -97,11 +110,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
     mockMode: body.mockMode === true,
   };
 
-  return fetch(new URL("/api/video-creations/start", request.url), {
+  return startVideoCreation(new NextRequest(new URL("/api/video-creations/start", request.url), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: forwardedHeaders(request),
     body: JSON.stringify(forwardedBody),
-  });
+  }));
 }

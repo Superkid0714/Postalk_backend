@@ -1,3 +1,7 @@
+import { verifyStoreUpload } from "@/lib/files/verify-upload";
+import { resolveDurationSeconds } from "@/lib/files/video-duration";
+import { requireStoreAccess } from "@/lib/auth/store-access";
+import { readRequestBody } from "@/lib/api/request-body";
 import { after } from "next/server";
 import type { NextRequest } from "next/server";
 
@@ -11,7 +15,7 @@ import {
 } from "@/lib/ad-session";
 import { createVideoSubmissionAndGenerationJobFromSession } from "@/lib/ad-session-video-generation";
 import { processVideoJobById } from "@/lib/generation/process-video-job";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isUuid } from "@/lib/validation";
 
 type RouteContext = {
@@ -63,7 +67,7 @@ function resolveOriginalShotKey(reviewPayload: unknown, fallback: string) {
 }
 
 async function insertSessionVideoAsset(params: {
-  supabase: ReturnType<typeof getSupabaseAdminClient>;
+  supabase: ReturnType<typeof getSupabaseServiceClient>;
   sessionId: string;
   shotKey: string;
   bucket: string;
@@ -129,26 +133,6 @@ async function insertSessionVideoAsset(params: {
   };
 }
 
-export function resolveDurationSeconds(body: SubmitSessionVideoBody) {
-  if (
-    typeof body.durationSeconds === "number" &&
-    Number.isFinite(body.durationSeconds) &&
-    body.durationSeconds > 0
-  ) {
-    return body.durationSeconds;
-  }
-
-  if (
-    typeof body.durationMs === "number" &&
-    Number.isFinite(body.durationMs) &&
-    body.durationMs > 0
-  ) {
-    return body.durationMs / 1000;
-  }
-
-  return null;
-}
-
 export async function POST(request: NextRequest, context: RouteContext) {
   const { sessionId } = await context.params;
 
@@ -161,7 +145,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   let body: SubmitSessionVideoBody;
 
   try {
-    body = (await request.json()) as SubmitSessionVideoBody;
+    body = (await readRequestBody(request)) as SubmitSessionVideoBody;
   } catch {
     return errorResponse("Invalid JSON body", 400, {
       code: "VALIDATION_ERROR",
@@ -192,7 +176,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
   }
 
-  const supabase = getSupabaseAdminClient();
+  const accessError = await requireStoreAccess(request, { sessionId });
+  if (accessError) return accessError;
+
+  const supabase = getSupabaseServiceClient();
   const { data: session, error } = await supabase
     .from("ad_creation_sessions")
     .select(`
@@ -255,6 +242,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
       },
     });
   }
+
+  const fileError = await verifyStoreUpload(supabase, session.store_id, body, "video_clip");
+  if (fileError) return fileError;
 
   const workflow = normalizeAdSessionWorkflow(session.workflow);
   const category = getDefaultSessionCategory(store.category);
@@ -462,7 +452,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   after(async () => {
     try {
-      await processVideoJobById(generation.jobId);
+      const processed = await processVideoJobById(generation.jobId);
+      if (processed.status !== "completed") return;
       await supabase
         .from("ad_creation_sessions")
         .update({

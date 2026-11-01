@@ -1,3 +1,4 @@
+import { requireStoreAccess } from "@/lib/auth/store-access";
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/response";
@@ -7,9 +8,7 @@ import {
   getRequestedShot,
   normalizeAdSessionWorkflow,
 } from "@/lib/ad-session";
-import { processGenerationJobById } from "@/lib/generation/process-job";
-import { processVideoJobById } from "@/lib/generation/process-video-job";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isUuid } from "@/lib/validation";
 
 type RouteContext = {
@@ -18,7 +17,7 @@ type RouteContext = {
   }>;
 };
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(request: NextRequest, context: RouteContext) {
   const { sessionId } = await context.params;
 
   if (!isUuid(sessionId)) {
@@ -27,7 +26,10 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     });
   }
 
-  const supabase = getSupabaseAdminClient();
+  const accessError = await requireStoreAccess(request, { sessionId });
+  if (accessError) return accessError;
+
+  const supabase = getSupabaseServiceClient();
   const { data: session, error } = await supabase
     .from("ad_creation_sessions")
     .select(`
@@ -71,18 +73,6 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     return errorResponse("Ad session not found", 404, {
       code: "AD_SESSION_NOT_FOUND",
     });
-  }
-
-  if (session.generation_job_id && (session.status === "generating" || session.status === "ready_for_generation")) {
-    try {
-      if (session.ad_type === "video") {
-        await processVideoJobById(session.generation_job_id);
-      } else {
-        await processGenerationJobById(session.generation_job_id);
-      }
-    } catch {
-      // Persisted state is returned below.
-    }
   }
 
   const workflow = normalizeAdSessionWorkflow(session.workflow);

@@ -1,3 +1,6 @@
+import { generationConflictResponse } from "@/lib/generation/conflict";
+import { requireStoreAccess } from "@/lib/auth/store-access";
+import { readRequestBody } from "@/lib/api/request-body";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -11,7 +14,7 @@ import {
   type VideoResolution,
   type VideoStylePreset,
 } from "@/lib/ai/video";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isUuid } from "@/lib/validation";
 import {
   buildSubmissionVideoPrompt,
@@ -61,7 +64,7 @@ export async function POST(request: NextRequest) {
   let body: StartVideoCreationBody;
 
   try {
-    body = (await request.json()) as StartVideoCreationBody;
+    body = (await readRequestBody(request)) as StartVideoCreationBody;
   } catch {
     return errorResponse("Invalid JSON body", 400, {
       code: "VALIDATION_ERROR",
@@ -103,7 +106,10 @@ export async function POST(request: NextRequest) {
   const aspectRatio = body.aspectRatio ?? "9:16";
   const resolution = body.resolution ?? "720p";
   const durationSeconds = body.durationSeconds ?? 8;
-  const supabase = getSupabaseAdminClient();
+  const accessError = await requireStoreAccess(request, { submissionId: body.submissionId! });
+  if (accessError) return accessError;
+
+  const supabase = getSupabaseServiceClient();
 
   const { data: submission, error: submissionError } = await supabase
     .from("submissions")
@@ -216,6 +222,9 @@ export async function POST(request: NextRequest) {
       .single();
     const effectiveJobId = job?.id ?? mockJobId;
     const effectiveCreatedAt = job?.created_at ?? createdAt;
+
+    const mockConflict = generationConflictResponse(jobError);
+    if (mockConflict) return mockConflict;
 
     if (jobError && !isGenerationJobsMissingError(jobError.message)) {
       return errorResponse("Failed to create mock video generation job", 500, {
@@ -347,28 +356,6 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  let operationName: string;
-
-  try {
-    const operation = await startGeminiVideoOperation({
-      prompt: promptText,
-      image: {
-        mimeType: primaryImage.mime_type ?? "image/png",
-        bytesBase64: imageBytes,
-      },
-      aspectRatio,
-      resolution,
-      durationSeconds,
-    });
-
-    operationName = operation.name;
-  } catch (error) {
-    return errorResponse("Failed to start Gemini video generation", 500, {
-      code: "VIDEO_GENERATION_START_FAILED",
-      details: error instanceof Error ? error.message : "Unknown error",
-    });
-  }
-
   const createdAt = new Date().toISOString();
   const { data: job, error: jobError } = await supabase
     .from("generation_jobs")
@@ -385,7 +372,7 @@ export async function POST(request: NextRequest) {
       request_payload: {
         generationType: "video",
         provider: "gemini-veo",
-        providerOperationName: operationName,
+        providerOperationName: null,
         durationSeconds,
         aspectRatio,
         resolution,
@@ -399,11 +386,46 @@ export async function POST(request: NextRequest) {
     .select("id, status, created_at")
     .single();
 
+  const conflict = generationConflictResponse(jobError);
+  if (conflict) return conflict;
+
   if (jobError || !job) {
     return errorResponse("Failed to create video generation job", 500, {
       code: "VIDEO_JOB_CREATE_FAILED",
       details: jobError?.message,
     });
+  }
+
+  let operationName: string;
+
+  try {
+    const operation = await startGeminiVideoOperation({
+      prompt: promptText,
+      image: {
+        mimeType: primaryImage.mime_type ?? "image/png",
+        bytesBase64: imageBytes,
+      },
+      aspectRatio,
+      resolution,
+      durationSeconds,
+    });
+
+    operationName = operation.name;
+  } catch (error) {
+    await supabase.from("generation_jobs").update({ status: "failed", completed_at: new Date().toISOString(), failure_reason: error instanceof Error ? error.message : "Provider start failed" }).eq("id", job.id);
+    return errorResponse("Failed to start Gemini video generation", 502, {
+      code: "VIDEO_GENERATION_START_FAILED",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+
+  const { error: operationSaveError } = await supabase.from("generation_jobs").update({
+    request_payload: { generationType: "video", provider: "gemini-veo", providerOperationName: operationName,
+      durationSeconds, aspectRatio, resolution, stylePreset, sourceAssetPath: primaryImage.file_path },
+  }).eq("id", job.id);
+  if (operationSaveError) {
+    console.error("Provider operation could not be persisted", { jobId: job.id, operationName });
+    return errorResponse("Video started but its operation could not be saved", 503, { code: "VIDEO_OPERATION_SAVE_FAILED" });
   }
 
   const { error: submissionUpdateError } = await supabase

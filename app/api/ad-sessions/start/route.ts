@@ -1,3 +1,5 @@
+import { requireStoreAccess } from "@/lib/auth/store-access";
+import { readRequestBody } from "@/lib/api/request-body";
 import { after } from "next/server";
 import type { NextRequest } from "next/server";
 
@@ -9,7 +11,7 @@ import {
   getRequestedShot,
 } from "@/lib/ad-session";
 import { prepareAdSessionDrafts } from "@/lib/ad-session-preparation";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isUuid } from "@/lib/validation";
 
 type StartAdSessionBody = {
@@ -40,7 +42,7 @@ export async function POST(request: NextRequest) {
   let body: StartAdSessionBody;
 
   try {
-    body = (await request.json()) as StartAdSessionBody;
+    body = (await readRequestBody(request)) as StartAdSessionBody;
   } catch {
     return errorResponse("Invalid JSON body", 400, {
       code: "VALIDATION_ERROR",
@@ -96,7 +98,10 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const supabase = getSupabaseAdminClient();
+  const accessError = await requireStoreAccess(request, { storeId: body.storeId! });
+  if (accessError) return accessError;
+
+  const supabase = getSupabaseServiceClient();
   const { data: store, error: storeError } = await supabase
     .from("stores")
     .select("id, market_name, store_name, owner_name, category, description")

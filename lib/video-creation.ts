@@ -12,9 +12,9 @@ export type VideoWorkflowStatus =
   | "draft"
   | "generating"
   | "generated"
-  | "requested_publish"
-  | "approved"
-  | "rejected";
+  | "publishing"
+  | "published"
+  | "publish_failed";
 
 export type SubmissionVideoWorkflowMetadata = {
   currentJobId?: string | null;

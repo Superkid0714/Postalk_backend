@@ -9,7 +9,7 @@ import {
   type AdSessionStore,
   type AdSessionWorkflow,
 } from "@/lib/ad-session";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 type SessionPreparationAssetRow = {
   shot_key: string;
@@ -119,7 +119,7 @@ export function buildDraftSubmissionFromSession(
 }
 
 export async function prepareAdSessionDrafts(sessionId: string) {
-  const supabase = getSupabaseAdminClient();
+  const supabase = getSupabaseServiceClient();
   const { data: session, error } = await supabase
     .from("ad_creation_sessions")
     .select(`
@@ -179,7 +179,6 @@ export async function prepareAdSessionDrafts(sessionId: string) {
   }));
 
   const nextWorkflow = {
-    ...workflow,
     draftCaption: captionResult.caption,
     draftHashtags: captionResult.hashtags,
     draftFoodCardNewsPlan: foodCardNewsPlan,
@@ -188,12 +187,9 @@ export async function prepareAdSessionDrafts(sessionId: string) {
     draftAssetCount: session.ad_creation_session_assets?.length ?? 0,
   };
 
-  const { error: updateError } = await supabase
-    .from("ad_creation_sessions")
-    .update({
-      workflow: nextWorkflow,
-    })
-    .eq("id", sessionId);
+  const { error: updateError } = await supabase.rpc("merge_ad_session_draft", {
+    p_session_id: sessionId, p_draft: nextWorkflow,
+  });
 
   if (updateError) {
     throw new Error(updateError.message);

@@ -1,4 +1,4 @@
-type SubmissionStatus = "pending_review" | "approved" | "rejected";
+type SubmissionStatus = "draft" | "published";
 type SubmissionAssetType =
   | "menu_board"
   | "food_photo"
@@ -32,29 +32,11 @@ const THUMBNAIL_PRIORITY: SubmissionAssetType[] = [
 ];
 
 export function getSubmissionStatusLabel(status: SubmissionStatus) {
-  switch (status) {
-    case "pending_review":
-      return "승인 대기중";
-    case "approved":
-      return "승인 완료";
-    case "rejected":
-      return "보충 필요";
-    default:
-      return status;
-  }
+  return status === "published" ? "게시 완료" : "보관 중";
 }
 
 export function getSubmissionStatusMessage(status: SubmissionStatus) {
-  switch (status) {
-    case "pending_review":
-      return "운영팀에서 내용을 확인하고 있어요";
-    case "approved":
-      return "승인이 완료된 광고예요";
-    case "rejected":
-      return "내용을 보완해서 다시 제출해주세요";
-    default:
-      return "";
-  }
+  return status === "published" ? "Instagram에 게시된 광고예요" : "완성된 광고를 확인하고 직접 게시할 수 있어요";
 }
 
 export function getSubmissionTitle(

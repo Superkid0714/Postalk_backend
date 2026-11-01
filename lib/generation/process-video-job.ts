@@ -1,3 +1,4 @@
+import { withGenerationJobLease } from "@/lib/generation/job-lease";
 import { renderQuoteVideo } from "@/lib/ai/quote-video";
 import {
   downloadGeminiVideoFile,
@@ -13,7 +14,7 @@ import {
   getSubmissionVideoWorkflowMetadata,
   mergeSubmissionVideoWorkflowMetadata,
 } from "@/lib/video-creation";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 async function extractVideoThumbnailBytes(videoBytes: Uint8Array) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "postalk-video-thumb-"));
@@ -69,7 +70,7 @@ async function saveGeneratedVideoThumbnail(params: {
   filePath: string;
   videoBytes: Uint8Array;
 }) {
-  const supabase = getSupabaseAdminClient();
+  const supabase = getSupabaseServiceClient();
   const thumbnailBytes = await extractVideoThumbnailBytes(params.videoBytes);
   const thumbnailPath = params.filePath.replace(/\.mp4$/i, ".jpg");
 
@@ -110,7 +111,11 @@ async function saveGeneratedVideoThumbnail(params: {
 }
 
 export async function processVideoJobById(jobId: string) {
-  const supabase = getSupabaseAdminClient();
+  return withGenerationJobLease(jobId, () => processClaimedJob(jobId));
+}
+
+async function processClaimedJob(jobId: string) {
+  const supabase = getSupabaseServiceClient();
 
   const { data: job, error: jobError } = await supabase
     .from("generation_jobs")
@@ -119,6 +124,7 @@ export async function processVideoJobById(jobId: string) {
       submission_id,
       store_id,
       status,
+      started_at,
       prompt_text,
       model_name,
       failure_reason,
@@ -135,6 +141,10 @@ export async function processVideoJobById(jobId: string) {
 
   if (jobError || !job) {
     throw new Error("Video generation job not found");
+  }
+
+  if (job.status === "completed" || job.status === "failed") {
+    return { jobId: job.id, status: job.status as "completed" | "failed", completed: job.status === "completed", resultFilePath: job.result_file_path ?? null };
   }
 
   const submission = Array.isArray(job.submissions)
@@ -382,7 +392,16 @@ export async function processVideoJobById(jobId: string) {
   }
 
   if (!providerOperationName) {
-    throw new Error("Gemini provider operation is missing");
+    const startedAt = Date.parse(job.started_at ?? "");
+    if (Number.isFinite(startedAt) && Date.now() - startedAt < 15 * 60_000) {
+      return { jobId: job.id, status: "processing" as const, completed: false };
+    }
+    const reason = "Video provider start was interrupted; regenerate after checking the provider operation";
+    const { error } = await supabase.from("generation_jobs").update({
+      status: "failed", failure_reason: reason, completed_at: new Date().toISOString(),
+    }).eq("id", job.id);
+    if (error) throw new Error(error.message);
+    return { jobId: job.id, status: "failed" as const, completed: false };
   }
 
   const operation = await getGeminiVideoOperation(providerOperationName);
