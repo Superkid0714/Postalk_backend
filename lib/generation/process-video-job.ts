@@ -1,3 +1,4 @@
+import { getMediaStorage, getUploadStorageBucket } from "@/lib/storage/media";
 import { withGenerationJobLease } from "@/lib/generation/job-lease";
 import { renderQuoteVideo } from "@/lib/ai/quote-video";
 import {
@@ -74,8 +75,8 @@ async function saveGeneratedVideoThumbnail(params: {
   const thumbnailBytes = await extractVideoThumbnailBytes(params.videoBytes);
   const thumbnailPath = params.filePath.replace(/\.mp4$/i, ".jpg");
 
-  const { error: uploadError } = await supabase.storage
-    .from("uploads")
+  const { error: uploadError } = await getMediaStorage(supabase)
+    .from(getUploadStorageBucket())
     .upload(thumbnailPath, thumbnailBytes, {
       contentType: "image/jpeg",
       upsert: true,
@@ -90,7 +91,7 @@ async function saveGeneratedVideoThumbnail(params: {
     .insert({
       submission_id: params.submissionId,
       asset_type: "video_thumbnail",
-      storage_bucket: "uploads",
+      storage_bucket: getUploadStorageBucket(),
       file_path: thumbnailPath,
       file_name: `${params.jobId}.jpg`,
       mime_type: "image/jpeg",
@@ -212,7 +213,7 @@ async function processClaimedJob(jobId: string) {
           throw new Error("Invalid source video payload");
         }
 
-        const { data, error } = await supabase.storage
+        const { data, error } = await getMediaStorage(supabase)
           .from(item.storageBucket)
           .createSignedUrl(item.filePath, 60 * 60);
 
@@ -239,8 +240,8 @@ async function processClaimedJob(jobId: string) {
       });
       const filePath = `${job.store_id}/${job.submission_id}/generated/${job.id}.mp4`;
 
-      const { error: uploadError } = await supabase.storage
-        .from("uploads")
+      const { error: uploadError } = await getMediaStorage(supabase)
+        .from(getUploadStorageBucket())
         .upload(filePath, bytes, {
           contentType: "video/mp4",
           upsert: true,
@@ -255,7 +256,7 @@ async function processClaimedJob(jobId: string) {
         .insert({
           submission_id: job.submission_id,
           asset_type: "generated_video",
-          storage_bucket: "uploads",
+          storage_bucket: getUploadStorageBucket(),
           file_path: filePath,
           file_name: `${job.id}.mp4`,
           mime_type: "video/mp4",
@@ -307,7 +308,7 @@ async function processClaimedJob(jobId: string) {
           completed_at: completedAt,
           failure_reason: null,
           result_asset_id: asset.id,
-          result_storage_bucket: "uploads",
+          result_storage_bucket: getUploadStorageBucket(),
           result_file_path: filePath,
           result_payload: {
             ...(typeof job.result_payload === "object" && job.result_payload !== null
@@ -336,7 +337,7 @@ async function processClaimedJob(jobId: string) {
               durationSeconds: currentWorkflow.durationSeconds ?? 8,
               aspectRatio: currentWorkflow.aspectRatio ?? "9:16",
               resolution: currentWorkflow.resolution ?? "720p",
-              resultStorageBucket: "uploads",
+              resultStorageBucket: getUploadStorageBucket(),
               resultFilePath: filePath,
               modelName: "render-quote-video",
             },
@@ -460,8 +461,8 @@ async function processClaimedJob(jobId: string) {
   const bytes = await downloadGeminiVideoFile(generatedVideo.uri);
   const filePath = `${job.store_id}/${job.submission_id}/generated/${job.id}.mp4`;
 
-  const { error: uploadError } = await supabase.storage
-    .from("uploads")
+  const { error: uploadError } = await getMediaStorage(supabase)
+    .from(getUploadStorageBucket())
     .upload(filePath, bytes, {
       contentType: generatedVideo.mimeType,
       upsert: true,
@@ -476,7 +477,7 @@ async function processClaimedJob(jobId: string) {
     .insert({
       submission_id: job.submission_id,
       asset_type: "generated_video",
-      storage_bucket: "uploads",
+      storage_bucket: getUploadStorageBucket(),
       file_path: filePath,
       file_name: `${job.id}.mp4`,
       mime_type: generatedVideo.mimeType,
@@ -526,7 +527,7 @@ async function processClaimedJob(jobId: string) {
       completed_at: completedAt,
       failure_reason: null,
       result_asset_id: asset.id,
-      result_storage_bucket: "uploads",
+      result_storage_bucket: getUploadStorageBucket(),
       result_file_path: filePath,
       result_payload: {
         providerOperationName,

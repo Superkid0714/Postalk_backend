@@ -1,3 +1,4 @@
+import { getMediaStorage, getUploadStorageBucket } from "@/lib/storage/media";
 import { requireStoreAccess } from "@/lib/auth/store-access";
 import { randomUUID } from "node:crypto";
 
@@ -150,8 +151,8 @@ export async function POST(request: NextRequest) {
   const filePath = `stores/${storeLookup.data.id}/${assetTypeValue}/${assetId}/${safeFileName}`;
   const fileBuffer = Buffer.from(await fileValue.arrayBuffer());
 
-  const { error: uploadError } = await supabase.storage
-    .from("uploads")
+  const { error: uploadError } = await getMediaStorage(supabase)
+    .from(getUploadStorageBucket())
     .upload(filePath, fileBuffer, {
       contentType: fileValue.type,
       upsert: false,
@@ -168,7 +169,7 @@ export async function POST(request: NextRequest) {
     {
       assetId,
       assetType: assetTypeValue,
-      bucket: "uploads",
+      bucket: getUploadStorageBucket(),
       filePath,
       fileName: safeFileName,
       mimeType: fileValue.type,

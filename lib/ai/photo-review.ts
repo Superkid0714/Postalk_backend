@@ -1,3 +1,4 @@
+import { getMediaStorage } from "@/lib/storage/media";
 import { getOpenAiApiKey } from "@/lib/env";
 import { fetchWithTimeout } from "@/lib/http";
 import {
@@ -323,7 +324,7 @@ export async function reviewPhotoAsset(
     throw new Error("OPENAI_API_KEY is not configured");
   }
 
-  const { data, error } = await params.supabase.storage
+  const { data, error } = await getMediaStorage(params.supabase)
     .from(params.bucket)
     .download(params.filePath);
 

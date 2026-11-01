@@ -1,3 +1,4 @@
+import { getMediaStorage } from "../lib/storage/media.ts";
 import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
@@ -6,27 +7,10 @@ import path from "node:path";
 import ffmpegPath from "ffmpeg-static";
 import { createClient } from "@supabase/supabase-js";
 
-async function readEnvFile() {
-  const envPath = path.resolve(".env");
-  const text = await fs.readFile(envPath, "utf8");
-  const env = {};
-
-  for (const line of text.split(/\r?\n/)) {
-    if (!line || line.trim().startsWith("#")) {
-      continue;
-    }
-
-    const separatorIndex = line.indexOf("=");
-    if (separatorIndex === -1) {
-      continue;
-    }
-
-    const key = line.slice(0, separatorIndex).trim();
-    const value = line.slice(separatorIndex + 1).trim();
-    env[key] = value;
-  }
-
-  return env;
+function readEnvFile() {
+  try { process.loadEnvFile(path.resolve(".env")); }
+  catch (error) { if (error.code !== "ENOENT") throw error; }
+  return process.env;
 }
 
 async function extractThumbnail(videoBytes) {
@@ -80,7 +64,7 @@ async function main() {
   const submissionId = process.argv[2];
 
   if (!submissionId) {
-    throw new Error("Usage: node scripts/backfill-video-thumbnail.mjs <submissionId>");
+    throw new Error("Usage: node --import tsx scripts/backfill-video-thumbnail.mjs <submissionId>");
   }
 
   const env = await readEnvFile();
@@ -125,7 +109,7 @@ async function main() {
     throw new Error(assetError?.message ?? "Generated video asset not found");
   }
 
-  const { data: fileData, error: downloadError } = await supabase.storage
+  const { data: fileData, error: downloadError } = await getMediaStorage(supabase)
     .from(videoAsset.storage_bucket)
     .download(videoAsset.file_path);
 
@@ -137,7 +121,7 @@ async function main() {
   const thumbnailBytes = await extractThumbnail(videoBytes);
   const thumbnailPath = videoAsset.file_path.replace(/\.mp4$/i, ".jpg");
 
-  const { error: uploadError } = await supabase.storage
+  const { error: uploadError } = await getMediaStorage(supabase)
     .from(videoAsset.storage_bucket)
     .upload(thumbnailPath, thumbnailBytes, {
       contentType: "image/jpeg",

@@ -1,3 +1,4 @@
+import { getMediaStorage, getUploadStorageBucket } from "@/lib/storage/media";
 import { generationConflictResponse } from "@/lib/generation/conflict";
 import { requireStoreAccess } from "@/lib/auth/store-access";
 import { readRequestBody } from "@/lib/api/request-body";
@@ -174,7 +175,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { data: imageData, error: imageDownloadError } = await supabase.storage
+  const { data: imageData, error: imageDownloadError } = await getMediaStorage(supabase)
     .from(primaryImage.storage_bucket)
     .download(primaryImage.file_path);
 
@@ -243,8 +244,8 @@ export async function POST(request: NextRequest) {
       const sampleVideoBytes = await readFile(sampleVideoPath);
       const filePath = `${submission.store_id}/${submission.id}/generated/${effectiveJobId}.mp4`;
 
-      const { error: uploadError } = await supabase.storage
-        .from("uploads")
+      const { error: uploadError } = await getMediaStorage(supabase)
+        .from(getUploadStorageBucket())
         .upload(filePath, sampleVideoBytes, {
           contentType: "video/mp4",
           upsert: true,
@@ -259,7 +260,7 @@ export async function POST(request: NextRequest) {
         .insert({
           submission_id: submission.id,
           asset_type: "generated_video",
-          storage_bucket: "uploads",
+          storage_bucket: getUploadStorageBucket(),
           file_path: filePath,
           file_name: `${effectiveJobId}.mp4`,
           mime_type: "video/mp4",
@@ -284,7 +285,7 @@ export async function POST(request: NextRequest) {
             completed_at: completedAt,
             failure_reason: null,
             result_asset_id: resultAssetId,
-            result_storage_bucket: "uploads",
+            result_storage_bucket: getUploadStorageBucket(),
             result_file_path: filePath,
             result_payload: {
               script,
@@ -309,7 +310,7 @@ export async function POST(request: NextRequest) {
             stylePreset,
             generatedAt: completedAt,
             lastFailureReason: null,
-            resultStorageBucket: "uploads",
+            resultStorageBucket: getUploadStorageBucket(),
             resultFilePath: filePath,
             modelName: "veo-mock",
             mockMode: true,

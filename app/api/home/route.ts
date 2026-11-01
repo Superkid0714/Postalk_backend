@@ -1,3 +1,4 @@
+import { getMediaStorage } from "@/lib/storage/media";
 import { requireStoreAccess } from "@/lib/auth/store-access";
 import type { NextRequest } from "next/server";
 
@@ -66,7 +67,7 @@ async function getSignedThumbnailUrl(asset: SubmissionAssetRecord | null) {
   }
 
   const supabase = getSupabaseServiceClient();
-  const { data, error } = await supabase.storage
+  const { data, error } = await getMediaStorage(supabase)
     .from(asset.storage_bucket)
     .createSignedUrl(asset.file_path, 60 * 60);
 

@@ -1,3 +1,4 @@
+import { getMediaStorage, getUploadStorageBucket } from "@/lib/storage/media";
 import { withGenerationJobLease } from "@/lib/generation/job-lease";
 import {
   buildPromoCarouselPrompts,
@@ -236,7 +237,7 @@ async function processClaimedJob(jobId: string) {
         throw new Error("Mock generation source asset not found");
       }
 
-      const { data, error } = await supabase.storage
+      const { data, error } = await getMediaStorage(supabase)
         .from(sourceAsset.storage_bucket)
         .download(sourceAsset.file_path);
 
@@ -362,8 +363,8 @@ async function processClaimedJob(jobId: string) {
 
         const filePath = `${job.store_id}/${job.submission_id}/generated/${job.id}-${carouselPrompt.index + 1}.png`;
 
-        const { error: uploadError } = await supabase.storage
-          .from("uploads")
+        const { error: uploadError } = await getMediaStorage(supabase)
+          .from(getUploadStorageBucket())
           .upload(filePath, result.bytes, {
             contentType: "image/png",
             upsert: true,
@@ -378,7 +379,7 @@ async function processClaimedJob(jobId: string) {
           .insert({
             submission_id: job.submission_id,
             asset_type: "generated_image",
-            storage_bucket: "uploads",
+            storage_bucket: getUploadStorageBucket(),
             file_path: filePath,
             file_name: `${job.id}-${carouselPrompt.index + 1}.png`,
             mime_type: "image/png",
@@ -416,7 +417,7 @@ async function processClaimedJob(jobId: string) {
         completed_at: completedAt,
         failure_reason: null,
         result_asset_id: generatedImages[0]?.assetId ?? null,
-        result_storage_bucket: "uploads",
+        result_storage_bucket: getUploadStorageBucket(),
         result_file_path: generatedImages[0]?.filePath ?? null,
         result_payload: {
           imageCount,

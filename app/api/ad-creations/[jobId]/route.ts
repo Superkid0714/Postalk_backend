@@ -1,3 +1,4 @@
+import { getMediaStorage } from "@/lib/storage/media";
 import { requireStoreAccess } from "@/lib/auth/store-access";
 import type { NextRequest } from "next/server";
 
@@ -76,7 +77,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   let imageCount = 1;
 
   if (job.result_storage_bucket && job.result_file_path) {
-    const { data: signedUrlData } = await supabase.storage
+    const { data: signedUrlData } = await getMediaStorage(supabase)
       .from(job.result_storage_bucket)
       .createSignedUrl(job.result_file_path, 60 * 60);
 
@@ -112,7 +113,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
             };
           }
 
-          const { data: signedUrlData } = await supabase.storage
+          const { data: signedUrlData } = await getMediaStorage(supabase)
             .from(job.result_storage_bucket)
             .createSignedUrl(filePath, 60 * 60);
 

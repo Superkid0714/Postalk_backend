@@ -1,3 +1,4 @@
+import { getMediaStorage } from "@/lib/storage/media";
 import { withPublishLock } from "@/lib/instagram/publish-lock";
 import { getInstagramEnv } from "@/lib/env";
 import { fetchWithTimeout } from "@/lib/http";
@@ -473,7 +474,7 @@ export function pickAssetsForInstagram(
 
 async function createSignedAssetUrl(bucket: string, filePath: string) {
   const supabase = getSupabaseServiceClient();
-  const { data, error } = await supabase.storage
+  const { data, error } = await getMediaStorage(supabase)
     .from(bucket)
     .createSignedUrl(filePath, 60 * 60 * 6);
 

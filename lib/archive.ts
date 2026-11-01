@@ -1,3 +1,4 @@
+import { getMediaStorage } from "@/lib/storage/media";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 import {
@@ -93,7 +94,7 @@ export async function getArchiveThumbnailUrl(
   }
 
   const supabase = getSupabaseServiceClient();
-  const { data, error } = await supabase.storage
+  const { data, error } = await getMediaStorage(supabase)
     .from(asset.storage_bucket)
     .createSignedUrl(asset.file_path, 60 * 60);
 
