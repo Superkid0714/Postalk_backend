@@ -36,6 +36,9 @@ dev-server.log
 # local docs
 *.md
 !README.md
+!docs/
+!docs/**/*.md
+/migration-reports/
 
 # env files (can opt-in for committing if needed)
 .env*
