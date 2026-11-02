@@ -66,6 +66,9 @@ node --env-file=.env --import tsx scripts/migrate-media-to-s3.ts --mode promote 
 기존 S3 키는 덮어쓰지 않으며 크기·SHA-256·MIME을 원본과 비교합니다. 다르면 즉시 중단합니다.
 검증한 한 객체의 assets, session assets, job result, sourceVideos, videoWorkflow 참조를
 하나의 DB 트랜잭션으로 바꿉니다. 파일 키·캡션·게시 상태는 바꾸지 않습니다.
+전시 기능 SQL 적용 후에는 exhibition_uploads와 전시 작업의 materials 참조도 함께 바꿉니다.
+카드뉴스·썸네일이 하나의 버킷 참조를 공유하므로 promote/rollback은 전체 원본의 검증을 먼저 끝낸 뒤 DB를 변경합니다.
+이 두 모드에는 --limit을 사용할 수 없습니다. 표본 복사만으로 일부 묶음의 참조를 전환하지 않도록 막습니다.
 오류 이전에 완료된 객체는 유지됩니다. 보고서 확인 후 같은 모드를 다시 실행하면 재검증하며 계속 처리합니다.
 `--limit`은 처음 N개 표본용이며 전체 이전에서는 제거해야 합니다.
 결과 `migration-reports/*.jsonl`에는 가게 파일 키가 포함되므로 비공개로 보관하며 Git에서 제외합니다.

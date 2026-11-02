@@ -41,6 +41,7 @@ dev-server.log
 !docs/AWS_MEDIA_MIGRATION.md
 !docs/OPERATIONS.md
 !docs/CHANGELOG.md
+!docs/EXHIBITION_API.md
 /migration-reports/
 /tmp/
 /public/merchant-*.png

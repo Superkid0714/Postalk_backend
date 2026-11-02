@@ -2,6 +2,7 @@
 
 ## 상세 문서
 
+- [전시 화면 SC-00~09 연동 계약](docs/EXHIBITION_API.md)
 - [프론트엔드 API 변경](docs/API_CHANGES.md)
 - [배포·운영·DB 적용 순서](docs/OPERATIONS.md)
 - [이미지·영상 AWS S3 이전과 롤백](docs/AWS_MEDIA_MIGRATION.md)
