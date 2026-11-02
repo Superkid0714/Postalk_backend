@@ -1,24 +1,22 @@
 do $$
 declare
-  shot_constraint_name text;
-  asset_constraint_name text;
+  constraint_name text;
 begin
-  select con.conname
-    into shot_constraint_name
+  -- PostgreSQL deparses IN checks as = ANY(...), so text matching "in"
+  -- misses existing constraints and fails when adding the same name again.
+  for constraint_name in select con.conname
   from pg_constraint con
   join pg_class rel on rel.oid = con.conrelid
   join pg_namespace nsp on nsp.oid = rel.relnamespace
   where nsp.nspname = 'public'
     and rel.relname = 'ad_creation_session_assets'
     and con.contype = 'c'
-    and pg_get_constraintdef(con.oid) like '%shot_key in%';
-
-  if shot_constraint_name is not null then
+    and exists(select 1 from pg_attribute a where a.attrelid=con.conrelid and a.attname='shot_key' and a.attnum=any(con.conkey)) loop
     execute format(
       'alter table public.ad_creation_session_assets drop constraint %I',
-      shot_constraint_name
+      constraint_name
     );
-  end if;
+  end loop;
 
   alter table public.ad_creation_session_assets
     add constraint ad_creation_session_assets_shot_key_check
@@ -40,22 +38,19 @@ begin
       )
     );
 
-  select con.conname
-    into asset_constraint_name
+  for constraint_name in select con.conname
   from pg_constraint con
   join pg_class rel on rel.oid = con.conrelid
   join pg_namespace nsp on nsp.oid = rel.relnamespace
   where nsp.nspname = 'public'
     and rel.relname = 'ad_creation_session_assets'
     and con.contype = 'c'
-    and pg_get_constraintdef(con.oid) like '%asset_type in%';
-
-  if asset_constraint_name is not null then
+    and exists(select 1 from pg_attribute a where a.attrelid=con.conrelid and a.attname='asset_type' and a.attnum=any(con.conkey)) loop
     execute format(
       'alter table public.ad_creation_session_assets drop constraint %I',
-      asset_constraint_name
+      constraint_name
     );
-  end if;
+  end loop;
 
   alter table public.ad_creation_session_assets
     add constraint ad_creation_session_assets_asset_type_check
