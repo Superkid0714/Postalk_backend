@@ -20,6 +20,7 @@ test("exhibition SQL enforces atomic creation, lifecycle, and shared-account pub
       return (await db.query<{ result: { adId: string; jobId: string; reused: boolean } }>("select create_exhibition_ad($1,$2::jsonb,$3,$4::uuid[],'[]'::jsonb) as result", [storeId, JSON.stringify(input), digest, [asset]])).rows[0].result;
     }
     const input = makeInput(); const asset = await register(input); const ad = await create(input, asset);
+    assert.equal((await db.query<{ model_name: string }>("select model_name from generation_jobs where id=$1", [ad.jobId])).rows[0].model_name, "render-exhibition-card");
     await t.test("double-clicks reuse the ad while changed content conflicts", async () => {
       assert.equal((await create(input, asset)).adId, ad.adId);
       assert.equal((await create(input, asset)).reused, true);

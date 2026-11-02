@@ -476,7 +476,7 @@ begin
     jsonb_build_object('exhibition',true,'adWorkflow',jsonb_build_object('adType',case when p_input->>'format'='reels' then 'video' else 'photo' end)), 'draft') returning id into submission_id;
   insert into public.generation_jobs(submission_id,store_id,status,style_preset,model_name,request_payload,progress)
   values(submission_id,p_store_id,'queued',case when p_input->>'format'='reels' then 'market_story' else 'food_card_news' end,
-    case when p_input->>'format'='reels' then 'render-exhibition-video' else 'gpt-image-2' end,
+    case when p_input->>'format'='reels' then 'render-exhibition-video' else 'render-exhibition-card' end,
     jsonb_build_object('source','exhibition','input',p_input,'materials',sources,'subtitles',p_subtitles),
     jsonb_build_object('stage','queued','current',0,'total',jsonb_array_length(p_input->'template'->'scenes') + 2,'message','광고 제작을 준비하고 있어요.')) returning id into job_id;
   insert into public.exhibition_ads(id,store_id,creation_id,input_digest,format,concept_id,input,job_id)
