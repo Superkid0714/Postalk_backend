@@ -440,8 +440,8 @@ export function pickAssetsForInstagram(
     }
 
     return mediaType === "video"
-      ? job.model_name.startsWith("veo") || job.model_name === "render-quote-video"
-      : !job.model_name.startsWith("veo") && job.model_name !== "render-quote-video";
+      ? job.model_name.startsWith("veo") || ["render-quote-video", "render-exhibition-video"].includes(job.model_name)
+      : !job.model_name.startsWith("veo") && !["render-quote-video", "render-exhibition-video"].includes(job.model_name);
   });
 
   if (mediaType === "photo") {
@@ -716,6 +716,7 @@ async function startClaimedInstagramPublish(
 
   const submission = await loadSubmission(submissionId);
 
+  if (submission.ai_metadata?.exhibitionDeletedAt) throw new Error("Deleted ads cannot be published");
   const existing = getInstagramPublishMetadata(submission.ai_metadata);
   if (existing.status === "published" || existing.publishedMediaId || existing.status === "processing") {
     return getStoredInstagramPublishForSubmission(submissionId);

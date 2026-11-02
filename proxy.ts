@@ -9,7 +9,7 @@ const ALLOWED_ORIGINS = new Set([
 const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "GET, POST, PATCH, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, x-merchant-qr-token",
+    "Content-Type, Authorization, x-merchant-qr-token, x-user-id, x-creation-token",
   "Access-Control-Max-Age": "86400",
 };
 

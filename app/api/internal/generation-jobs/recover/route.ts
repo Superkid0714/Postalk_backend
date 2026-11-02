@@ -5,11 +5,18 @@ import { processAnyGenerationJob } from "@/lib/generation/process-any-job";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { syncInstagramPublishForSubmission } from "@/lib/instagram/publish";
 import { PublishBusyError } from "@/lib/instagram/publish-lock";
+import { processExhibitionScript } from "@/lib/exhibition/scripts";
 
 export async function POST(request: NextRequest) {
   const authError = requireInternalWorkerKey(request);
   if (authError) return authError;
   const supabase = getSupabaseServiceClient();
+  if (process.env.EXHIBITION_MODE_ENABLED === "true") {
+    const { data: scripts, error: scriptError } = await supabase.from("exhibition_script_jobs").select("id")
+      .or(`status.eq.queued,and(status.eq.processing,lease_expires_at.lt.${new Date().toISOString()})`).order("updated_at", { ascending: true }).limit(5);
+    if (scriptError) return errorResponse("Unable to load script jobs", 503, { code: "RECOVERY_FAILED" });
+    for (const job of scripts ?? []) { try { await processExhibitionScript(job.id); } catch (error) { console.error("Exhibition script recovery failed", { jobId: job.id, error }); } }
+  }
   const { data: publishes, error: publishError } = await supabase.from("submissions")
     .select("id, ai_metadata").eq("ai_metadata->instagramPublish->>status", "processing")
     .order("updated_at", { ascending: true }).limit(5);
