@@ -5,6 +5,7 @@
 - [전시 화면 SC-00~09 연동 계약](docs/EXHIBITION_API.md)
 - [프론트엔드 API 변경](docs/API_CHANGES.md)
 - [배포·운영·DB 적용 순서](docs/OPERATIONS.md)
+- [2026-11-03 실제 Supabase DB·Storage 적용 결과](docs/SUPABASE_DEPLOYMENT_20261103.md)
 - [이미지·영상 AWS S3 이전과 롤백](docs/AWS_MEDIA_MIGRATION.md)
 - [변경 묶음과 검토 순서](docs/CHANGELOG.md)
 
@@ -146,7 +147,7 @@ node --env-file=.env scripts/generation-worker.mjs
 ### 실행 검증
 
 새 테스트 Supabase 프로젝트의 설치·확인 순서는 [운영 문서](docs/OPERATIONS.md)의 최초 테스트 프로젝트 절을 따릅니다.
-현재 프로젝트의 실제 DB에는 자동 적용하지 않습니다. 설치 후 검증 SQL은 임시 제작 데이터를 롤백합니다.
+애플리케이션이 실제 DB에 SQL을 자동 적용하지 않습니다. 기존 프로젝트에는 2026-11-03에 수동 업그레이드와 검증을 완료했습니다. [적용 기록](docs/SUPABASE_DEPLOYMENT_20261103.md)을 확인하세요. 설치 후 검증 SQL은 임시 제작 데이터를 롤백합니다.
 
 ```powershell
 npm test
