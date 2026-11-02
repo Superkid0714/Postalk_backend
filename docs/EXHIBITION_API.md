@@ -7,7 +7,7 @@
 
 ## 켜기
 
-기존 운영 SQL 적용 후 `supabase/migrations/20261102_exhibition_flow.sql`을 적용합니다.
+기존 DB는 OPERATIONS.md의 1~8번 SQL을 순서대로 적용합니다. 정규화·서버 권한 SQL까지 필요합니다.
 신규 `schema.sql`에는 포함되어 있습니다. 실제 운영 DB에 자동 적용하지 않습니다.
 
 ```dotenv
@@ -98,10 +98,21 @@ SC-03에서 요청한 이전 대본이 늦게 도착하면 당시 creationId를 
 
 SC-07에서 각 재료를 multipart로 업로드합니다.
 필드: user_id, creationId, sceneNumber, menuId(가게 장면은 생략), file.
-사진 JPEG/PNG/WebP는 10MB, 영상 MP4/QuickTime/WebM은 200MB까지 받습니다.
+사진 JPEG/PNG/WebP는 10MiB, 영상 MP4/QuickTime/WebM은 50MiB까지 받습니다. 한 요청에 file은 하나만 전달합니다.
+multipart 전체는 최대 52MiB이며 Content-Length가 없어도 실제 수신 바이트를 제한합니다.
+배포 호스팅·프록시와 Supabase 프로젝트/버킷 상한이 더 작으면 그 제한도 적용되므로 리허설에서 확인해야 합니다.
 서버가 실제 미디어와 영상 길이를 확인합니다. 실패한 재료만 다시 전송하면 됩니다.
 같은 제작의 같은 장면 재업로드는 최신 assetId로 교체합니다. 생성 요청 후에는 재료 교체를 막습니다.
 생성을 시작한 뒤 장면을 수정하려면 새 creationId로 제작을 시작합니다.
+
+SC-01 또는 SC-02에서 GET /api/exhibition/uploads?user_id=1로 한 번 정책을 읽고 Context에 보관할 수 있습니다.
+응답 data: `{image:{maxBytes:10485760,mimeTypes:[...]},video:{maxBytes:52428800,mimeTypes:[...]},maxRequestBytes:54525952}`.
+SC-04 촬영 중 장면별 업로드를 요구하지 않는 기존 흐름은 유지합니다.
+프론트의 기존 200MiB 영상 제한을 50MiB로 변경하고 파일 선택 단계에서도 안내합니다.
+업로드 오류는 413 PAYLOAD_TOO_LARGE, 429 UPLOAD_BUSY, 507 STORAGE_QUOTA_EXCEEDED, 503 STORAGE_UNAVAILABLE로 구분합니다.
+507은 재시도를 반복하지 말고 현장 담당자에게 알립니다. 제작 시작 상태는 저장 전 409로 거절합니다.
+사전 확인 이후의 경합도 등록 RPC에서 다시 검사합니다. 외부 업로드 후 DB 통신 실패 시 실제 객체가 남을 수 있으며
+등록 성공 여부가 불확실한 파일을 자동 삭제하지 않습니다. 서버 로그와 실제 Storage 사용량을 함께 확인합니다.
 
 생성 요청에는 위 공통 입력과 다음 필드를 추가합니다.
 
@@ -158,7 +169,9 @@ page는 1부터, pageSize는 1~50입니다. 홈에서는 pageSize=4를 사용합
 응답: items, page, pageSize, total, totalAll, hasNext. emptyReason은 no_ads(전체가 비어 있음), no_matches(필터 결과 없음) 또는 null입니다.
 최신 생성 시각과 ID 순으로 정렬하고 삭제 광고는 제외합니다.
 항목: adId, format, conceptId, title, publishStatus, generationStatus, thumbnailUrl, createdAt.
-목록에 영상 원본 URL은 주지 않으며 작은 JPEG 썸네일을 사용합니다. 제작 중에는 thumbnailUrl이 null일 수 있습니다.
+목록에는 완성된 작업의 작은 JPEG 대표 이미지만 사용합니다. 카드뉴스는 360×450, 릴스는 360×640입니다.
+제작 중이거나 대표 이미지가 없는 옛 결과는 thumbnailUrl이 null입니다. 프론트는 기본 이미지를 표시합니다.
+썸네일이 없다는 이유로 목록에서 전체 카드나 영상 원본을 대신 다운로드하지 않습니다.
 상세: resultUrls, caption, permalink, narration, progress, canPublish 등. 결과 URL은 브라우저에서 바로 여는 서명 URL입니다.
 URL은 만료되므로 재조회할 수 있어야 합니다. 카드뉴스 저장은 현재 장의 resultUrls[index]를 사용합니다.
 목록 필터·스크롤 복구와 메뉴 숨김, 새로고침 가드, 버튼 중복 방지는 프론트에서 처리합니다.
