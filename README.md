@@ -133,14 +133,14 @@ node --env-file=.env scripts/generation-worker.mjs
 ### ERD — dbdiagram.io
 
 - 현재 구현: [docs/erd/current.dbml](docs/erd/current.dbml). 저장소의 `supabase/schema.sql`을 기준으로 추출한 구조이며 실제 운영 DB를 조회한 결과는 아닙니다.
-- 개선 설계 초안: [docs/erd/proposed.dbml](docs/erd/proposed.dbml). **미구현 검토안**이며 현재 API나 DB가 이 구조로 변경되었다는 뜻이 아닙니다.
-- 저장된 다이어그램: [Postalk - Current](https://dbdiagram.io/d/Postalk-Current-6ae842d1f99a5c458bd3cb2f), [Postalk - Proposed (Review Draft)](https://dbdiagram.io/d/Postalk-Proposed-Review-Draft-6ae843398bf38111a80408eb). 현재 비공개이므로 팀원에게는 사이트의 공유 메뉴에서 접근 권한을 설정해야 합니다.
-- [dbdiagram.io 편집기](https://dbdiagram.io/d)에서 새 다이어그램을 만들고 각 DBML 파일 내용을 붙여 넣습니다. 이름은 `Postalk - Current`와 `Postalk - Proposed`로 구분하세요. 팀 공유는 저장 후 공유 링크를 사용합니다.
+- 구현된 제작 흐름: [docs/erd/workflow.dbml](docs/erd/workflow.dbml). 같은 스키마에서 주요 12개 테이블만 추출한 협업용 ERD입니다. 과거 미구현 개선안 파일은 이 실제 구현 기반 파일로 대체했습니다.
+- 저장된 다이어그램: [Postalk - Current](https://dbdiagram.io/d/Postalk-Current-6ae842d1f99a5c458bd3cb2f), [Postalk - Workflow](https://dbdiagram.io/d/Postalk-Workflow-6ae843398bf38111a80408eb). 팀 공유 시 계정의 공유 메뉴에서 접근 권한을 확인합니다.
+- [dbdiagram.io 편집기](https://dbdiagram.io/d)에 각 DBML 파일 내용을 붙여 넣습니다. `Current`는 전체 구현, `Workflow`는 같은 구현의 제작 흐름 부분입니다. 운영 DB 적용 여부를 의미하지 않습니다.
 - 현재 구조 재생성: `node scripts/export-erd.mjs`. 환경 파일을 읽지 않고 메모리 PostgreSQL에서 SQL을 실행해 추출합니다. 운영 DB 접속이나 변경은 없습니다.
-- 현재 파일에는 전체 15개 테이블, 컬럼·기본값·유일키·FK·삭제 동작을 기록합니다. CHECK와 인덱스 SQL은 테이블 노트에 표시합니다. 함수·트리거·RLS·권한의 원본은 SQL입니다. `creation_id`처럼 FK 없는 논리 연결을 선으로 표시하지 않습니다.
+- 현재 파일에는 전체 22개 테이블·35개 FK와 컬럼·기본값·유일키·삭제 동작을 기록합니다. CHECK와 인덱스 SQL은 테이블 노트에 표시합니다. 함수·트리거·RLS·권한·호환 뷰의 원본은 SQL입니다. Workflow에서는 생략한 기술·이전 테이블로 향하는 FK 선도 생략합니다.
 - `users.id`는 UUID이며 전시용 `user_id=1`과 관계가 없습니다. 실제 계정과 가게 권한 모델은 별도 확정 사항입니다.
-- 개선안은 생성 세션·장면·자막 작업·파일 위치·생성 결과·게시 시도를 분리합니다. 프론트 Context 및 촬영 Blob의 임시 보관 원칙은 유지합니다. 최종 콘셉트, 입력 수정 시 세션 규칙, 저장소 전환 이력/정리 정책, 기존 API 호환 마이그레이션은 팀 검토 후 확정합니다.
-- 개선안에 필요한 부분 유일 인덱스와 동시성·상태 전이 규칙은 DBML 노트에 명시했습니다. DBML에서 내보낸 SQL만으로는 전체 동작을 구현할 수 없습니다. 별도의 검토된 마이그레이션·RPC·RLS가 필요합니다.
+- 생성 세션·장면·자막 작업·파일 위치·생성 결과·게시 시도를 실제 DB 관계로 분리했습니다. 기존 전시 테이블 세 개는 같은 데이터를 가리키는 호환 뷰이며 API 응답 계약은 유지합니다. 프론트 Context 및 촬영 Blob의 임시 보관 원칙도 유지합니다.
+- 신규 DB는 전체 schema.sql, 기존 DB는 [배포 순서](docs/OPERATIONS.md)에 따라 마지막 정규화 마이그레이션을 적용해야 합니다. DBML SQL 내보내기만으로 함수·트리거·RLS를 대체하지 마세요. Supabase가 기본이며 AWS 전환과 파일 자동 삭제는 실행하지 않습니다.
 
 ### 실행 검증
 

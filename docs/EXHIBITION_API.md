@@ -162,3 +162,24 @@ page는 1부터, pageSize는 1~50입니다. 홈에서는 pageSize=4를 사용합
 상세: resultUrls, caption, permalink, narration, progress, canPublish 등. 결과 URL은 브라우저에서 바로 여는 서명 URL입니다.
 URL은 만료되므로 재조회할 수 있어야 합니다. 카드뉴스 저장은 현재 장의 resultUrls[index]를 사용합니다.
 목록 필터·스크롤 복구와 메뉴 숨김, 새로고침 가드, 버튼 중복 방지는 프론트에서 처리합니다.
+
+## 구현된 DB 구조와 외부 모듈 연결
+
+정규화 SQL 적용 후 실제 테이블은 input_templates / script_jobs / contents이며
+이전 exhibition_* 세 이름은 동일 데이터의 호환 뷰입니다. API URL과 생성·대본·광고 ID는 바꾸지 않습니다.
+creation_sessions는 생성 전 작업을 묶고 creation_scenes에는 장면별 최종 자막을 저장합니다.
+concept_versions는 전달받은 템플릿의 불변 스냅샷이며 동적 메뉴/장면 변형은 정의 해시로 구분합니다.
+media_assets는 Supabase/S3 객체 위치·크기·알려진 해시를 관리하고 content_outputs는 결과 순서와 용도를 연결합니다.
+publication_attempts에는 명시적 게시 시도와 확정 실패·성공·결과 불확실 상태가 남습니다.
+전체 구현 ERD는 docs/erd/current.dbml, 협업용 부분 ERD는 docs/erd/workflow.dbml입니다.
+
+프론트는 상세/게시 응답의 requiresVerification=true인 경우 재게시를 유도하지 않고 결과 확인 상태를 표시합니다.
+생성 완료는 게시 요청을 만들지 않습니다. 기존 creationToken 규칙도 그대로 적용합니다.
+
+외부 릴스/디자인 담당자는 최종 conceptId, template.id/version, renderer, scenes의 순서·입력 종류·길이,
+usesSubtitles와 maxSubtitleChars를 전달해야 합니다. 메뉴별 장면과 편집 자막은 생성 요청 스냅샷에 고정됩니다.
+현재 지원 renderer는 source-photo-v1 / scene-reel-v1이며 새 renderer는 명시적 구현 후 허용해야 합니다.
+최종 콘셉트 3종이나 외부 TTS 공급자를 임의로 지정하지 않았습니다. 공급자 코드/API 전달 후 실제 연동이 필요합니다.
+
+Supabase DB와 Storage를 기본으로 유지합니다. 목록에는 작은 썸네일을 사용하고 원본 영상은 상세에서 요청합니다.
+AWS는 선택 가능한 저장소 어댑터이며 실제 이전은 수행하지 않습니다. 파일 보존 정책 미확정으로 자동 삭제하지 않습니다.

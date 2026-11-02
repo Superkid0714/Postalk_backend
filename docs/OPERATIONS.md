@@ -13,6 +13,7 @@ API 쓰기와 워커를 중지하고 DB를 백업합니다. 기존 DB에는 아�
 | 4 | 20261102_submission_publish_leases.sql | 중복 게시 방지·메타데이터 원자적 병합 |
 | 5 | 20261102_media_storage_remap.sql | 검증된 객체의 저장소 참조 전환 |
 | 6 | 20261102_exhibition_flow.sql | 전시용 템플릿·대본·일괄 제작·상세 수정·삭제 및 저장소 참조 확장 |
+| 7 | 20261102_z_normalized_workflow.sql | 생성 세션·장면·콘셉트 스냅샷·파일 카탈로그·게시 시도 기록, 이전 이름 호환 뷰 |
 
 같은 접수에 활성 작업이 중복되면 두 번째 SQL은 실패하고 전체 롤백됩니다. 먼저 확인하세요.
 
@@ -96,6 +97,61 @@ S3 전환 전 비공개 버킷·IAM·사진/영상 업로드·미리보기·상�
 /api/health는 프로세스 응답 확인용이며 DB·AI·AWS 연결을 보증하지 않습니다.
 
 전시 기능은 기본적으로 꺼져 있습니다. 활성화 환경과 화면별 계약은 [전시 연동 문서](EXHIBITION_API.md)를 따르세요.
+
+## 정규화 구조 적용과 확인
+
+7번 마이그레이션과 새 서버 코드를 함께 배포합니다. 운영 DB에 자동 적용하는 코드는 없습니다.
+먼저 복제/테스트 DB에 적용하고 실제 Supabase PostgREST를 통한 템플릿 저장·대본 생성·업로드·제작·조회를 확인하세요.
+PGlite는 PostgreSQL 테이블/RPC를 실행하지만 Supabase PostgREST의 스키마 캐시와 뷰 노출 검증은 별도입니다.
+
+기존 exhibition_templates / exhibition_script_jobs / exhibition_ads는 각각 input_templates / script_jobs / contents로
+이름 변경하며 이전 이름은 security-invoker 단순 뷰로 제공합니다. 같은 행을 읽고 쓰며 별도 복제 테이블이 아닙니다.
+사용 중인 submissions와 생성/게시 lease 테이블은 유지합니다. 기존 캡션·게시 JSON 저장 경로를 유지하고
+트리거가 같은 트랜잭션에서 콘텐츠/시도 기록을 연결합니다. 관리자 기능은 도입하지 않습니다.
+
+업로드는 제작 세션을 만들고, 대본은 입력 스냅샷을 연결하며, 생성 요청은 입력과 장면·최종 자막을 고정합니다.
+제출한 세션은 다른 입력으로 재사용할 수 없습니다. 새 제작에는 새 creationId를 사용합니다.
+콘셉트는 전달받은 템플릿 전체의 불변 스냅샷입니다. 업체 버전이 같아도 메뉴별 장면 구성이 다르면
+definition_digest로 다른 내부 스냅샷을 구분합니다. 최종 콘셉트 디자인을 임의로 만들지는 않습니다.
+
+기존 파일 메타데이터를 카탈로그로 연결하고 새 업로드·결과에는 SHA-256을 저장합니다.
+옛 파일의 알 수 없는 크기·해시는 만들지 않습니다. 업로드 재시도의 이전 객체도 삭제하지 않습니다.
+이전 게시 이력은 남아 있는 마지막 메타데이터만 가져오며 사라진 과거 시도를 복원했다고 간주하지 않습니다.
+
+```sql
+-- 서버 권한 SQL Editor: 등록된 파일 용량만 읽기 전용 집계
+select public.media_usage_summary();
+-- 신규 구조 연결 확인
+select c.id,c.session_id,j.content_id,j.status
+from public.contents c join public.generation_jobs j on j.id=c.job_id;
+```
+
+용량 집계는 provider별 이미지/영상/기타 개수·bytes, 크기 미상 개수, DB 참조가 없는 객체 후보 수를 제공합니다.
+실제 Storage 전체 목록·전송량·청구액이 아니며, 외부 객체의 존재를 확인하거나 삭제하지 않습니다.
+참조 없음은 삭제 허가가 아닙니다. 보관 기간과 외부 게시 접근 여부를 확인한 별도 정리 정책이 필요합니다.
+
+## Instagram 응답 유실 복구
+
+media_publish 전 요청 시각과 결과 불확실 상태를 먼저 DB에 기록합니다.
+응답 유실·게시 후 DB 장애가 있으면 같은 외부 호출을 반복하지 않습니다. 성공 기록 후에는 불확실 상태를 해제합니다.
+복구 워커는 outcomeUnknown=true 건을 자동 재게시하지 않습니다.
+상세와 게시 응답의 requiresVerification=true는 결과 확인이 필요한 상태이며 UI 게시 상태는 publishing을 유지합니다.
+
+Instagram 게시 내역을 직접 확인한 뒤 서버 권한으로 아래 RPC를 호출할 수 있습니다.
+실행 중 lease가 없고 최초 게시 요청 이후 15분이 지난 건만 처리합니다. 확인 근거는 DB 시도 기록에 보관합니다.
+게시 ID는 실제로 확인된 숫자 ID여야 합니다. NULL은 실제 미게시를 확인한 경우에만 사용합니다.
+
+```sql
+-- 예시 값을 실제 확인한 값으로 교체
+select public.reconcile_instagram_publication(
+  '00000000-0000-4000-8000-000000000000'::uuid,
+  '123456789', 'Instagram 게시 내역과 게시 ID를 직접 대조한 확인 근거',
+  'https://www.instagram.com/p/VERIFIED_POST/'
+);
+```
+
+이 RPC는 공개 API나 관람객 기능이 아닙니다. 확인 없이 failed로 바꿔 재시도하면 중복 게시 위험이 있습니다.
+실제 DB 이전과 외부 Instagram/AWS/AI 호출은 로컬 검사에서 실행하지 않았습니다.
 
 ## 의존성 점검 기록
 
