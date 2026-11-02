@@ -11,6 +11,7 @@ test("media migration defaults to a read-only inventory", () => {
   assert.throws(() => parseMigrationArgs(["--mode", "delete"]));
   assert.throws(() => parseMigrationArgs(["--limit", "0"]));
   assert.equal(parseMigrationArgs(["--limit", "5"]).limit, 5);
+  assert.throws(() => parseMigrationArgs(["--mode", "promote", "--apply", "--limit", "5"]), /full verification/);
 });
 
 test("media verification detects changed bytes", () => {

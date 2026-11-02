@@ -21,6 +21,7 @@ export function parseMigrationArgs(args: string[]) {
   }
   if (!["plan", "copy", "promote", "rollback"].includes(mode)) throw new Error("Invalid migration mode");
   if (mode !== "plan" && !apply) throw new Error("Writes require --apply; use --mode plan to inspect first");
+  if (["promote", "rollback"].includes(mode) && Number.isFinite(limit)) throw new Error("Reference changes require a full verification pass; --limit is for plan/copy only");
   return { mode, limit };
 }
 
@@ -58,6 +59,17 @@ async function main() {
   const directory = path.resolve("migration-reports");
   await mkdir(directory, { recursive: true });
   const report = path.join(directory, `${Date.now()}-${options.mode}.jsonl`);
+  // A job shares one bucket reference across all carousel images and thumbnails.
+  // Verify the entire source bucket before changing any reference, so a canary copy cannot break a batch.
+  if (options.mode === "promote" || options.mode === "rollback") {
+    for await (const key of sourceObjects(supabase)) {
+      const { data, error } = await supabase.storage.from("uploads").download(key);
+      if (error || !data) throw new Error(error?.message ?? `Source object missing: ${key}`);
+      const bytes = new Uint8Array(await data.arrayBuffer());
+      await verifyTarget(s3, bucket!, key, sha256(bytes), bytes.byteLength, data.type);
+      await appendFile(report, JSON.stringify({ key, phase: "verified_before_remap" }) + "\n");
+    }
+  }
   let count = 0;
   for await (const key of sourceObjects(supabase)) {
     if (count >= options.limit) break;
