@@ -14,14 +14,14 @@ export async function GET(request: Request) { return exhibitionRoute(async () =>
   if (!Number.isInteger(page) || page < 1 || page > 100000 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50) throw new ExhibitionError("목록 페이지를 확인해 주세요.");
   if (!["all", "card_news", "reels"].includes(format) || !["all", "unpublished", "publishing", "published", "failed"].includes(publishStatus)) throw new ExhibitionError("광고 형식과 게시 상태를 확인해 주세요.");
   const supabase = getSupabaseServiceClient();
-  let query = supabase.from("exhibition_ads").select("id,format,concept_id,job_id,publish_status,created_at", { count: "exact" }).eq("store_id", storeId).eq("user_id", 1).is("deleted_at", null);
+  let query = supabase.from("contents").select("id,format,concept_id,job_id,publish_status,created_at", { count: "exact" }).eq("store_id", storeId).eq("user_id", 1).is("deleted_at", null);
   if (format !== "all") query = query.eq("format", format);
   if (publishStatus !== "all") query = query.eq("publish_status", publishStatus);
   const { data, error, count } = await query.order("created_at", { ascending: false }).order("id", { ascending: false }).range((page - 1) * pageSize, page * pageSize - 1);
   if (error) throw new Error(error.message);
   let totalAll = count ?? 0;
   if (format !== "all" || publishStatus !== "all") {
-    const overall = await supabase.from("exhibition_ads").select("id", { count: "exact", head: true }).eq("store_id", storeId).eq("user_id", 1).is("deleted_at", null);
+    const overall = await supabase.from("contents").select("id", { count: "exact", head: true }).eq("store_id", storeId).eq("user_id", 1).is("deleted_at", null);
     if (overall.error) throw new Error(overall.error.message);
     totalAll = overall.count ?? 0;
   }

@@ -26,6 +26,8 @@ export type InstagramPublishMetadata = {
   publishedAt?: string | null;
   lastCheckedAt?: string | null;
   lastError?: string | null;
+  publishAttemptedAt?: string | null;
+  outcomeUnknown?: boolean | null;
 };
 
 type InstagramSubmissionRow = {
@@ -75,6 +77,7 @@ type InstagramPublishResult = {
   permalink: string | null;
   caption: string | null;
   lastError: string | null;
+  requiresVerification?: boolean;
 };
 
 type InstagramContainerStatus = {
@@ -591,6 +594,15 @@ async function publishInstagramContainer(
     throw new Error("Instagram publishing is not configured");
   }
 
+  // An uncertain publish must never be downgraded to a retryable container error.
+  if (instagramPublish.publishAttemptedAt || instagramPublish.outcomeUnknown) {
+    await updateInstagramMetadata(submissionId, { outcomeUnknown: true,
+      lastError: "Instagram 게시 결과 확인이 필요해요. 중복 게시를 막기 위해 자동 재요청을 중단했어요.", lastCheckedAt: new Date().toISOString() });
+    return { ok: true, submissionId, mediaType, status: "processing" as const,
+      containerId, publishedMediaId: null, permalink: null, caption: instagramPublish.caption ?? null,
+      lastError: "게시 결과 확인이 필요해요.", requiresVerification: true };
+  }
+
   const containerStatus = await getGraphJson<InstagramContainerStatus>(
     `/${containerId}`,
     {
@@ -602,12 +614,10 @@ async function publishInstagramContainer(
   const checkedAt = new Date().toISOString();
 
   if (statusCode === "FINISHED") {
-    const published = await postGraphForm<{ id: string }>(
-      `/${config.igUserId}/media_publish`,
-      {
-        creation_id: containerId,
-      },
-    );
+    // Persist the intention BEFORE the external side effect. A timeout or crash
+    // after this point needs reconciliation, rather than another media_publish.
+    await updateInstagramMetadata(submissionId, { publishAttemptedAt: checkedAt, outcomeUnknown: true });
+    const published = await postGraphForm<{ id: string }>(`/${config.igUserId}/media_publish`, { creation_id: containerId });
 
     await updateInstagramMetadata(submissionId, {
       status: "published",
@@ -617,6 +627,7 @@ async function publishInstagramContainer(
       publishedAt: checkedAt,
       lastCheckedAt: checkedAt,
       lastError: null,
+      outcomeUnknown: false,
     });
 
     const permalink = await fetchPublishedMediaPermalink(published.id).catch(() => null);
@@ -755,6 +766,8 @@ async function startClaimedInstagramPublish(
     lastCheckedAt: null,
     lastError: null,
     containerStatusCode: null,
+    publishAttemptedAt: null,
+    outcomeUnknown: false,
   });
 
   try {
@@ -910,7 +923,8 @@ export async function getStoredInstagramPublishForSubmission(submissionId: strin
   return { ok: state.status !== "failed", submissionId, mediaType: state.mediaType, status: state.status,
     containerId: state.containerId ?? null, publishedMediaId: state.publishedMediaId ?? null,
     permalink: state.permalink ?? null, caption: state.caption ?? null, lastError: state.lastError ?? null,
-    publishMode: state.publishMode ?? "single", carouselItemCount: state.carouselItemCount ?? undefined };
+    publishMode: state.publishMode ?? "single", carouselItemCount: state.carouselItemCount ?? undefined,
+    requiresVerification: state.outcomeUnknown === true };
 }
 
 export async function startInstagramPublishForSubmission(submissionId: string, options?: { mediaType?: InstagramMediaType; captionOverride?: string }) {

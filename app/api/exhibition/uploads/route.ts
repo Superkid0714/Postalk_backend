@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { exhibitionAccess, exhibitionRoute } from "@/lib/exhibition/access";
 import { ExhibitionError, text } from "@/lib/exhibition/contract";
 import { inspectMedia } from "@/lib/exhibition/render";
@@ -36,6 +36,7 @@ export async function POST(request: Request) { return exhibitionRoute(async () =
     id: assetId, store_id: storeId, creation_id: creationId, scene_number: sceneNumber, menu_id: menuId,
     media_type: image ? "image" : "video", storage_bucket: bucket, file_path: filePath, mime_type: file.type, file_size: file.size,
     duration_seconds: video ? metadata.durationSeconds : null,
+    checksum_sha256: createHash("sha256").update(bytes).digest("hex"),
   } });
   if (error?.message.includes("CREATION_ALREADY_STARTED")) throw new ExhibitionError("이미 광고 제작을 시작했어요. 진행 상태를 확인해 주세요.", 409, "CREATION_ALREADY_STARTED");
   if (error) throw new Error(error.message);

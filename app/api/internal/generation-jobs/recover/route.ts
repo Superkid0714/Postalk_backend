@@ -12,18 +12,20 @@ export async function POST(request: NextRequest) {
   if (authError) return authError;
   const supabase = getSupabaseServiceClient();
   if (process.env.EXHIBITION_MODE_ENABLED === "true") {
-    const { data: scripts, error: scriptError } = await supabase.from("exhibition_script_jobs").select("id")
+    const { data: scripts, error: scriptError } = await supabase.from("script_jobs").select("id")
       .or(`status.eq.queued,and(status.eq.processing,lease_expires_at.lt.${new Date().toISOString()})`).order("updated_at", { ascending: true }).limit(5);
     if (scriptError) return errorResponse("Unable to load script jobs", 503, { code: "RECOVERY_FAILED" });
     for (const job of scripts ?? []) { try { await processExhibitionScript(job.id); } catch (error) { console.error("Exhibition script recovery failed", { jobId: job.id, error }); } }
   }
   const { data: publishes, error: publishError } = await supabase.from("submissions")
     .select("id, ai_metadata").eq("ai_metadata->instagramPublish->>status", "processing")
+    .not("ai_metadata->instagramPublish->>containerId", "is", null)
+    .or("ai_metadata->instagramPublish->>outcomeUnknown.is.null,ai_metadata->instagramPublish->>outcomeUnknown.eq.false")
     .order("updated_at", { ascending: true }).limit(5);
   if (publishError) return errorResponse("Unable to load pending publishes", 503, { code: "RECOVERY_FAILED" });
   for (const submission of publishes ?? []) {
     const metadata = submission.ai_metadata?.instagramPublish;
-    if (!metadata?.containerId) continue;
+    if (!metadata?.containerId || metadata.outcomeUnknown) continue;
     try { await syncInstagramPublishForSubmission(submission.id); }
     catch (error) {
       if (!(error instanceof PublishBusyError)) console.error("Instagram publish sync failed", { submissionId: submission.id, error });

@@ -36,17 +36,17 @@ export async function processExhibitionScript(jobId: string) {
   if (claimError) throw new Error(claimError.message);
   if (!claimed) return;
   try {
-    const { data, error } = await supabase.from("exhibition_script_jobs").select("input").eq("id", jobId).single();
+    const { data, error } = await supabase.from("script_jobs").select("input").eq("id", jobId).single();
     if (error || !data) throw new Error("대본 작업을 찾지 못했어요.");
     const input = parseCreationInput(data.input);
     const result = await buildSceneSubtitles(input);
-    const { error: updateError } = await supabase.from("exhibition_script_jobs").update({
+    const { error: updateError } = await supabase.from("script_jobs").update({
       status: "completed", result: { ...result, scenes: result.scenes.map(scene => ({ ...scene, target: input.template.scenes[scene.sceneNumber - 1].target })) },
       failure_reason: null, updated_at: new Date().toISOString(),
     }).eq("id", jobId).eq("lease_owner", owner);
     if (updateError) throw new Error(updateError.message);
   } catch (error) {
-    await supabase.from("exhibition_script_jobs").update({ status: "failed", failure_reason: "대본을 만들지 못했어요. 다시 요청해 주세요.", updated_at: new Date().toISOString() }).eq("id", jobId).eq("lease_owner", owner);
+    await supabase.from("script_jobs").update({ status: "failed", failure_reason: "대본을 만들지 못했어요. 다시 요청해 주세요.", updated_at: new Date().toISOString() }).eq("id", jobId).eq("lease_owner", owner);
     throw error;
   }
 }

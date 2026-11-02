@@ -19,6 +19,7 @@ export async function POST(request: Request, context: { params: Promise<{ adId: 
   try {
     const result = await startInstagramPublishForSubmission(adId, { mediaType: ad.format === "reels" ? "video" : "photo" });
     if (!result.ok) throw new ExhibitionError("게시하지 못했어요. 잠시 후 다시 시도해 주세요.", 502, "PUBLISH_FAILED");
-    return successResponse({ adId, publishStatus: result.status === "published" ? "published" : "publishing", permalink: result.permalink }, "게시 요청을 보냈어요.", result.status === "processing" ? 202 : 200);
+    return successResponse({ adId, publishStatus: result.status === "published" ? "published" : "publishing", permalink: result.permalink,
+      requiresVerification: result.requiresVerification === true }, result.requiresVerification ? "게시 결과를 확인하고 있어요. 다시 게시하지 않아도 돼요." : "게시 요청을 보냈어요.", result.status === "processing" ? 202 : 200);
   } catch (error) { if (error instanceof PublishBusyError) throw new ExhibitionError("이미 게시를 진행하고 있어요.", 409, "PUBLISH_IN_PROGRESS"); throw error; }
 }); }

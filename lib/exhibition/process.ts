@@ -3,6 +3,7 @@ import { getMediaStorage, getUploadStorageBucket } from "@/lib/storage/media";
 import { withGenerationJobLease } from "@/lib/generation/job-lease";
 import { parseCreationInput, parseSubtitles, type Scene } from "@/lib/exhibition/contract";
 import { cardThumbnail, renderCard, renderReel } from "@/lib/exhibition/render";
+import { createHash } from "node:crypto";
 
 type Material = { sceneNumber: number; storageBucket: string; filePath: string; mimeType: string };
 export async function processExhibitionJob(jobId: string) {
@@ -16,7 +17,7 @@ export async function processExhibitionJob(jobId: string) {
     const materials = job.request_payload.materials as Material[];
     const total = input.template.scenes.length + 2;
     const active = async () => {
-      const { data, error } = await supabase.from("exhibition_ads").select("deleted_at").eq("id", job.submission_id).single();
+      const { data, error } = await supabase.from("contents").select("deleted_at").eq("id", job.submission_id).single();
       if (error || !data || data.deleted_at) throw new Error("삭제된 광고의 제작을 중단했어요.");
     };
     const progress = async (stage: string, current: number, message: string) => {
@@ -46,12 +47,14 @@ export async function processExhibitionJob(jobId: string) {
         const { data: previous, error: lookupError } = await supabase.from("submission_assets").select("id").eq("submission_id", job.submission_id).eq("file_path", filePath).maybeSingle();
         if (lookupError) throw new Error(lookupError.message);
         if (previous) {
-          const { error } = await supabase.from("submission_assets").update({ storage_bucket: bucket, file_size: bytes.byteLength }).eq("id", previous.id);
+          const { error } = await supabase.from("submission_assets").update({ storage_bucket: bucket, file_size: bytes.byteLength,
+            mime_type: mimeType, generation_job_id: jobId, checksum_sha256: createHash("sha256").update(bytes).digest("hex") }).eq("id", previous.id);
           if (error) throw new Error(error.message);
           return previous.id as string;
         }
         const { data, error } = await supabase.from("submission_assets").insert({ submission_id: job.submission_id, asset_type: assetType,
-          storage_bucket: bucket, file_path: filePath, file_name: filePath.split("/").pop(), mime_type: mimeType, file_size: bytes.byteLength, sort_order: order }).select("id").single();
+          storage_bucket: bucket, file_path: filePath, file_name: filePath.split("/").pop(), mime_type: mimeType, file_size: bytes.byteLength, sort_order: order,
+          generation_job_id: jobId, checksum_sha256: createHash("sha256").update(bytes).digest("hex") }).select("id").single();
         if (error || !data) throw new Error(error?.message ?? "결과물을 저장하지 못했어요.");
         return data.id as string;
       };
@@ -69,8 +72,7 @@ export async function processExhibitionJob(jobId: string) {
           generatedImages.push({ assetId, filePath, promptKey: `scene-${scene.sceneNumber}` });
           if (scene.sceneNumber === 1) {
             thumbnailPath = `${root}-thumb.jpg`;
-            const { error } = await getMediaStorage(supabase).from(bucket).upload(thumbnailPath, await cardThumbnail(image), { contentType: "image/jpeg", upsert: true });
-            if (error) throw new Error(error.message);
+            await save(await cardThumbnail(image), thumbnailPath, "video_thumbnail", "image/jpeg");
           }
         }
         resultId = generatedImages[0].assetId; resultPath = generatedImages[0].filePath;
