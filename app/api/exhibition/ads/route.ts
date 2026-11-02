@@ -31,7 +31,7 @@ export async function GET(request: Request) { return exhibitionRoute(async () =>
   if (jobs.error || submissions.error) throw new Error("목록을 불러오지 못했어요.");
   const items = await Promise.all((data ?? []).map(async ad => {
     const job = jobs.data?.find(job => job.id === ad.job_id);
-    const thumbnail = job?.result_payload?.thumbnailFilePath ?? (ad.format === "card_news" ? job?.result_payload?.generatedImages?.[0]?.filePath : null);
+    const thumbnail = job?.status === "completed" ? job.result_payload?.thumbnailFilePath : null;
     return { adId: ad.id, format: ad.format, conceptId: ad.concept_id, title: submissions.data?.find(row => row.id === ad.id)?.title ?? "",
       publishStatus: ad.publish_status, generationStatus: job?.status ?? "queued", createdAt: ad.created_at,
       thumbnailUrl: job?.result_storage_bucket && thumbnail ? await signedMedia(job.result_storage_bucket, thumbnail) : null };

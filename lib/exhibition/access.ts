@@ -3,10 +3,14 @@ import { errorResponse } from "@/lib/api/response";
 import { ExhibitionError, object } from "@/lib/exhibition/contract";
 import { isUuid } from "@/lib/validation";
 
-export function exhibitionAccess(request: Request, body?: Record<string, unknown> | FormData) {
+export function exhibitionConfiguration() {
   if (process.env.EXHIBITION_MODE_ENABLED !== "true") throw new ExhibitionError("요청한 화면을 찾을 수 없어요.", 404, "NOT_FOUND");
   const storeId = process.env.EXHIBITION_STORE_ID;
   if (!isUuid(storeId)) throw new ExhibitionError("전시용 가게 설정을 확인해 주세요.", 503, "EXHIBITION_NOT_CONFIGURED");
+  return { storeId };
+}
+export function exhibitionAccess(request: Request, body?: Record<string, unknown> | FormData) {
+  const { storeId } = exhibitionConfiguration();
   const values = [request.headers.get("x-user-id"), new URL(request.url).searchParams.get("user_id"), body instanceof FormData ? body.get("user_id") : body?.user_id].filter(value => value !== null && value !== undefined);
   if (!values.length || values.some(value => value !== 1 && value !== "1")) throw new ExhibitionError("전시 로그인을 다시 확인해 주세요.", 401, "UNAUTHORIZED");
   return { userId: 1, storeId };

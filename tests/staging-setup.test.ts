@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
+import { exhibitionMediaPolicy } from "../lib/exhibition/media-policy.ts";
 
 const sql = (path: string) => readFile(new URL(`../supabase/${path}`, import.meta.url), "utf8");
 test("staging SQL checks installation and protects legacy QR tables even with automatic client grants", async (t) => {
@@ -51,6 +52,7 @@ test("staging SQL checks installation and protects legacy QR tables even with au
       const setup = await sql("staging/03-private-storage.sql");
       await db.exec(setup);
       assert.equal((await db.query<{ public: boolean }>("select public from storage.buckets where id='uploads'")).rows[0].public, false);
+      assert.equal(Number((await db.query<{ file_size_limit: number }>("select file_size_limit from storage.buckets where id='uploads'")).rows[0].file_size_limit), exhibitionMediaPolicy.video.maxBytes);
       await assert.rejects(db.exec(setup), /BUCKET_ALREADY_EXISTS/);
       await db.exec("rollback;");
       assert.equal((await db.query("select * from storage.buckets")).rows.length, 1);
