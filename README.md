@@ -144,6 +144,9 @@ node --env-file=.env scripts/generation-worker.mjs
 
 ### 실행 검증
 
+새 테스트 Supabase 프로젝트의 설치·확인 순서는 [운영 문서](docs/OPERATIONS.md)의 최초 테스트 프로젝트 절을 따릅니다.
+현재 프로젝트의 실제 DB에는 자동 적용하지 않습니다. 설치 후 검증 SQL은 임시 제작 데이터를 롤백합니다.
+
 ```powershell
 npm test
 npx tsc --noEmit --incremental false

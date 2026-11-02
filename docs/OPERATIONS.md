@@ -14,6 +14,7 @@ API 쓰기와 워커를 중지하고 DB를 백업합니다. 기존 DB에는 아�
 | 5 | 20261102_media_storage_remap.sql | 검증된 객체의 저장소 참조 전환 |
 | 6 | 20261102_exhibition_flow.sql | 전시용 템플릿·대본·일괄 제작·상세 수정·삭제 및 저장소 참조 확장 |
 | 7 | 20261102_z_normalized_workflow.sql | 생성 세션·장면·콘셉트 스냅샷·파일 카탈로그·게시 시도 기록, 이전 이름 호환 뷰 |
+| 8 | 20261102_zz_server_only_tables.sql | 가게·사용자·기존 촬영·QR 테이블의 RLS 및 서버 전용 명시적 권한 |
 
 같은 접수에 활성 작업이 중복되면 두 번째 SQL은 실패하고 전체 롤백됩니다. 먼저 확인하세요.
 
@@ -29,6 +30,45 @@ group by submission_id having count(*) > 1;
 환경 설정 후 코드를 배포하고 API·QR 권한·생성·게시 흐름을 확인한 뒤 일반 쓰기를 재개합니다.
 
 ## 환경
+
+### 최초 테스트 Supabase 프로젝트 설치
+
+별도 클라우드 테스트 프로젝트는 아직 생성하지 않았습니다. 대시보드 접속이 복구되면 다음 순서로 진행합니다.
+프로젝트 이름은 postalk-staging을 권장합니다. 현재 .env의 프로젝트와 다른 프로젝트인지 ref를 대조하세요.
+DB 비밀번호는 프로젝트 생성 화면에서 직접 설정하고 실제 키는 로컬 .env.staging에만 입력합니다.
+계정의 무료 프로젝트 생성 가능 여부를 확인하며 유료 전환을 자동 진행하지 않습니다.
+
+새 프로젝트의 SQL Editor에서 아래 파일을 차례로 실행합니다. 기존 DB의 순차 업그레이드와 다른 절차입니다.
+
+| 순서 | 파일 | 확인할 결과 |
+| --- | --- | --- |
+| 0 | [빈 DB 확인](../supabase/staging/00-check-empty.sql) | EMPTY_PUBLIC_SCHEMA; public에 테이블이 있으면 중단 |
+| 1 | [전체 설치 SQL](../supabase/schema.sql) | 모든 SQL 성공. 기존 DB에 재실행하지 않음 |
+| 2 | [설치 검증](../supabase/staging/02-verify.sql) | PASS 결과와 ROLLBACK. 임시 제작·캡션·삭제 검사가 실제 테이블에 잔류하지 않음 |
+| 3 | [비공개 업로드 버킷](../supabase/staging/03-private-storage.sql) | 이후 API 파일 테스트에 필요. 이미 있는 버킷은 변경하지 않고 중단 |
+
+검증 SQL은 실제 PostgreSQL 테이블·FK·서버 권한·RLS·RPC·호환 뷰와 생성 멱등성을 점검합니다.
+실제 Storage 파일·AI·Instagram API를 호출하지 않습니다. 버킷 SQL은 새 테스트 프로젝트의 메타데이터만 생성합니다.
+버킷은 비공개이고 50 MiB 제한입니다. 앱의 영상 허용 상한 200 MiB보다 엄격하므로 테스트 파일은 50 MiB 이하로 준비합니다.
+프로젝트 전체 파일 제한도 별도로 적용됩니다. 버킷만 변경해 프로젝트 상한을 우회할 수는 없습니다.
+공개 Storage 정책을 추가하지 않습니다. 파일 접근은 서버와 만료되는 서명 URL을 사용합니다.
+
+[테스트 환경 예시](../supabase/staging/env.example)를 새 .env.staging으로 복사하고 테스트 프로젝트의 값만 입력합니다.
+기존 .env와 기존 프로젝트를 변경하지 않습니다. 예시의 외부 서비스 빈 값도 유지해야 Next.js가 기존 .env에서
+AI/Instagram/AWS 설정을 상속하지 않습니다. .env.staging은 Git에서 제외됩니다.
+
+```powershell
+if (Test-Path -LiteralPath .env.staging) { throw '.env.staging already exists' }
+Copy-Item -LiteralPath supabase/staging/env.example -Destination .env.staging
+# 테스트용 URL·키를 로컬 파일에 설정한 다음 실행
+node --env-file=.env.staging node_modules/next/dist/bin/next dev -p 3100
+```
+
+EXHIBITION_MODE_ENABLED는 초기 false이며 SQL 검증 자체에는 앱 서버나 API 키가 필요하지 않습니다.
+다음 단계에서 테스트 가게와 전시 비밀키를 설정하고 명시적으로 활성화한 뒤 프론트와 연결합니다.
+SQL Editor 검사 통과는 실제 Supabase PostgREST·Storage 통합 검사를 대신하지 않습니다.
+
+### 서버 설정 값
 
 - DB: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
 - 내부 워커: INTERNAL_WORKER_API_KEY
@@ -100,7 +140,7 @@ S3 전환 전 비공개 버킷·IAM·사진/영상 업로드·미리보기·상�
 
 ## 정규화 구조 적용과 확인
 
-7번 마이그레이션과 새 서버 코드를 함께 배포합니다. 운영 DB에 자동 적용하는 코드는 없습니다.
+7~8번 마이그레이션과 새 서버 코드를 함께 배포합니다. 운영 DB에 자동 적용하는 코드는 없습니다.
 먼저 복제/테스트 DB에 적용하고 실제 Supabase PostgREST를 통한 템플릿 저장·대본 생성·업로드·제작·조회를 확인하세요.
 PGlite는 PostgreSQL 테이블/RPC를 실행하지만 Supabase PostgREST의 스키마 캐시와 뷰 노출 검증은 별도입니다.
 
