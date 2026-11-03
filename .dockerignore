@@ -6,3 +6,18 @@ npm-debug.log
 Dockerfile
 docker-compose.yml
 README.md
+
+# Credentials and local artifacts must never enter the build context or image.
+.env
+.env.*
+!.env.example
+.aws
+.codex
+.agents
+.vercel
+tmp
+.tmp*
+migration-reports
+dev-server.log
+*.tsbuildinfo
+public/merchant-*.png

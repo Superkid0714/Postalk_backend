@@ -97,6 +97,29 @@ ADMIN_API_KEY는 사용하지 않습니다. 내부 키는 상인 인증 수단�
 
 ## 실행
 
+### 배포 점검 결과 (2026-11-03 KST)
+
+기존 문서의 Vercel main 주소 `https://postalk-backend-git-main-cnu-clothing.vercel.app/api/health`는
+HTTP 200과 `service=postalk-backend`를 응답했습니다. 커밋 `8fccafc`의 GitHub Vercel 상태도 success입니다.
+그러나 main 주소가 해당 커밋을 실행한다는 증거는 아닙니다. Vercel 상세 화면은 로그인이 필요하여
+최신 브랜치의 실제 도메인·환경 변수·운영 승격·프론트 연결 여부는 아직 확인하지 못했습니다.
+같은 main 주소의 `GET /api/exhibition/uploads`는 HTML 404를 반환했습니다.
+새 코드의 비활성화 응답은 JSON이므로, 이 주소에서 최신 전시 라우트가 제공되는 것으로 확인되지 않았습니다.
+
+현재 영상 업로드는 API를 통과하는 multipart 방식입니다. Vercel Functions의 요청 본문 4.5MB 제한 때문에
+앱의 사진 10MiB·영상 50MiB 상한 전체를 처리할 수 없습니다.
+[Vercel 공식 제한](https://vercel.com/docs/errors/function_payload_too_large)을 참조하세요.
+Supabase Pro 결제로 이 API 서버 제한이 바뀌지는 않습니다.
+
+행사 배포는 API와 복구 워커를 Docker의 상시 실행 서버에서 함께 운영하는 방향을 우선 권장합니다.
+DB·Storage는 Supabase를 유지합니다. Vercel을 API 호스트로 유지하려면 서명 업로드·완료 검증을 도입해
+미디어를 Supabase로 직접 전송하고, 장시간 렌더링·복구 워커 실행 환경을 별도로 확정해야 합니다.
+현재 Docker 설정은 준비되어 있지만 실제 클라우드 컨테이너 배포는 실행하지 않았습니다.
+로컬 Docker daemon도 중지 상태여서 이번 점검에서는 컨테이너 빌드·실행을 확인하지 못했습니다.
+
+Docker 빌드 문맥에서 `.env*`, 개인 QR, 임시 결과를 제외하도록 `.dockerignore`를 보완했습니다.
+실제 환경 값은 Compose의 runtime `env_file` 또는 배포 플랫폼의 환경 변수로 주입합니다.
+
 ```powershell
 npm ci
 npm run dev
