@@ -5,6 +5,7 @@ node_modules
 npm-debug.log
 Dockerfile
 docker-compose.yml
+Dockerfile.worker
 README.md
 
 # Credentials and local artifacts must never enter the build context or image.

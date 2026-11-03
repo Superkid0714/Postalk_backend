@@ -1,0 +1,59 @@
+# Creates paid compute only when explicitly applied in your Render account.
+# No Render database/disk: all persistent data stays in existing Supabase.
+services:
+  - type: web
+    name: postalk-api
+    runtime: docker
+    region: singapore
+    plan: 1c-2g
+    numInstances: 1
+    branch: codex/merchant-workflow-aws-storage
+    autoDeployTrigger: 'off'
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    maxShutdownDelaySeconds: 180
+    envVars:
+      - key: PORT
+        value: '10000'
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=1024
+      - key: MEDIA_STORAGE_PROVIDER
+        value: supabase
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: INTERNAL_WORKER_API_KEY
+        generateValue: true
+      - key: EXHIBITION_MODE_ENABLED
+        value: 'false'
+      - key: EXHIBITION_PUBLISH_SECRET
+        generateValue: true
+  - type: worker
+    name: postalk-recovery
+    runtime: docker
+    region: singapore
+    plan: 0.5c-512mb
+    numInstances: 1
+    branch: codex/merchant-workflow-aws-storage
+    autoDeployTrigger: 'off'
+    dockerfilePath: ./Dockerfile.worker
+    maxShutdownDelaySeconds: 60
+    envVars:
+      - key: GENERATION_WORKER_HOSTPORT
+        fromService:
+          type: web
+          name: postalk-api
+          property: hostport
+      - key: INTERNAL_WORKER_API_KEY
+        fromService:
+          type: web
+          name: postalk-api
+          envVarKey: INTERNAL_WORKER_API_KEY
+      # Enable explicitly only after verifying live pending work and providers.
+      - key: GENERATION_WORKER_ENABLED
+        value: 'false'

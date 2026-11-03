@@ -5,6 +5,7 @@ export async function GET() {
     {
       status: "ok",
       service: "postalk-backend",
+      revision: process.env.RENDER_GIT_COMMIT || process.env.VERCEL_GIT_COMMIT_SHA || null,
       timestamp: new Date().toISOString(),
     },
     { status: 200 },

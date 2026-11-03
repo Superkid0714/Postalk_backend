@@ -26,7 +26,7 @@ async function extractVideoThumbnailBytes(videoBytes: Uint8Array) {
     await fs.writeFile(inputPath, videoBytes);
 
     await new Promise<void>((resolve, reject) => {
-      const ffmpeg = spawn(ffmpegStatic ?? "ffmpeg", [
+      const ffmpeg = spawn(process.env.FFMPEG_PATH || ffmpegStatic || "ffmpeg", [
         "-y",
         "-ss",
         "0.1",

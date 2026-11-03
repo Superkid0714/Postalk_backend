@@ -5,6 +5,8 @@ services:
       dockerfile: Dockerfile
     container_name: postalk-web
     restart: unless-stopped
+    init: true
+    stop_grace_period: 180s
     ports:
       - "${APP_PORT:-3000}:3000"
     env_file:
@@ -25,8 +27,9 @@ services:
   generation-worker:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.worker
     restart: unless-stopped
+    init: true
     env_file:
       - .env
     environment:

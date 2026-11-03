@@ -91,6 +91,7 @@ export function getPublicAppUrl() {
   const explicit =
     readOptionalEnv("NEXT_PUBLIC_APP_URL") ??
     readOptionalEnv("PUBLIC_APP_URL") ??
+    process.env.RENDER_EXTERNAL_URL?.trim() ??
     process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim() ??
     process.env.VERCEL_URL?.trim() ??
     null;

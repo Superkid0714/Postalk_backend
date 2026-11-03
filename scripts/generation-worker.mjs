@@ -1,13 +1,18 @@
 import { setTimeout } from "node:timers/promises";
 
-const baseUrl = process.env.GENERATION_WORKER_BASE_URL || "http://postalk-web:3000";
+// Render's private hostport has no scheme; Compose supplies a complete URL.
+const baseUrl = process.env.GENERATION_WORKER_BASE_URL ||
+  (process.env.GENERATION_WORKER_HOSTPORT ? `http://${process.env.GENERATION_WORKER_HOSTPORT}` : "http://postalk-web:3000");
+const enabled = process.env.GENERATION_WORKER_ENABLED !== "false";
 const key = process.env.INTERNAL_WORKER_API_KEY?.trim();
 if (!key) throw new Error("INTERNAL_WORKER_API_KEY is required for the generation worker");
+if (!enabled) console.log("Generation recovery is disabled; no external jobs will run.");
 const shutdown = new AbortController();
 for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => shutdown.abort());
 
 while (!shutdown.signal.aborted) {
   try {
+    if (!enabled) { await setTimeout(20_000, undefined, { signal: shutdown.signal }); continue; }
     const response = await fetch(new URL("/api/internal/generation-jobs/recover", baseUrl), {
       method: "POST",
       headers: { "x-internal-worker-key": key },
