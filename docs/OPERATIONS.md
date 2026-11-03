@@ -156,7 +156,7 @@ Instagram 컨테이너 ID를 저장하기 전에 프로세스가 중단되면 �
 약 200건 제작을 계획하며 DB와 이미지·영상 저장은 Supabase Pro로 통일합니다.
 MEDIA_STORAGE_PROVIDER=supabase를 유지하고 AWS 이전은 보류합니다. 실제 결제·구독 변경은 이 코드가 실행하지 않습니다.
 Supabase의 Pro 구독은 조직 단위이고 파일/전송 할당량을 공유하므로 테스트 프로젝트를 포함한 조직 Usage도 확인합니다.
-Next.js/FFmpeg 실행 서버와 외부 AI/TTS 비용은 Supabase 구독과 별개입니다.
+Next.js/FFmpeg 실행 서버와 외부 AI 비용은 Supabase 구독과 별개입니다. 릴스는 음성 합성을 사용하지 않습니다.
 
 행사 전에 프론트의 파일 제한을 GET /api/exhibition/uploads 정책에 맞추고, 실제 uploads 버킷 상한도 50MiB로 확인합니다.
 사진 10MiB, 영상 50MiB, multipart 전체 52MiB입니다. 기존 버킷 설정은 코드에서 자동 변경하지 않습니다.

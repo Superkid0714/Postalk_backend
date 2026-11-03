@@ -15,10 +15,6 @@ EXHIBITION_MODE_ENABLED=true
 EXHIBITION_STORE_ID=<등록된 stores.id UUID>
 EXHIBITION_PUBLISH_SECRET=<충분히 무작위인 32자 이상의 서버 전용 값>
 EXHIBITION_SCRIPT_MODEL=gpt-4.1-mini
-EXHIBITION_TTS_API_URL=<자막 입력을 WAV로 합성하는 서버 주소>
-EXHIBITION_TTS_API_KEY=<필요한 경우>
-EXHIBITION_TTS_MODEL=<공급자 설정에 따른 선택 값>
-EXHIBITION_TTS_VOICE=<공급자 설정에 따른 선택 값>
 ```
 
 게시 비밀 값은 프론트엔드에 전달하지 않으며 전시 중에는 유지합니다.
@@ -131,20 +127,11 @@ progress에는 stage, current, total, message가 있습니다. 준비·렌더링
 완료 응답의 adId로 프론트에서 replace 이동합니다.
 실패한 생성은 현재 Context의 권한으로 POST /api/exhibition/ads/:adId/retry를 호출할 수 있습니다.
 
-## 자막·TTS·음악
+## 자막·음악
 
-SC-06에서 수정한 문장 하나를 자막과 TTS 양쪽에 동일하게 사용합니다.
-릴스는 서버에서 720×1280으로 정규화하며 영상 원본의 오디오·배경음악은 넣지 않습니다.
-자막 없는 템플릿에서는 대본·음성 합성을 호출하지 않고 무음 릴스를 만듭니다.
-자막 있는 경우 음성이 끝날 때까지 필요한 길이를 확보하며 부족한 영상은 반복합니다.
-결과의 narration.disclosure는 AI 음성 안내이므로 프론트 재생 화면에서 표시해 주세요.
-
-TTS 연결은 공급자 교체가 가능한 서버 어댑터입니다. EXHIBITION_TTS_API_URL로
-`{input,response_format:"wav",model?,voice?}` POST를 보내고 WAV 바이너리를 받습니다.
-EXHIBITION_TTS_API_KEY가 있으면 Bearer 헤더를 사용합니다. 공급자별 프로토콜이 다르면 이 어댑터를 조정합니다.
-실제 음성 공급자 연결은 아직 필요합니다. 미설정 시 TTS_NOT_CONFIGURED를 반환해 생성 전에 알립니다.
-현재 OpenAI Speech API의 종료 예정 안내 때문에 특정 종료 예정 모델을 기본값으로 고정하지 않았습니다.
-([공식 음성 문서](https://developers.openai.com/api/docs/guides/text-to-speech))
+SC-06에서 수정한 문장은 화면 자막으로만 사용합니다.
+릴스는 서버에서 720×1280으로 정규화하며, 영상 원본의 오디오·배경음악과 음성 합성은 넣지 않는 무음 MP4를 만듭니다.
+자막이 있는 템플릿은 지정된 장면 길이를 유지하며, 부족한 영상은 반복합니다.
 
 ## 공용 계정의 게시·캡션·삭제
 
@@ -172,7 +159,7 @@ page는 1부터, pageSize는 1~50입니다. 홈에서는 pageSize=4를 사용합
 목록에는 완성된 작업의 작은 JPEG 대표 이미지만 사용합니다. 카드뉴스는 360×450, 릴스는 360×640입니다.
 제작 중이거나 대표 이미지가 없는 옛 결과는 thumbnailUrl이 null입니다. 프론트는 기본 이미지를 표시합니다.
 썸네일이 없다는 이유로 목록에서 전체 카드나 영상 원본을 대신 다운로드하지 않습니다.
-상세: resultUrls, caption, permalink, narration, progress, canPublish 등. 결과 URL은 브라우저에서 바로 여는 서명 URL입니다.
+상세: resultUrls, caption, permalink, progress, canPublish 등. 결과 URL은 브라우저에서 바로 여는 서명 URL입니다.
 URL은 만료되므로 재조회할 수 있어야 합니다. 카드뉴스 저장은 현재 장의 resultUrls[index]를 사용합니다.
 목록 필터·스크롤 복구와 메뉴 숨김, 새로고침 가드, 버튼 중복 방지는 프론트에서 처리합니다.
 
@@ -192,7 +179,7 @@ publication_attempts에는 명시적 게시 시도와 확정 실패·성공·결
 외부 릴스/디자인 담당자는 최종 conceptId, template.id/version, renderer, scenes의 순서·입력 종류·길이,
 usesSubtitles와 maxSubtitleChars를 전달해야 합니다. 메뉴별 장면과 편집 자막은 생성 요청 스냅샷에 고정됩니다.
 현재 지원 renderer는 source-photo-v1 / scene-reel-v1이며 새 renderer는 명시적 구현 후 허용해야 합니다.
-최종 콘셉트 3종이나 외부 TTS 공급자를 임의로 지정하지 않았습니다. 공급자 코드/API 전달 후 실제 연동이 필요합니다.
+최종 콘셉트 3종은 외부 담당자의 정의를 받은 뒤 연결합니다. TTS는 사용하지 않습니다.
 
 Supabase DB와 Storage를 기본으로 유지합니다. 목록에는 작은 썸네일을 사용하고 원본 영상은 상세에서 요청합니다.
 AWS는 선택 가능한 저장소 어댑터이며 실제 이전은 수행하지 않습니다. 파일 보존 정책 미확정으로 자동 삭제하지 않습니다.

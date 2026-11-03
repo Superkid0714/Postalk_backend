@@ -3,7 +3,6 @@ import { mkdtemp, readFile, writeFile, copyFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import ffmpegStatic from "ffmpeg-static";
-import { fetchWithTimeout } from "@/lib/http";
 import type { CreationInput, Scene } from "@/lib/exhibition/contract";
 
 const ffmpeg = () => process.env.FFMPEG_PATH || ffmpegStatic || "ffmpeg";
@@ -60,24 +59,7 @@ export async function cardThumbnail(bytes: Uint8Array) {
   } finally { await rm(directory, { recursive: true, force: true }); }
 }
 
-// Provider-neutral WAV contract. No default is tied to a retiring Speech API/model.
-export async function synthesizeNarration(text: string) {
-  const endpoint = process.env.EXHIBITION_TTS_API_URL;
-  if (!endpoint) throw new Error("음성 합성 서비스 설정을 확인해 주세요.");
-  const url = new URL(endpoint);
-  if (url.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(url.hostname)) throw new Error("음성 합성 서비스에는 HTTPS 주소가 필요해요.");
-  const response = await fetchWithTimeout(url, { method: "POST",
-    headers: { "Content-Type": "application/json", ...(process.env.EXHIBITION_TTS_API_KEY ? { Authorization: `Bearer ${process.env.EXHIBITION_TTS_API_KEY}` } : {}) },
-    body: JSON.stringify({ input: text, response_format: "wav", ...(process.env.EXHIBITION_TTS_MODEL ? { model: process.env.EXHIBITION_TTS_MODEL } : {}), ...(process.env.EXHIBITION_TTS_VOICE ? { voice: process.env.EXHIBITION_TTS_VOICE } : {}) }), timeoutMs: 60_000,
-  });
-  if (!response.ok) throw new Error("음성을 만들지 못했어요. 다시 시도해 주세요.");
-  const bytes = Buffer.from(await response.arrayBuffer());
-  if (bytes.byteLength > 20 * 1024 * 1024) throw new Error("음성 응답이 너무 커요.");
-  if (bytes.toString("ascii", 0, 4) !== "RIFF" || bytes.toString("ascii", 8, 12) !== "WAVE") throw new Error("음성 서비스가 WAV 파일을 반환하지 않았어요.");
-  return bytes;
-}
-
-export async function renderReel(input: CreationInput, load: (scene: Scene) => Promise<Uint8Array>, subtitles: Array<{ sceneNumber: number; text: string }>, onScene: (scene: Scene) => Promise<void>, synthesize = synthesizeNarration) {
+export async function renderReel(input: CreationInput, load: (scene: Scene) => Promise<Uint8Array>, subtitles: Array<{ sceneNumber: number; text: string }>, onScene: (scene: Scene) => Promise<void>) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "postalk-reel-"));
   try {
     if (input.template.usesSubtitles) await font(directory);
@@ -87,22 +69,17 @@ export async function renderReel(input: CreationInput, load: (scene: Scene) => P
       const probe = parseMediaProbe(await run(["-i", source], directory, true));
       if (scene.mediaType === "video" && (!probe.durationSeconds || probe.durationSeconds + 0.05 < scene.durationSeconds)) throw new Error(`${scene.sceneNumber}번 영상이 너무 짧아요. 다시 촬영해 주세요.`);
       const output = `scene-${scene.sceneNumber}.mp4`;
-      let duration = scene.durationSeconds;
+      const duration = scene.durationSeconds;
       const args = ["-y", ...(scene.mediaType === "image" ? ["-loop", "1"] : ["-stream_loop", "-1"]), "-i", source];
       let filter = "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,setsar=1,fps=30";
       if (input.template.usesSubtitles) {
         const text = subtitles.find(item => item.sceneNumber === scene.sceneNumber)?.text;
         if (!text) throw new Error("장면 자막이 비어 있어요.");
-        const audio = `voice-${scene.sceneNumber}.wav`;
         const caption = `caption-${scene.sceneNumber}.txt`;
-        await writeFile(path.join(directory, audio), await synthesize(text));
         await writeFile(path.join(directory, caption), wrap(text));
-        const voice = parseMediaProbe(await run(["-i", audio], directory, true));
-        if (!voice.durationSeconds) throw new Error("음성 길이를 확인하지 못했어요.");
-        duration = Math.max(duration, voice.durationSeconds + 0.2);
-        args.push("-i", audio, "-map", "0:v:0", "-map", "1:a:0", "-af", "apad", "-ar", "48000", "-ac", "2", "-c:a", "aac");
         filter += `,drawtext=fontfile=font.otf:textfile=${caption}:expansion=none:fontsize=34:fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=12:x=(w-text_w)/2:y=h-text_h-140`;
-      } else args.push("-an");
+      }
+      args.push("-an");
       args.push("-vf", filter, "-t", String(duration), "-c:v", "libx264", "-preset", "veryfast", "-threads", "2", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output);
       await run(args, directory);
       await onScene(scene);

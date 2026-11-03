@@ -77,7 +77,7 @@ export async function processExhibitionJob(jobId: string) {
         }
         resultId = generatedImages[0].assetId; resultPath = generatedImages[0].filePath;
       } else {
-        await progress("rendering", 0, input.template.usesSubtitles ? "자막과 같은 문장으로 음성을 만들고 있어요." : "영상을 연결하고 있어요.");
+        await progress("rendering", 0, input.template.usesSubtitles ? "자막을 넣어 영상을 만들고 있어요." : "영상을 연결하고 있어요.");
         const rendered = await renderReel(input, load, subtitles, scene => progress("rendering", scene.sceneNumber, `${scene.sceneNumber}번째 장면을 완성했어요.`));
         resultPath = `${root}.mp4`; thumbnailPath = `${root}.jpg`;
         resultId = await save(rendered.video, resultPath, "generated_video", "video/mp4");
@@ -89,7 +89,7 @@ export async function processExhibitionJob(jobId: string) {
       await active();
       const { error: completionError } = await supabase.from("generation_jobs").update({ status: "completed", completed_at: new Date().toISOString(), failure_reason: null,
         result_asset_id: resultId, result_storage_bucket: bucket, result_file_path: resultPath,
-        result_payload: { generatedImages, thumbnailFilePath: thumbnailPath, format: input.format, narration: input.template.usesSubtitles ? { isAiGenerated: true, disclosure: "이 영상의 내레이션은 AI가 만든 음성이에요." } : null },
+        result_payload: { generatedImages, thumbnailFilePath: thumbnailPath, format: input.format },
         progress: { stage: "completed", current: total, total, message: "광고가 완성되었어요." },
       }).eq("id", jobId);
       if (completionError) throw new Error(completionError.message);

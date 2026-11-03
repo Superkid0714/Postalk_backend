@@ -17,7 +17,7 @@ test("concept and menu-dependent scene definitions are supplied rather than hard
   const invalid = sampleInput(); invalid.template.scenes[0].menuId = "missing";
   assert.throws(() => parseCreationInput(invalid));
 });
-test("silent templates reject captions and captioned reels preserve exact edited narration text", () => {
+test("silent templates reject captions and captioned reels preserve exact edited subtitle text", () => {
   const input = parseCreationInput(sampleInput());
   const text = "직접 고친 자막이에요.";
   assert.deepEqual(parseSubtitles([{ sceneNumber: 1, text }], input), [{ sceneNumber: 1, text }]);

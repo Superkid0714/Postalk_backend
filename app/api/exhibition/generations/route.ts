@@ -12,7 +12,6 @@ export async function POST(request: Request) { return exhibitionRoute(async () =
   const input = parseCreationInput(body);
   const subtitles = parseSubtitles(body.subtitles, input);
   const token = creationToken(input.creationId, storeId);
-  if (input.template.usesSubtitles && !process.env.EXHIBITION_TTS_API_URL) throw new ExhibitionError("음성 합성 서비스가 아직 연결되지 않았어요. 잠시 후 다시 시도해 주세요.", 503, "TTS_NOT_CONFIGURED");
   if (!Array.isArray(body.materials) || body.materials.length !== input.template.scenes.length) throw new ExhibitionError("모든 장면의 재료를 올려 주세요.");
   const assets = body.materials.map((value, index) => {
     const material = object(value);

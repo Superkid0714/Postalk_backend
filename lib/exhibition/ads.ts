@@ -39,7 +39,7 @@ export async function exhibitionAdDetail(adId: string, storeId: string) {
     resultUrls,
     thumbnailUrl: normalizedThumbnail ? await signedMedia(normalizedThumbnail.bucket, normalizedThumbnail.path) : bucket && thumbnail ? await signedMedia(bucket, thumbnail) : null,
     requiresVerification: submission.data.ai_metadata?.instagramPublish?.outcomeUnknown === true,
-    narration: generation.result_payload?.narration ?? null, createdAt: ad.created_at };
+    createdAt: ad.created_at };
 }
 
 export async function contentMedia(contentId: string, storeId: string, jobId: string) {

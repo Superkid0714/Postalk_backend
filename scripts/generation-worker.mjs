@@ -1,6 +1,6 @@
 import { setTimeout } from "node:timers/promises";
 
-// Render's private hostport has no scheme; Compose supplies a complete URL.
+// Railway's private domain has no scheme; Compose supplies a complete URL.
 const baseUrl = process.env.GENERATION_WORKER_BASE_URL ||
   (process.env.GENERATION_WORKER_HOSTPORT ? `http://${process.env.GENERATION_WORKER_HOSTPORT}` : "http://postalk-web:3000");
 const enabled = process.env.GENERATION_WORKER_ENABLED !== "false";

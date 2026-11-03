@@ -6,12 +6,13 @@
 - [프론트엔드 API 변경](docs/API_CHANGES.md)
 - [배포·운영·DB 적용 순서](docs/OPERATIONS.md)
 - [2026-11-03 실제 Supabase DB·Storage 적용 결과](docs/SUPABASE_DEPLOYMENT_20261103.md)
-- [신규 서버·HTTPS 주소를 포함한 Render 배포](docs/RENDER_DEPLOYMENT.md)
+- [Railway API·워커 배포 준비](docs/RAILWAY_DEPLOYMENT.md)
 - [이미지·영상 AWS S3 이전과 롤백](docs/AWS_MEDIA_MIGRATION.md)
 - [변경 묶음과 검토 순서](docs/CHANGELOG.md)
 
 기본 미디어 저장소는 Supabase이며 `MEDIA_STORAGE_PROVIDER=s3`로 새 파일의 쓰기 위치를 바꿀 수 있습니다.
 전시 운영은 Supabase Pro의 DB와 비공개 Storage를 사용합니다. AWS 저장소 이전은 보류하며 호환 코드는 참고용으로 유지합니다.
+백엔드는 Railway Hobby의 API·복구 워커 2개 서비스로 운영할 예정입니다. 기존 Render Blueprint는 대안/기록용이며 새 운영 배포에는 사용하지 않습니다.
 기존 파일은 저장된 bucket 식별자로 읽습니다. 실제 구독 결제·AWS 배포·파일 복사·운영 DB 변경은 자동 실행하지 않습니다.
 
 전통시장 상인을 위한 콘텐츠 생성·보관·직접 게시 API입니다.

@@ -21,7 +21,7 @@ export async function buildSceneSubtitles(input: CreationInput) {
   const response = await fetchWithTimeout("https://api.openai.com/v1/responses", {
     method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({ model: process.env.EXHIBITION_SCRIPT_MODEL || "gpt-4.1-mini", input:
-      `다음 가게·메뉴·장면 정보로 한국어 광고 내레이션을 작성하세요. 입력에 없는 사실이나 가격을 만들지 마세요. 각 문장은 자막과 TTS에 동일하게 사용합니다. 장면 순서를 유지하고 문장당 ${input.template.maxSubtitleChars}자 이하로 작성하세요. 마크다운 없이 {"scenes":[{"sceneNumber":1,"text":"문장"}]} JSON만 출력하세요.\n${JSON.stringify(input)}` }), timeoutMs: 45_000,
+      `다음 가게·메뉴·장면 정보로 한국어 광고 자막을 작성하세요. 입력에 없는 사실이나 가격을 만들지 마세요. 장면 순서를 유지하고 문장당 ${input.template.maxSubtitleChars}자 이하로 작성하세요. 마크다운 없이 {"scenes":[{"sceneNumber":1,"text":"문장"}]} JSON만 출력하세요.\n${JSON.stringify(input)}` }), timeoutMs: 45_000,
   });
   if (!response.ok) throw new Error("대본 생성 서비스에 연결하지 못했어요.");
   const content = responseText(await response.json()).replace(/^```(?:json)?\s*|\s*```$/g, "");

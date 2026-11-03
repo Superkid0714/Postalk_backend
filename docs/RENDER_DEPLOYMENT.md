@@ -40,7 +40,7 @@ API와 워커의 자동 배포는 off입니다. 행사 도중 Git push만으로 
 [Render 공식 가격](https://render.com/pricing)에서 확인했습니다. 컴퓨트는 실행 시간에 따라 초 단위로 비례 과금합니다.
 30일을 가정한 96시간 실행의 단순 추산은 약 $4.27입니다. 준비·검증 기간 동안 켜둔 시간도 포함되며, 실제 청구액을 보장하는 견적은 아닙니다.
 Hobby workspace는 전송량 월 5GB와 표준 빌드 500분을 포함합니다. 초과 전송량은 $0.15/GB,
-추가 표준 빌드 시간은 $5/1,000분으로 안내돼 있습니다. 세금·환율·Supabase 구독·AI/TTS 비용은 별도입니다.
+추가 표준 빌드 시간은 $5/1,000분으로 안내돼 있습니다. 세금·환율·Supabase 구독·AI 비용은 별도입니다. 릴스는 TTS를 사용하지 않습니다.
 Render Pro workspace 구독 $25는 이 두 서비스를 운영하기 위한 필수 선택이 아닙니다.
 워크스페이스 기능이 추가로 필요할 때만 선택하세요. 유료 컴퓨트와 workspace 요금은 다른 항목입니다.
 
@@ -70,7 +70,7 @@ API에 표시되는 sync:false 값은 다음과 같습니다.
 INTERNAL_WORKER_API_KEY와 EXHIBITION_PUBLISH_SECRET은 Render가 무작위로 생성합니다.
 워커의 내부 키는 API 값을 참조하므로 두 곳에서 다른 키를 새로 만들지 않습니다.
 `NEXT_PUBLIC_APP_URL`을 수동 입력하지 않으면 Render의 `RENDER_EXTERNAL_URL`을 사용합니다.
-API에서 필요한 다른 AI/TTS/Instagram 변수는 `.env.example`을 기준으로 기능별로 추가합니다.
+API에서 필요한 다른 AI/Instagram 변수는 `.env.example`을 기준으로 기능별로 추가합니다.
 기존 `.env` 전체를 업로드하지 마세요. AWS, 과거 관리자 키 등 사용하지 않는 값은 등록하지 않습니다.
 
 ## 이미지·포트·종료 처리
@@ -92,14 +92,14 @@ node scripts/smoke-deployment.mjs https://ACTUAL-SERVICE.onrender.com https://po
 
 확인 항목은 process health, health 응답 revision, 전시 라우트 존재(JSON 404 또는 인증 오류),
 인증 없는 워커 요청 차단, CORS preflight입니다. DB 행·Storage·AI·Instagram을 읽거나 호출하지 않습니다.
-health 성공은 DB·AI/TTS·실제 게시 성공을 뜻하지 않습니다.
+health 성공은 DB·AI·실제 게시 성공을 뜻하지 않습니다.
 
 추가 검증 순서는 아래와 같습니다.
 
 1. health revision이 배포 대상으로 선택한 커밋과 일치하는지 확인
 2. EXHIBITION_STORE_ID를 실제 확인된 전시 가게 UUID로 설정하고 EXHIBITION_MODE_ENABLED=true 적용
 3. 서명 URL·업로드·조회·캡션을 프론트에서 검증. 4.5MB보다 큰 사진과 50MiB 이하 영상을 실제로 전송하여 클라우드 경로 제한 확인
-4. 최종 콘셉트와 AI/TTS 설정 후 카드뉴스·릴스 결과를 한 건씩 확인
+4. 최종 콘셉트와 AI 설정 후 카드뉴스·무음 자막 릴스 결과를 한 건씩 확인
 5. 기존 진행 중 작업과 외부 제공자 상태를 확인한 뒤 워커 GENERATION_WORKER_ENABLED=true 적용
 6. 상인이 명시적으로 게시 버튼을 누르는 Instagram 검증 후 행사 리허설
 
