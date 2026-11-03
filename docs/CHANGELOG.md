@@ -2,6 +2,14 @@
 
 이 변경은 Lucel 작성자 정보로 다음 단위로 나눠 커밋합니다.
 
+## 후속: Render API·워커 배포 준비
+
+- Node 22 / Debian 기반 FFmpeg·한글 폰트·비특권 실행, API와 경량 HTTP 복구 워커 이미지 분리
+- Singapore 리전 API 2GB·워커 512MB Blueprint, 내부 주소·인증키 참조 및 초기 워커 비활성화
+- 프론트 CORS 환경 설정, Render 기본 URL 지원, health 응답에 소스 revision 추가
+- 읽기 전용 배포 smoke 도구, CORS 및 실제 로컬 워커 요청 회귀 검사
+- 서버·도메인이 없는 경우의 비용·배포·롤백·행사 종료 절차 문서화
+
 ## 후속: 실제 기존 Supabase 복구·SQL·Storage 적용 (2026-11-03 KST)
 
 - 일시 중지된 기존 프로젝트 Resume, 기존 14개 테이블 행 수 보존 후 22개 앱 테이블과 미사용 레거시 5개 테이블 유지

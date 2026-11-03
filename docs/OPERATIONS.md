@@ -97,6 +97,9 @@ ADMIN_API_KEY는 사용하지 않습니다. 내부 키는 상인 인증 수단�
 
 ## 실행
 
+새 서버와 도메인이 없는 경우 [Render 배포 절차](RENDER_DEPLOYMENT.md)와 `render.yaml`을 사용합니다.
+API와 경량 복구 워커를 분리하며, 최초 배포 워커는 비활성 상태입니다. 실제 클라우드 적용 여부는 해당 절차와 구분합니다.
+
 ### 배포 점검 결과 (2026-11-03 KST)
 
 기존 문서의 Vercel main 주소 `https://postalk-backend-git-main-cnu-clothing.vercel.app/api/health`는

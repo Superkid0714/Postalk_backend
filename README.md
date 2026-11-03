@@ -6,6 +6,7 @@
 - [프론트엔드 API 변경](docs/API_CHANGES.md)
 - [배포·운영·DB 적용 순서](docs/OPERATIONS.md)
 - [2026-11-03 실제 Supabase DB·Storage 적용 결과](docs/SUPABASE_DEPLOYMENT_20261103.md)
+- [신규 서버·HTTPS 주소를 포함한 Render 배포](docs/RENDER_DEPLOYMENT.md)
 - [이미지·영상 AWS S3 이전과 롤백](docs/AWS_MEDIA_MIGRATION.md)
 - [변경 묶음과 검토 순서](docs/CHANGELOG.md)
 

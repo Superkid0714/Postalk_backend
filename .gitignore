@@ -43,6 +43,7 @@ dev-server.log
 !docs/CHANGELOG.md
 !docs/EXHIBITION_API.md
 !docs/SUPABASE_DEPLOYMENT_20261103.md
+!docs/RENDER_DEPLOYMENT.md
 /migration-reports/
 /tmp/
 /public/merchant-*.png
