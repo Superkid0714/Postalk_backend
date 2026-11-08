@@ -28,7 +28,7 @@ Railway에는 영구 DB·Volume·Object Storage를 만들지 않습니다. 이�
 
 ## Railway 서비스 생성
 
-프로젝트에 **GitHub Repo 서비스 두 개**를 만듭니다. 둘 모두 브랜치 `codex/merchant-workflow-aws-storage`를 선택하고, 초기에는 자동 배포를 끕니다.
+프로젝트에 **GitHub Repo 서비스 두 개**를 만듭니다. 둘 모두 브랜치 `production`을 선택하고, 초기에는 자동 배포를 끕니다.
 
 ### 1. API — `postalk-api`
 
@@ -76,7 +76,7 @@ Railway의 private domain은 서비스 간 통신용이며 외부에 공개하�
 
 ## 첫 배포와 검증
 
-1. API부터 배포하고 public domain의 `/api/health`가 200인지 확인합니다.
+1. API부터 배포하고 public domain의 `/api/health`가 200인지 확인합니다. Supabase 변수 등록 후에는 `/api/health/ready`도 확인합니다. 이 readiness 경로는 데이터를 만들지 않고 DB 읽기와 Supabase `uploads` 버킷 확인만 수행하며, 정상일 때 `database: "ok"`, `storage: "ok"`를 응답합니다.
 2. 프론트 `NEXT_PUBLIC_API_BASE_URL`을 API public domain으로 설정하고 프론트를 재배포합니다.
 3. `CORS_ALLOWED_ORIGINS`에 정확한 프론트 origin만 넣고, 로그인·목록·자막·업로드를 확인합니다.
 4. `EXHIBITION_STORE_ID`를 확인한 뒤에만 `EXHIBITION_MODE_ENABLED=true`로 바꿉니다.
