@@ -1,10 +1,12 @@
 # Supabase 실제 적용 기록 — 2026-11-03 KST
 
+> 이 문서는 2026-11-03 작업 기록입니다. 현재 운영은 Supabase Pro를 사용하며, Railway 준비 상태 확인 API에서 DB와 Storage 연결을 확인합니다.
+
 ## 대상과 결정
 
 - 대상: 기존 `Superkid0714's Project`, ref `dcxyfbnzappvxxkgmcyo`
 - 사용자가 적용 대상 판단을 위임하여, 기존 프로젝트를 Resume하고 기존 데이터를 보존하는 업그레이드를 선택했습니다.
-- 별도 프로젝트 생성, Pro 결제, 컴퓨트 변경은 하지 않았습니다. 확인 당시 Free / Nano / Tokyo입니다.
+- 당시에는 별도 프로젝트 생성, Pro 결제, 컴퓨트 변경을 하지 않았습니다. 이후 운영 계획에 따라 Supabase Pro로 전환했습니다.
 - 기존 `.env`와 동일한 프로젝트이며 `.env` 및 실제 키는 수정·커밋하지 않았습니다.
 
 ## DB 변경

@@ -1,11 +1,9 @@
 # Railway + Supabase Pro 배포 준비
 
-행사 전 테스트와 11월 18~21일 운영을 위한 선택 구성입니다.
+현재 운영 구성입니다. 배포 기준 브랜치는 `main`입니다.
 
 ```text
-프론트엔드 → Railway API (postalk-api) → Supabase Pro (DB / Auth / private Storage)
-                       ↑
-             Railway worker (postalk-recovery)
+프론트엔드 → Railway API (Postalk_backend) → Supabase Pro (DB / Auth / private Storage)
 ```
 
 Railway에는 영구 DB·Volume·Object Storage를 만들지 않습니다. 이미지·영상은 Supabase의 비공개 `uploads` 버킷에만 저장합니다.
@@ -28,9 +26,11 @@ Railway에는 영구 DB·Volume·Object Storage를 만들지 않습니다. 이�
 
 ## Railway 서비스 생성
 
-프로젝트에 **GitHub Repo 서비스 두 개**를 만듭니다. 둘 모두 브랜치 `production`을 선택하고, 초기에는 자동 배포를 끕니다.
+현재 Railway 프로젝트의 API 서비스는 `Postalk_backend`입니다. GitHub 저장소 `Superkid0714/Postalk_backend`의 `main` 브랜치를 Source로 선택합니다.
 
-### 1. API — `postalk-api`
+복구 워커는 외부 AI 생성 작업을 실제로 운영할 때만 추가합니다. 현재는 `GENERATION_WORKER_ENABLED=false`를 유지합니다.
+
+### API — `Postalk_backend`
 
 - Builder: Dockerfile
 - Dockerfile: 기본 `Dockerfile`
@@ -48,15 +48,15 @@ Railway에는 영구 DB·Volume·Object Storage를 만들지 않습니다. 이�
 | `NEXT_PUBLIC_SUPABASE_URL` | 기존 Supabase 프로젝트 URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | 동일 프로젝트 anon/publishable key |
 | `SUPABASE_SERVICE_ROLE_KEY` | 동일 프로젝트 service role key — API에만 등록 |
-| `CORS_ALLOWED_ORIGINS` | 실제 프론트 origin. 예: `https://frontend.example.com` |
-| `INTERNAL_WORKER_API_KEY` | 새 32자 이상 무작위 값 |
+| `CORS_ALLOWED_ORIGINS` | 실제 프론트 origin. 예: `https://posttalk.vercel.app` |
+| `INTERNAL_WORKER_API_KEY` | 워커를 만들 때만 32자 이상 무작위 값 등록 |
 | `EXHIBITION_MODE_ENABLED` | 초기에는 `false` |
 | `EXHIBITION_PUBLISH_SECRET` | 새 32자 이상 무작위 값 |
 | `GENERATION_WORKER_ENABLED` | `false` |
 
 `PORT`는 Railway가 자동 제공하므로 직접 고정하지 않습니다. `NEXT_PUBLIC_APP_URL`도 비워 두면 서버가 Railway public domain을 기준으로 URL을 계산합니다.
 
-### 2. 워커 — `postalk-recovery`
+### 선택: 워커 — `postalk-recovery`
 
 - Builder: Dockerfile
 - Dockerfile 경로: `Dockerfile.worker` (`RAILWAY_DOCKERFILE_PATH=Dockerfile.worker`로 지정)
@@ -68,21 +68,21 @@ Railway에는 영구 DB·Volume·Object Storage를 만들지 않습니다. 이�
 
 | 변수 | 값 |
 | --- | --- |
-| `GENERATION_WORKER_BASE_URL` | `http://${{postalk-api.RAILWAY_PRIVATE_DOMAIN}}:3000` |
+| `GENERATION_WORKER_BASE_URL` | Railway가 표시한 API private domain에 `:3000`을 붙인 주소 |
 | `INTERNAL_WORKER_API_KEY` | API와 **정확히 같은 값** |
 | `GENERATION_WORKER_ENABLED` | 초기에는 `false` |
 
 Railway의 private domain은 서비스 간 통신용이며 외부에 공개하지 않습니다. API가 기본적으로 3000 포트를 수신하므로 워커 주소에 `:3000`을 붙입니다.
 
-## 첫 배포와 검증
+## 배포와 검증
 
-1. API부터 배포하고 public domain의 `/api/health`가 200인지 확인합니다. Supabase 변수 등록 후에는 `/api/health/ready`도 확인합니다. 이 readiness 경로는 데이터를 만들지 않고 DB 읽기와 Supabase `uploads` 버킷 확인만 수행하며, 정상일 때 `database: "ok"`, `storage: "ok"`를 응답합니다.
-2. 프론트 `NEXT_PUBLIC_API_BASE_URL`을 API public domain으로 설정하고 프론트를 재배포합니다.
-3. `CORS_ALLOWED_ORIGINS`에 정확한 프론트 origin만 넣고, 로그인·목록·자막·업로드를 확인합니다.
-4. `EXHIBITION_STORE_ID`를 확인한 뒤에만 `EXHIBITION_MODE_ENABLED=true`로 바꿉니다.
-5. 사진 10MiB와 영상 50MiB 이하를 실제로 올려 Supabase Storage·Railway 업로드 경로를 확인합니다.
-6. 카드뉴스와 **무음 자막 릴스**을 각 1건 만들어 확인합니다. 이 단계까지 `GENERATION_WORKER_ENABLED=false`를 유지합니다.
-7. 기존 대기 작업과 외부 AI 상태를 확인한 후 워커만 `true`로 전환합니다.
+1. GitHub Actions가 성공한 `main` 커밋인지 확인합니다.
+2. Railway API가 `main`을 Source Branch로 사용하고 있는지 확인합니다.
+3. public domain의 `/api/health`가 200인지 확인합니다. Supabase 변수 등록 후에는 `/api/health/ready`도 확인합니다. 이 readiness 경로는 데이터를 만들지 않고 DB 읽기와 Supabase `uploads` 버킷 확인만 수행하며, 정상일 때 `database: "ok"`, `storage: "ok"`를 응답합니다.
+4. 프론트 `NEXT_PUBLIC_API_BASE_URL`을 API public domain으로 설정하고 프론트를 재배포합니다.
+5. `CORS_ALLOWED_ORIGINS`에 정확한 프론트 origin만 넣고, 로그인·목록·자막·업로드를 확인합니다.
+6. 사진 10MiB와 영상 50MiB 이하를 실제로 올려 Supabase Storage·Railway 업로드 경로를 확인합니다.
+7. 카드뉴스와 **무음 자막 릴스**을 각 1건 만들어 확인합니다. 이 단계까지 `GENERATION_WORKER_ENABLED=false`를 유지합니다.
 8. 상인이 직접 누르는 Instagram 게시 동작은 별도 리허설에서 1건 확인합니다.
 
 `SUPABASE_SERVICE_ROLE_KEY`를 Railway에 등록하면 Railway API 컨테이너가 DB·Storage 서버 작업을 수행할 수 있습니다. 이 키를 실제로 입력하기 직전에, 값과 목적지를 확인한 뒤에만 등록합니다.

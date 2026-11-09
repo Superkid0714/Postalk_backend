@@ -1,5 +1,7 @@
 # 전시 화면 SC-00~09 백엔드 연동
 
+> 선택 기능입니다. 현재 운영 환경에서는 `EXHIBITION_MODE_ENABLED=false`로 꺼져 있습니다.
+
 전달받은 화면 명세를 위한 `/api/exhibition` API입니다. 이 저장소에는 별도 프론트엔드의 화면·Context·카메라 구현이 없습니다.
 기존 QR 기반 상인 API는 유지하며 전시 API만 명시적으로 켭니다.
 프론트엔드의 고정 로그인 1234/1234, localStorage 로그인 유지, 제작 Context 메모리 보관은 프론트엔드 담당입니다.
