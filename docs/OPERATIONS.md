@@ -61,5 +61,3 @@ GET https://postalkbackend-production.up.railway.app/api/health/ready
 2. Railway API와 워커를 중지하거나 삭제합니다.
 3. Railway Usage가 더 증가하지 않는지 확인합니다.
 4. 보관이 더 필요 없을 때 Supabase Pro 하향 여부를 결정합니다.
-
-과거 Render·Vercel 운영 기록은 현재 절차가 아닙니다.

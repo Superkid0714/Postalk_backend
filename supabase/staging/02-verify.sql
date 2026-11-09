@@ -1,5 +1,5 @@
 -- After schema.sql, run in the SAME new staging project.
--- Temporary fixtures are rolled back. No Storage, AI, AWS or Instagram calls.
+-- Temporary fixtures are rolled back. No Storage, AI, or Instagram calls.
 begin;
 do $$
 declare table_name text; rpc text; selected_store uuid; creation uuid:=gen_random_uuid(); asset uuid:=gen_random_uuid();

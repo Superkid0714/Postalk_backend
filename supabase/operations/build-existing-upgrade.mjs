@@ -5,7 +5,7 @@ export async function buildExistingUpgrade() {
   const read = name => readFile(new URL(name, import.meta.url), 'utf8');
   const names = ['20260819_store_location_fields.sql','20260819_ad_creation_session_video_assets.sql',
     '20261102_generation_job_leases.sql','20261102_remove_review_workflow.sql','20261102_session_draft_merge.sql',
-    '20261102_submission_publish_leases.sql','20261102_media_storage_remap.sql','20261102_exhibition_flow.sql',
+    '20261102_submission_publish_leases.sql','20261102_exhibition_flow.sql',
     '20261102_z_normalized_workflow.sql','20261102_zz_server_only_tables.sql'];
   const fragments = await Promise.all(names.map(async name => `-- ${name}\n${(await read('../migrations/'+name)).replace(/^\s*(begin|commit);\s*$/gmi,'')}`));
   return `-- Existing populated Postalk project: one atomic upgrade, no table or file deletion.

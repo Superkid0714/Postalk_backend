@@ -96,7 +96,7 @@ test("exhibition uploads enforce bounded requests and avoid redundant or oversiz
       assert.equal(report.storageWarning, true);
       assert.equal(report.unknownSizeObjects, 2);
       assert.equal(report.unreferencedCandidates, 3);
-      assert.equal(buildUsageReport([{ provider: "s3", bytes: 100e9 }]).storageWarning, false);
+      assert.equal(buildUsageReport([{ provider: "external", bytes: 100e9 }]).storageWarning, false);
     });
     await t.test("archive signs only dedicated thumbnails and never falls back to the full card", async () => {
       calls.length = 0;

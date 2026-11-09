@@ -32,14 +32,6 @@ test("exhibition SQL enforces atomic creation, lifecycle, and shared-account pub
       await assert.rejects(create(makeInput(), asset), /MATERIALS_INVALID/);
       assert.equal((await db.query<{ count: number }>("select count(*)::int as count from submissions")).rows[0].count, 1);
     });
-    await t.test("storage remapping includes exhibition registry and generation material snapshots", async () => {
-      const key = (await db.query<{ file_path: string }>("select file_path from exhibition_uploads where id=$1", [asset])).rows[0].file_path;
-      await db.query("select remap_media_storage_reference('uploads','s3:exhibition-test',$1)", [key]);
-      assert.equal((await db.query<{ storage_bucket: string }>("select storage_bucket from exhibition_uploads where id=$1", [asset])).rows[0].storage_bucket, "s3:exhibition-test");
-      const job = (await db.query<{ request_payload: { materials: Array<{ storageBucket: string }> } }>("select request_payload from generation_jobs where id=$1", [ad.jobId])).rows[0];
-      assert.equal(job.request_payload.materials[0].storageBucket, "s3:exhibition-test");
-      await db.query("select remap_media_storage_reference('s3:exhibition-test','uploads',$1)", [key]);
-    });
     await t.test("caption editing waits for generation and locks after publishing", async () => {
       const patch = () => db.query("select update_exhibition_caption($1,$2,'새 캡션')", [ad.adId, storeId]);
       await assert.rejects(patch(), /AD_NOT_READY/);

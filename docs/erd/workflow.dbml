@@ -147,7 +147,7 @@ Table media_assets {
     (provider, bucket, object_key) [unique]
     (id, store_id) [unique]
   }
-  Note: 'CHECK (((checksum_sha256 IS NULL) OR (checksum_sha256 ~ \'^[0-9a-f]{64}$\'::text))); CHECK ((file_size >= 0)); CHECK ((provider = ANY (ARRAY[\'supabase\'::text, \'s3\'::text]))); CREATE UNIQUE INDEX media_assets_id_store_id_key ON public.media_assets USING btree (id, store_id); CREATE UNIQUE INDEX media_assets_pkey ON public.media_assets USING btree (id); CREATE UNIQUE INDEX media_assets_provider_bucket_object_key_key ON public.media_assets USING btree (provider, bucket, object_key)'
+  Note: 'CHECK ((bucket = \'uploads\'::text)); CHECK (((checksum_sha256 IS NULL) OR (checksum_sha256 ~ \'^[0-9a-f]{64}$\'::text))); CHECK ((file_size >= 0)); CHECK ((provider = \'supabase\'::text)); CREATE UNIQUE INDEX media_assets_id_store_id_key ON public.media_assets USING btree (id, store_id); CREATE UNIQUE INDEX media_assets_pkey ON public.media_assets USING btree (id); CREATE UNIQUE INDEX media_assets_provider_bucket_object_key_key ON public.media_assets USING btree (provider, bucket, object_key)'
 }
 
 Table publication_attempts {

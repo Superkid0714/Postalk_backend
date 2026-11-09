@@ -34,7 +34,7 @@ create table if not exists public.creation_scenes (
 );
 create table if not exists public.media_assets (
   id uuid primary key default gen_random_uuid(), store_id uuid not null references public.stores(id),
-  provider text not null check(provider in ('supabase','s3')), bucket text not null, object_key text not null,
+  provider text not null check(provider = 'supabase'), bucket text not null check(bucket = 'uploads'), object_key text not null,
   mime_type text, file_size bigint check(file_size>=0), duration_seconds double precision,
   checksum_sha256 text check(checksum_sha256 is null or checksum_sha256 ~ '^[0-9a-f]{64}$'),
   created_at timestamptz not null default now(), unique(provider,bucket,object_key), unique(id,store_id)
@@ -189,8 +189,8 @@ begin
   else owner_store:=new.store_id;
     selected_session:=public.ensure_creation_session(new.store_id,new.creation_id);
   end if;
-  provider_name:=case when new.storage_bucket like 's3:%' then 's3' else 'supabase' end;
-  bucket_name:=case when provider_name='s3' then substr(new.storage_bucket,4) else new.storage_bucket end;
+  provider_name:='supabase';
+  bucket_name:='uploads';
   if tg_op='UPDATE' and new.file_path=old.file_path and new.id=old.id then previous_id:=old.media_asset_id; end if;
   if previous_id is not null then
     update public.media_assets set provider=provider_name,bucket=bucket_name,mime_type=coalesce(new.mime_type,mime_type),file_size=coalesce(new.file_size,file_size)
@@ -259,8 +259,8 @@ begin
      or new.result_payload->>'thumbnailFilePath'=file_path);
   thumbnail:=new.result_payload->>'thumbnailFilePath';
   if thumbnail is not null and new.result_storage_bucket is not null then
-    provider_name:=case when new.result_storage_bucket like 's3:%' then 's3' else 'supabase' end;
-    bucket_name:=case when provider_name='s3' then substr(new.result_storage_bucket,4) else new.result_storage_bucket end;
+    provider_name:='supabase';
+    bucket_name:='uploads';
     insert into public.media_assets(store_id,provider,bucket,object_key,mime_type)
       values(new.store_id,provider_name,bucket_name,thumbnail,'image/jpeg')
       on conflict(provider,bucket,object_key) do update set object_key=excluded.object_key where media_assets.store_id=excluded.store_id returning id into selected_media;

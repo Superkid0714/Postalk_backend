@@ -8,7 +8,7 @@
 - POST 파일 상한은 사진 10MiB·영상 50MiB로 통일했습니다. 기존 200MiB 검사는 프론트도 갱신해야 합니다.
 - 413 크기 초과, 429 업로드 혼잡, 507 저장 한도, 503 저장소 연결 오류를 구분합니다. 제작 후 재업로드는 409입니다.
 - 목록 thumbnailUrl이 null이면 기본 이미지를 사용합니다. 전체 카드/영상으로 대체 다운로드하지 않습니다.
-- 전시 운영은 Supabase Pro DB/Storage이며 AWS 이전은 보류합니다. 프론트 UI 구현 자체는 별도 저장소의 작업입니다.
+- 전시 운영은 Supabase Pro DB/Storage를 사용합니다. 프론트 UI 구현 자체는 별도 저장소의 작업입니다.
 
 ## 전시 DB 구조 후속 변경
 
@@ -32,7 +32,7 @@ uploads multipart와 submissions / photo-check JSON의 기존 qrToken 입력도 
 
 ## 파일 응답
 
-업로드의 bucket 값은 Supabase의 `uploads` 또는 AWS의 `s3:<버킷>`입니다.
+업로드의 bucket 값은 Supabase의 `uploads`입니다.
 응답의 bucket과 filePath를 그대로 다음 요청에 전달하세요. 클라이언트에서 고정하거나 가공하지 않습니다.
 서명 URL은 만료되므로 영구 주소로 저장하지 말고 조회 API에서 갱신합니다.
 

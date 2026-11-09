@@ -16,6 +16,6 @@
 - QR 기반 상인 접근 제어 추가
 - 생성 작업 선점·복구 워커 추가
 - 이미지·영상 저장소를 Supabase 중심으로 정리
-- AWS S3 이전은 호환 코드와 계획만 유지, 실제 이전은 보류
+- 이미지·영상은 Supabase Storage로 통일
 
 세부 API 변경은 [API_CHANGES.md](API_CHANGES.md), 운영 방법은 [OPERATIONS.md](OPERATIONS.md)를 기준으로 합니다.

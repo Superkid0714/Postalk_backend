@@ -171,7 +171,7 @@ URL은 만료되므로 재조회할 수 있어야 합니다. 카드뉴스 저장
 이전 exhibition_* 세 이름은 동일 데이터의 호환 뷰입니다. API URL과 생성·대본·광고 ID는 바꾸지 않습니다.
 creation_sessions는 생성 전 작업을 묶고 creation_scenes에는 장면별 최종 자막을 저장합니다.
 concept_versions는 전달받은 템플릿의 불변 스냅샷이며 동적 메뉴/장면 변형은 정의 해시로 구분합니다.
-media_assets는 Supabase/S3 객체 위치·크기·알려진 해시를 관리하고 content_outputs는 결과 순서와 용도를 연결합니다.
+media_assets는 Supabase 객체 위치·크기·알려진 해시를 관리하고 content_outputs는 결과 순서와 용도를 연결합니다.
 publication_attempts에는 명시적 게시 시도와 확정 실패·성공·결과 불확실 상태가 남습니다.
 전체 구현 ERD는 docs/erd/current.dbml, 협업용 부분 ERD는 docs/erd/workflow.dbml입니다.
 
@@ -184,4 +184,4 @@ usesSubtitles와 maxSubtitleChars를 전달해야 합니다. 메뉴별 장면과
 최종 콘셉트 3종은 외부 담당자의 정의를 받은 뒤 연결합니다. TTS는 사용하지 않습니다.
 
 Supabase DB와 Storage를 기본으로 유지합니다. 목록에는 작은 썸네일을 사용하고 원본 영상은 상세에서 요청합니다.
-AWS는 선택 가능한 저장소 어댑터이며 실제 이전은 수행하지 않습니다. 파일 보존 정책 미확정으로 자동 삭제하지 않습니다.
+파일은 Supabase Storage에 보관하며, 보존 기간은 운영 종료 후 별도로 결정합니다.

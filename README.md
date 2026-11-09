@@ -74,6 +74,5 @@ npm test
 - [Railway·Supabase 설정](docs/RAILWAY_DEPLOYMENT.md)
 - [상인 API 변경 사항](docs/API_CHANGES.md)
 - [전시 화면 API](docs/EXHIBITION_API.md)
-- [AWS 이전 참고](docs/AWS_MEDIA_MIGRATION.md)
 - [Supabase 적용 기록](docs/SUPABASE_DEPLOYMENT_20261103.md)
 - [변경 기록](docs/CHANGELOG.md)

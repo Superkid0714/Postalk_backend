@@ -54,6 +54,6 @@ export async function contentMedia(contentId: string, storeId: string, jobId: st
   return outputs.map(output => {
     const file = media?.find(file => file.id === output.media_asset_id);
     if (!file) throw new Error("완성 파일 연결을 확인하지 못했어요.");
-    return { purpose: output.purpose as string, bucket: file.provider === "s3" ? `s3:${file.bucket}` : file.bucket as string, path: file.object_key as string };
+    return { purpose: output.purpose as string, bucket: file.bucket as string, path: file.object_key as string };
   });
 }

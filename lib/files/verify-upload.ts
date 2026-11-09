@@ -1,15 +1,10 @@
-import { mediaObjectExists, resolveMediaBucket } from "@/lib/storage/media";
+import { mediaObjectExists } from "@/lib/storage/media";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { errorResponse } from "@/lib/api/response";
 
 export function isStoreUploadPath(bucket: string, filePath: string, storeId: string, assetType?: string) {
   const parts = filePath.split("/");
-  let allowedBucket = bucket === "uploads";
-  if (bucket.startsWith("s3:")) {
-    try { allowedBucket = resolveMediaBucket(bucket).provider === "s3"; }
-    catch { return false; }
-  }
-  return allowedBucket && !filePath.includes("\\") && !filePath.includes("%") &&
+  return bucket === "uploads" && !filePath.includes("\\") && !filePath.includes("%") &&
     parts.length === 5 && parts.every(part => part.length > 0 && part !== "." && part !== "..") &&
     parts[0] === "stores" && parts[1] === storeId &&
     ["menu_board", "food_photo", "video_clip"].includes(parts[2]) &&

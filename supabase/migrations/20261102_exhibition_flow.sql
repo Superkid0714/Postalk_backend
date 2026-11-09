@@ -165,17 +165,12 @@ grant execute on function public.delete_exhibition_ad(uuid,uuid) to service_role
 grant execute on function public.retry_exhibition_generation(uuid,uuid) to service_role;
 
 -- Extend the storage remap for the exhibition upload registry and job snapshots.
--- Storage references are provider-qualified strings: uploads (Supabase), s3:<bucket> (AWS).
--- Object keys stay unchanged. This RPC switches every known reference to one verified object atomically.
+-- Storage is kept in the private Supabase uploads bucket.
 create or replace function public.remap_media_storage_reference(p_from text, p_to text, p_file_path text)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare asset_count integer; session_count integer; job_count integer; source_count integer; workflow_count integer; exhibition_count integer; material_count integer;
 begin
-  if p_from = p_to or p_file_path = '' or
-    not (p_from = 'uploads' or p_from ~ '^s3:[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$') or
-    not (p_to = 'uploads' or p_to ~ '^s3:[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$') then
-    raise exception 'Invalid media storage remap';
-  end if;
+  raise exception 'Media storage remapping is not supported';
   update public.submission_assets set storage_bucket = p_to where storage_bucket = p_from and file_path = p_file_path;
   get diagnostics asset_count = row_count;
   update public.ad_creation_session_assets set storage_bucket = p_to where storage_bucket = p_from and file_path = p_file_path;

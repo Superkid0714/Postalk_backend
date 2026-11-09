@@ -63,13 +63,6 @@ test("normalized workflow preserves existing API writes, scope, files and public
       assert.equal(knownMedia.mime_type, "image/png");
       await assert.rejects(db.query("update content_outputs set store_id=$1 where content_id=$2", [otherStore, historical.adId]), /foreign key/);
     });
-    await t.test("S3 remap retains a stable media id and changes every source reference", async () => {
-      const previous = (await db.query<{ media_asset_id: string }>("select media_asset_id from exhibition_uploads where id=$1", [source.id])).rows[0].media_asset_id;
-      await db.query("select remap_media_storage_reference('uploads','s3:postalk-test',$1)", [source.file_path]);
-      const media = (await db.query<{ id: string; provider: string; bucket: string }>("select id,provider,bucket from media_assets where id=$1", [previous])).rows[0];
-      assert.deepEqual(media, { id: previous, provider: "s3", bucket: "postalk-test" });
-      await db.query("select remap_media_storage_reference('s3:postalk-test','uploads',$1)", [source.file_path]);
-    });
     await t.test("older workers and metadata-only thumbnails are catalogued on completion", async () => {
       const next = (await db.query<{ id: string; job_id: string }>("select id,job_id from contents where id<>$1 limit 1", [historical.adId])).rows[0];
       const asset = (await db.query<{ id: string }>("insert into submission_assets(submission_id,asset_type,file_path) values($1,'generated_image','legacy-result.png') returning id", [next.id])).rows[0].id;

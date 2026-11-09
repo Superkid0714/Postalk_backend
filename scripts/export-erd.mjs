@@ -66,7 +66,7 @@ try {
     }
   }
   await mkdir(new URL('docs/erd/', root), { recursive: true });
-  const lines = [...header('postalk_current', 'Implemented repository schema, not confirmation of deployment. Supabase remains the default DB and file storage. AWS is optional. No automatic file deletion. exhibition_templates/exhibition_script_jobs/exhibition_ads are compatibility views. user_id=1 is not users.id.'), ...[...blocks.values()].flat(), ...refs.map(ref => ref.text), ''];
+  const lines = [...header('postalk_current', 'Implemented repository schema, not confirmation of deployment. Supabase is the DB and file storage. No automatic file deletion. exhibition_templates/exhibition_script_jobs/exhibition_ads are compatibility views. user_id=1 is not users.id.'), ...[...blocks.values()].flat(), ...refs.map(ref => ref.text), ''];
   await writeFile(new URL('docs/erd/current.dbml', root), lines.join('\n'));
   const workflow = new Set(['stores','input_templates','concept_versions','creation_sessions','creation_scenes','media_assets','scene_media','script_jobs','contents','generation_jobs','content_outputs','publication_attempts']);
   const subset = [...header('postalk_workflow', 'Implemented workflow subset of current.dbml. Legacy QR/session tables, submission compatibility parents, leases and references to omitted tables are hidden for readability. These functions and triggers are implemented, but deploying SQL and external AI integrations are separate steps.'), ...[...blocks].filter(([name]) => workflow.has(name)).flatMap(([, block]) => block), ...refs.filter(ref => workflow.has(ref.source) && workflow.has(ref.target)).map(ref => ref.text), ''];
