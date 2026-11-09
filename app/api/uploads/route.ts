@@ -14,7 +14,7 @@ import { isUuid } from "@/lib/validation";
 const MAX_FILE_SIZE_BY_TYPE = {
   menu_board: 10 * 1024 * 1024,
   food_photo: 10 * 1024 * 1024,
-  video_clip: 200 * 1024 * 1024,
+  video_clip: 50 * 1024 * 1024,
 } as const;
 
 const MIME_TYPES_BY_ASSET_TYPE: Record<AssetType, string[]> = {
