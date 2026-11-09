@@ -37,8 +37,11 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
+      - name: Install the production FFmpeg feature set
+        run: sudo apt-get update && sudo apt-get install --yes ffmpeg fontconfig fonts-noto-cjk
+
       - name: Run mock and integration tests
-        run: npm test
+        run: FFMPEG_PATH=/usr/bin/ffmpeg npm test
 
   docker-build:
     name: Docker deployment build
