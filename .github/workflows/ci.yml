@@ -2,9 +2,9 @@ name: Backend CI
 
 on:
   pull_request:
-    branches: [production]
+    branches: [main]
   push:
-    branches: [production]
+    branches: [main]
 
 permissions:
   contents: read
