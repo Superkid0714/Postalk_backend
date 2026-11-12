@@ -48,6 +48,63 @@
 
 사진은 최대 10MiB, 영상은 최대 50MiB입니다. 기존 가게 보관함과 Instagram 게시에는 기존 상인 권한이 필요합니다. 프론트 호출 방식과 배포 설정은 [게스트 제작 연동](docs/API_CHANGES.md#게스트-제작-연동)을 참고하세요.
 
+## 프론트 연동 API
+
+모든 응답은 `success`, `message`, `data` 구조를 사용합니다. 게스트 제작 화면은 아래 헤더를 모든 제작·조회 요청에 함께 보냅니다. 상인 QR 흐름에서는 같은 자리에 `x-merchant-qr-token`을 사용합니다.
+
+```http
+x-guest-session: 브라우저에만 보관하는 64자리 난수
+```
+
+| 목적 | 메서드·경로 | 핵심 입력 | 결과 |
+| --- | --- | --- | --- |
+| 게스트 작업 공간 열기 | `POST /api/guest-session` | 선택: `storeName`, `marketName` | `storeId`, `canPublish: false` |
+| 파일 업로드 | `POST /api/uploads` | multipart 파일, `storeId`, `assetType` | `bucket`, `filePath` |
+| 카드뉴스 세션 시작 | `POST /api/ad-sessions/start` | `adType: "photo"`, 소개 문구, `cardNewsTheme` | `sessionId`, 다음 촬영 요청 |
+| 카드뉴스 사진 제출 | `POST /api/ad-sessions/:sessionId/photos` | 앞 단계의 `bucket`, `filePath` | 다음 촬영 요청 또는 `generationJobId` |
+| 릴스 세션 시작 | `POST /api/ad-sessions/start` | `adType: "video"`, 소개 문구, `reelsConcept` | `sessionId`, 다음 촬영 요청 |
+| 릴스 영상 제출 | `POST /api/ad-sessions/:sessionId/videos` | 앞 단계의 `bucket`, `filePath` | 다음 촬영 요청 또는 `generationJobId` |
+| 생성 진행률 | `GET /api/generation-jobs/:jobId/progress` | 없음 | `status`, `percent`, `stage`, `failureReason` |
+| 세션·결과 조회 | `GET /api/ad-sessions/:sessionId` | 없음 | 수집 파일, 제출물, 생성 결과 |
+| 보관함 조회 | `GET /api/archive?storeId=...` | `mediaType`, `status` 선택 | 생성물 목록과 서명 URL |
+| Instagram 게시 | `POST /api/submissions/:id/instagram-publish` | 상인 QR 권한, `mediaType` | 게시 요청 상태 |
+
+카드뉴스 테마는 `minimal`, `christmas`이고, 릴스 콘셉트는 `simple`, `christmas`입니다. 마지막 파일 제출이 생성 작업을 시작하므로, 프론트는 `generationJobId`를 저장한 뒤 진행률 API를 폴링하면 됩니다. 게스트 작업 공간은 게시와 성과 조회를 할 수 없으므로 해당 버튼을 표시하지 않습니다.
+
+### 호출 순서
+
+```text
+POST /guest-session
+  → POST /uploads
+  → POST /ad-sessions/start
+  → POST /ad-sessions/:id/photos 또는 /videos
+  → GET /generation-jobs/:id/progress
+  → GET /ad-sessions/:id 또는 /archive
+  → (상인 QR만) POST /submissions/:id/instagram-publish
+```
+
+## 데이터 구조
+
+상세 ERD는 [현재 스키마](docs/erd/current.dbml)와 [제작 흐름 중심 ERD](docs/erd/workflow.dbml)에 있습니다. 두 파일은 dbdiagram.io에 붙여 넣어 시각화할 수 있습니다.
+
+```text
+stores
+ ├─ ad_creation_sessions ──< ad_creation_session_assets
+ │                           └─ 업로드한 사진·영상
+ ├─ submissions ──< generation_jobs ──< submission_assets
+ │                    └─ 카드뉴스 PNG 또는 릴스 MP4 생성 작업
+ ├─ merchant_qr_tokens
+ └─ qr_entry_slots
+
+submissions ──< Instagram 게시 상태·성과 정보(JSON)
+```
+
+- `stores`: 상인 가게 또는 게스트 작업 공간. 게스트는 `guest_session_hash`만 저장하며 원문 키는 DB에 남기지 않습니다.
+- `ad_creation_sessions`: 촬영 순서와 선택한 카드뉴스 테마·릴스 콘셉트를 보관하는 제작 세션입니다.
+- `generation_jobs`: AI 서비스 호출 상태와 결과 경로를 보관합니다. 상태는 `queued`, `processing`, `completed`, `failed`입니다.
+- `submission_assets`: 원본과 생성 결과의 Storage 경로를 연결합니다. 실제 파일은 Supabase `uploads` 버킷에 있습니다.
+- `submissions`: 보관함에서 보여 줄 제목, 캡션, 해시태그, 게시 상태의 기준 레코드입니다.
+
 ## 개발
 
 세 저장소를 함께 편집하려면 상위 폴더의 `Postalk.code-workspace`를 VS Code에서 엽니다. 각 저장소는 독립 Git 저장소입니다.
@@ -90,3 +147,5 @@ npm test
 - [전시 화면 API](docs/EXHIBITION_API.md)
 - [Supabase 적용 기록](docs/SUPABASE_DEPLOYMENT_20261103.md)
 - [변경 기록](docs/CHANGELOG.md)
+- [ERD: 전체](docs/erd/current.dbml)
+- [ERD: 제작 흐름](docs/erd/workflow.dbml)

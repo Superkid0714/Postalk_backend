@@ -215,12 +215,10 @@ Table stores {
   latitude "double precision"
   longitude "double precision"
   location_address text
+  guest_session_hash text [unique]
   created_at "timestamp with time zone" [not null, default: `now()`]
   updated_at "timestamp with time zone" [not null, default: `now()`]
-  indexes {
-    (market_name, store_name) [unique]
-  }
-  Note: 'CREATE UNIQUE INDEX stores_market_name_store_name_key ON public.stores USING btree (market_name, store_name); CREATE UNIQUE INDEX stores_pkey ON public.stores USING btree (id)'
+  Note: 'CREATE UNIQUE INDEX stores_guest_session_hash_key ON public.stores USING btree (guest_session_hash); CREATE UNIQUE INDEX stores_market_name_store_name_key ON public.stores USING btree (market_name, store_name) WHERE (guest_session_hash IS NULL); CREATE UNIQUE INDEX stores_pkey ON public.stores USING btree (id)'
 }
 
 Ref: content_outputs.(generation_job_id, content_id, store_id) > generation_jobs.(id, content_id, store_id)
