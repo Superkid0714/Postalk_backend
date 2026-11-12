@@ -45,8 +45,6 @@ dev-server.log
 !docs/SUPABASE_DEPLOYMENT_20261103.md
 !docs/RENDER_DEPLOYMENT.md
 !docs/RAILWAY_DEPLOYMENT.md
-!docs/development/
-!docs/development/*.md
 /migration-reports/
 /tmp/
 /public/merchant-*.png
