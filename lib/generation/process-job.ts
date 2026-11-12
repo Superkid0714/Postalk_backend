@@ -1,4 +1,6 @@
 import { getMediaStorage, getUploadStorageBucket } from "@/lib/storage/media";
+import { CARDNEWS_PROVIDER } from "@/lib/ai/cardnews-service";
+import { processCardNewsJob } from "@/lib/generation/process-cardnews-job";
 import { withGenerationJobLease } from "@/lib/generation/job-lease";
 import {
   buildPromoCarouselPrompts,
@@ -186,6 +188,9 @@ async function processClaimedJob(jobId: string) {
   }
 
   const normalizedSubmission = normalizeSubmissionRelation(job.submissions);
+  if (job.model_name === CARDNEWS_PROVIDER && normalizedSubmission) {
+    return processCardNewsJob(supabase, job, normalizedSubmission.ai_metadata ?? null);
+  }
 
   if (!normalizedSubmission) {
     throw new Error("Generation job submission not found");

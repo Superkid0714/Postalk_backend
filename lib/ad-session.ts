@@ -1,4 +1,5 @@
 import { getPhotoGuideByCategory } from "@/lib/photo-guides";
+import { CARDNEWS_SHOTS, CARDNEWS_SHOT_PLAN, isCardNewsShot, type CardNewsShot, type CardNewsTheme } from "@/lib/ai/cardnews-service";
 import {
   getStoreCategoryLabel,
   isStoreCategoryCode,
@@ -15,6 +16,7 @@ export type AdSessionStatus =
 export type AdSessionType = "photo" | "video";
 
 export type AdSessionShotKey =
+  | CardNewsShot
   | "menu_board"
   | "signature_menu"
   | "flatlay_menu"
@@ -37,6 +39,8 @@ export type AdSessionWorkflow = {
   menuIntro?: string | null;
   storeSpecialty?: string | null;
   shotPlan?: AdSessionShotKey[];
+  cardNewsTheme?: CardNewsTheme;
+  cardNewsStyle?: string;
   caption?: string | null;
   hashtags?: string[];
   draftCaption?: string | null;
@@ -92,6 +96,7 @@ const DEFAULT_VIDEO_SHOT_PLAN: AdSessionShotKey[] = [
 
 function isAdSessionShotKey(value: unknown): value is AdSessionShotKey {
   return (
+    isCardNewsShot(value) ||
     value === "menu_board" ||
     value === "signature_menu" ||
     value === "flatlay_menu" ||
@@ -191,6 +196,9 @@ export function normalizeAdSessionWorkflow(value: unknown): AdSessionWorkflow {
       : value.adType === "video"
         ? DEFAULT_VIDEO_SHOT_PLAN
         : DEFAULT_FOOD_SHOT_PLAN,
+    ...(value.cardNewsTheme === "minimal" || value.cardNewsTheme === "christmas"
+      ? { cardNewsTheme: value.cardNewsTheme, cardNewsStyle: typeof value.cardNewsStyle === "string" ? value.cardNewsStyle : "" }
+      : {}),
     caption: typeof value.caption === "string" ? value.caption : null,
     hashtags: Array.isArray(value.hashtags)
       ? value.hashtags.filter((item): item is string => typeof item === "string")
@@ -233,10 +241,15 @@ export function buildSessionWorkflowSeed(
     adType?: AdSessionType | null;
     menuIntro?: string | null;
     storeSpecialty?: string | null;
+    videoShotPlan?: readonly AdSessionShotKey[];
+    cardNewsTheme?: CardNewsTheme;
+    cardNewsStyle?: string;
   },
 ): AdSessionWorkflow {
   const adType = options?.adType === "video" ? "video" : "photo";
-  const shotPlan = adType === "video" ? DEFAULT_VIDEO_SHOT_PLAN : DEFAULT_FOOD_SHOT_PLAN;
+  const shotPlan = adType === "video"
+    ? [...(options?.videoShotPlan ?? DEFAULT_VIDEO_SHOT_PLAN)]
+    : options?.cardNewsTheme ? [...CARDNEWS_SHOT_PLAN] : DEFAULT_FOOD_SHOT_PLAN;
 
   return {
     currentShotIndex: 0,
@@ -250,6 +263,9 @@ export function buildSessionWorkflowSeed(
     menuIntro: options?.menuIntro ?? null,
     storeSpecialty: options?.storeSpecialty ?? null,
     shotPlan,
+    ...(adType === "photo" && options?.cardNewsTheme
+      ? { cardNewsTheme: options.cardNewsTheme, cardNewsStyle: options.cardNewsStyle ?? "" }
+      : {}),
     caption: null,
     hashtags: [],
     draftCaption: null,
@@ -359,6 +375,11 @@ export function buildPhotoRequest(
     storeSpecialty?: string | null;
   },
 ): AdSessionPhotoRequest {
+  if (isCardNewsShot(shotKey)) {
+    const { title, prompt } = CARDNEWS_SHOTS[shotKey];
+    return { shotKey, assetType: "food_photo", title, prompt, helperText: prompt, reviewShotOrder: null };
+  }
+
   const primarySubject = options.primarySubject;
   const specialtyPrompt = normalizeSpecialtyPrompt(options.storeSpecialty ?? null);
 

@@ -1,6 +1,8 @@
 import { getMediaStorage, getUploadStorageBucket } from "@/lib/storage/media";
 import { withGenerationJobLease } from "@/lib/generation/job-lease";
 import { renderQuoteVideo } from "@/lib/ai/quote-video";
+import { REELS_PROVIDER } from "@/lib/ai/reels";
+import { processReelsJob } from "@/lib/generation/process-reels-job";
 import {
   downloadGeminiVideoFile,
   extractGeneratedVideoFile,
@@ -168,6 +170,10 @@ async function processClaimedJob(jobId: string) {
     typeof requestPayload.providerOperationName === "string"
       ? requestPayload.providerOperationName
       : null;
+
+  if (provider === REELS_PROVIDER) {
+    return processReelsJob(supabase, job, submission.ai_metadata ?? null, requestPayload);
+  }
 
   if (provider === "render-quote-video") {
     if (job.status === "completed") {

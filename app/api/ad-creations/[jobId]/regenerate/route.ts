@@ -13,6 +13,7 @@ import {
   validateSubmissionStylePreset,
 } from "@/lib/ad-creation";
 import { type GenerationStylePreset } from "@/lib/ai/generation";
+import { CARDNEWS_PROVIDER } from "@/lib/ai/cardnews-service";
 import { processGenerationJobById } from "@/lib/generation/process-job";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isUuid } from "@/lib/validation";
@@ -74,6 +75,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       submission_id,
       store_id,
       style_preset,
+      model_name,
+      status,
       submissions (
         id,
         store_id,
@@ -105,6 +108,29 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return errorResponse("Ad creation job not found", 404, {
       code: "GENERATION_JOB_NOT_FOUND",
     });
+  }
+
+  if (existingJob.model_name === CARDNEWS_PROVIDER) {
+    if (existingJob.status !== "failed") {
+      return errorResponse("Only failed card news jobs can be retried", 409, { code: "CARDNEWS_RETRY_CONFLICT" });
+    }
+    const { data, error } = await supabase.from("generation_jobs")
+      .update({ status: "queued", failure_reason: null, started_at: null, completed_at: null })
+      .eq("id", jobId).eq("status", "failed").select("id").maybeSingle();
+    if (error) return generationConflictResponse(error) ?? errorResponse("Unable to retry card news", 503, { code: "CARDNEWS_RETRY_FAILED" });
+    if (!data) return errorResponse("The card news job is already being retried", 409, { code: "CARDNEWS_RETRY_CONFLICT" });
+    await supabase.from("ad_creation_sessions").update({ status: "generating" }).eq("generation_job_id", jobId);
+    after(async () => {
+      try {
+        const result = await processGenerationJobById(jobId);
+        if (result.status === "completed") {
+          await supabase.from("ad_creation_sessions").update({ status: "completed" }).eq("generation_job_id", jobId);
+        }
+      } catch (error) {
+        console.error("Card news retry failed", { jobId, error });
+      }
+    });
+    return successResponse({ jobId, submissionId: existingJob.submission_id, status: "queued" }, "Card news generation queued", 202);
   }
 
   const submission = Array.isArray(existingJob.submissions)

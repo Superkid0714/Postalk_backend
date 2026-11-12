@@ -1,4 +1,5 @@
 import { verifyStoreUpload } from "@/lib/files/verify-upload";
+import { isCardNewsShot } from "@/lib/ai/cardnews-service";
 import { requireStoreAccess } from "@/lib/auth/store-access";
 import { readRequestBody } from "@/lib/api/request-body";
 import { after } from "next/server";
@@ -100,6 +101,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       ad_creation_session_assets (
         id,
         shot_key,
+        file_path,
         sort_order
       )
     `)
@@ -162,10 +164,27 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const fileError = await verifyStoreUpload(supabase, session.store_id, body, currentRequest.assetType);
   if (fileError) return fileError;
 
+  const isCardPhoto = isCardNewsShot(currentRequest.shotKey);
+  const priorCardPhoto = isCardPhoto && session.ad_creation_session_assets?.find(asset =>
+    asset.shot_key === currentRequest.shotKey || asset.file_path === body.filePath!.trim());
+  if (priorCardPhoto && (priorCardPhoto.shot_key !== currentRequest.shotKey ||
+      priorCardPhoto.file_path !== body.filePath!.trim())) {
+    return errorResponse("Use a different photo for this slot", 409, { code: "CARDNEWS_PHOTO_REUSED" });
+  }
   let review;
 
   try {
-    review = await reviewPhotoAsset({
+    review = isCardPhoto ? {
+      passed: true,
+      score: null,
+      recommendedAction: "proceed",
+      summary: "사진을 받았어요.",
+      feedback: [],
+      checks: {
+        focus: "not_applicable", brightness: "not_applicable", framing: "not_applicable",
+        subjectVisibility: "not_applicable", guideMatch: "not_applicable", textReadability: "not_applicable",
+      },
+    } : await reviewPhotoAsset({
       supabase,
       bucket: body.bucket!.trim(),
       filePath: body.filePath!.trim(),
@@ -206,7 +225,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     ? session.ad_creation_session_assets.length
     : 0;
 
-  const { error: assetInsertError } = await supabase
+  const assetInsert = priorCardPhoto ? null : await supabase
     .from("ad_creation_session_assets")
     .insert({
       session_id: session.id,
@@ -225,10 +244,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       review_payload: review,
     });
 
-  if (assetInsertError) {
+  if (assetInsert?.error?.code === "23505" && isCardPhoto) {
+    return errorResponse("The photo was already recorded", 409, { code: "CARDNEWS_PHOTO_REUSED" });
+  }
+  if (assetInsert?.error) {
     return errorResponse("Failed to store session photo", 500, {
       code: "SESSION_ASSET_CREATE_FAILED",
-      details: assetInsertError.message,
+      details: assetInsert.error.message,
     });
   }
 
@@ -256,7 +278,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       });
     }
 
-    after(async () => {
+    if (!isCardPhoto) after(async () => {
       try {
         await prepareAdSessionDrafts(session.id);
       } catch (draftError) {

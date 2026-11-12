@@ -49,6 +49,7 @@ Railway에는 영구 DB·Volume·Object Storage를 만들지 않습니다. 이�
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | 동일 프로젝트 anon/publishable key |
 | `SUPABASE_SERVICE_ROLE_KEY` | 동일 프로젝트 service role key — API에만 등록 |
 | `CORS_ALLOWED_ORIGINS` | 실제 프론트 origin. 예: `https://posttalk.vercel.app` |
+| `GUEST_CREATION_ENABLED` | 게스트 세션 SQL 적용 후 `true` |
 | `INTERNAL_WORKER_API_KEY` | 워커를 만들 때만 32자 이상 무작위 값 등록 |
 | `EXHIBITION_MODE_ENABLED` | 초기에는 `false` |
 | `EXHIBITION_PUBLISH_SECRET` | 새 32자 이상 무작위 값 |
@@ -76,13 +77,29 @@ Railway의 private domain은 서비스 간 통신용이며 외부에 공개하�
 
 ## 배포와 검증
 
+기존 Supabase DB에는 이 버전 배포 전에 `supabase/migrations/20261111_guest_sessions.sql`을 적용합니다.
+
+### 릴스 서비스 연결
+
+릴스 저장소를 같은 Railway 환경에 별도 Docker 서비스로 배포합니다. 해당 서비스에는 `SUPABASE_URL`, `REELS_INTERNAL_API_KEY`, `PORT=8000`을 설정합니다. 백엔드에는 `REELS_API_URL=http://<릴스 서비스 이름>.railway.internal:8000`과 동일한 `REELS_INTERNAL_API_KEY`를 설정합니다.
+
+릴스 서비스에 연결한 뒤 일반 제작 화면의 새 영상 세션은 대표 메뉴 1개와 영상 4개로 13초짜리 릴스를 만듭니다. 이 결과물에는 자막과 BGM이 들어갑니다. 실제 검증은 게스트 진입, 업로드, 생성, 보관함 재생까지 한 번 이어서 하고, 브라우저에서 BGM과 썸네일을 확인합니다.
+
+### 카드뉴스 서비스 연결
+
+같은 Railway 환경에 카드뉴스 저장소를 별도 Docker 서비스로 배포합니다. 서비스에는 `SUPABASE_URL`, `CARDNEWS_INTERNAL_API_KEY`, `OPENAI_API_KEY`, `PORT=8000`을 설정하고, 백엔드에는 `CARDNEWS_API_URL=http://postalk-cardnews.railway.internal:8000`과 동일한 `CARDNEWS_INTERNAL_API_KEY`를 설정합니다. 기존 DB에는 `supabase/migrations/20261111_cardnews_shots.sql`을 먼저 적용합니다.
+
+프론트는 POSTALK 백엔드에만 접속합니다. 백엔드는 작업에 따라 릴스 또는 카드뉴스를 내부 서비스에 요청하고, 두 결과를 Supabase와 기존 보관함에서 제공합니다.
+
+### 배포 체크리스트
+
 1. GitHub Actions가 성공한 `main` 커밋인지 확인합니다.
 2. Railway API가 `main`을 Source Branch로 사용하고 있는지 확인합니다.
 3. public domain의 `/api/health`가 200인지 확인합니다. Supabase 변수 등록 후에는 `/api/health/ready`도 확인합니다. 이 readiness 경로는 데이터를 만들지 않고 DB 읽기와 Supabase `uploads` 버킷 확인만 수행하며, 정상일 때 `database: "ok"`, `storage: "ok"`를 응답합니다.
 4. 프론트 `NEXT_PUBLIC_API_BASE_URL`을 API public domain으로 설정하고 프론트를 재배포합니다.
-5. `CORS_ALLOWED_ORIGINS`에 정확한 프론트 origin만 넣고, 로그인·목록·자막·업로드를 확인합니다.
+5. `CORS_ALLOWED_ORIGINS`에 정확한 프론트 origin을 넣고, 로그인 없이 작업 공간 열기·목록·자막·업로드를 확인합니다.
 6. 사진 10MiB와 영상 50MiB 이하를 실제로 올려 Supabase Storage·Railway 업로드 경로를 확인합니다.
-7. 카드뉴스와 **무음 자막 릴스**을 각 1건 만들어 확인합니다. 이 단계까지 `GENERATION_WORKER_ENABLED=false`를 유지합니다.
+7. 카드뉴스와 BGM이 들어간 자막 릴스를 각각 1건 만들어 확인합니다. 이 단계까지 `GENERATION_WORKER_ENABLED=false`를 유지합니다.
 8. 상인이 직접 누르는 Instagram 게시 동작은 별도 리허설에서 1건 확인합니다.
 
 `SUPABASE_SERVICE_ROLE_KEY`를 Railway에 등록하면 Railway API 컨테이너가 DB·Storage 서버 작업을 수행할 수 있습니다. 이 키를 실제로 입력하기 직전에, 값과 목적지를 확인한 뒤에만 등록합니다.

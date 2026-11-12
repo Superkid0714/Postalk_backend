@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { buildReelsInput, isReelsEnabled, REELS_PROVIDER, REELS_SHOT_PLAN } from "@/lib/ai/reels";
 
 import { mergeSubmissionWorkflowMetadata } from "@/lib/ad-creation";
 import {
@@ -62,6 +63,20 @@ export async function createVideoSubmissionAndGenerationJobFromSession(params: {
     },
   };
   const script = await buildSubmissionVideoScript(submissionSeed, "market_story");
+  const savedShotPlan = params.workflow.shotPlan;
+  const hasReelsShotPlan = savedShotPlan?.length === REELS_SHOT_PLAN.length &&
+    REELS_SHOT_PLAN.every((shot, index) => savedShotPlan[index] === shot);
+  const useReels = isReelsEnabled() || hasReelsShotPlan;
+  const modelName = useReels ? REELS_PROVIDER : "render-quote-video";
+  const durationSeconds = useReels ? 13 : 8;
+  const resolution = useReels ? "1080p" : "720p";
+  const reelsInput = useReels ? buildReelsInput({
+    storeName: params.store.store_name,
+    storeDescription: params.workflow.storeSpecialty || params.session.intro_text.trim(),
+    menuName: targetMenuName,
+    menuDescription: params.workflow.menuIntro ?? undefined,
+    script,
+  }) : null;
   const captionMarkdown = buildCaptionMarkdown({
     script,
   });
@@ -90,9 +105,9 @@ export async function createVideoSubmissionAndGenerationJobFromSession(params: {
         videoWorkflow: {
           status: "generating",
           stylePreset: "market_story",
-          durationSeconds: 8,
+          durationSeconds,
           aspectRatio: "9:16",
-          resolution: "720p",
+          resolution,
           script,
           generatedAt: null,
           requestedPublishAt: null,
@@ -117,16 +132,17 @@ export async function createVideoSubmissionAndGenerationJobFromSession(params: {
       status: "queued",
       style_preset: "market_story",
       prompt_text: captionMarkdown,
-      model_name: "render-quote-video",
+      model_name: modelName,
       image_size: "9:16",
-      quality: "720p",
+      quality: resolution,
       request_payload: {
         source: "ad-session",
-        provider: "render-quote-video",
+        provider: modelName,
         adSessionId: params.session.id,
         adType: "video",
         stylePreset: "market_story",
         captionMarkdown,
+        ...(reelsInput ? { reelsInput } : {}),
         sourceVideos: params.assets.map((asset) => ({
           shotKey: asset.shot_key,
           storageBucket: asset.storage_bucket,
@@ -163,9 +179,9 @@ export async function createVideoSubmissionAndGenerationJobFromSession(params: {
           currentJobId: job.id,
           lastCompletedJobId: null,
           providerOperationName: null,
-          durationSeconds: 8,
+          durationSeconds,
           aspectRatio: "9:16",
-          resolution: "720p",
+          resolution,
           stylePreset: "market_story",
           generatedAt: null,
           requestedPublishAt: null,
@@ -173,7 +189,7 @@ export async function createVideoSubmissionAndGenerationJobFromSession(params: {
           lastFailureReason: null,
           resultStorageBucket: null,
           resultFilePath: null,
-          modelName: "render-quote-video",
+          modelName,
           mockMode: false,
           script,
         },

@@ -9,6 +9,7 @@ import {
 } from "@/lib/ad-session";
 import type { GenerationStylePreset } from "@/lib/ai/generation";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { CARDNEWS_PROVIDER, CARDNEWS_SHOTS, CARDNEWS_SHOT_PLAN, type CardNewsInput } from "@/lib/ai/cardnews-service";
 
 type SessionAssetRow = {
   shot_key: string;
@@ -54,6 +55,23 @@ export async function createSubmissionAndGenerationJobFromSession(params: {
   );
   const draftFoodCardNewsPlan = params.workflow.draftFoodCardNewsPlan ?? null;
   const draftCarouselPrompts = params.workflow.draftCarouselPrompts ?? [];
+  let cardNewsInput: CardNewsInput | null = null;
+  if (params.workflow.cardNewsTheme) {
+    const photos = CARDNEWS_SHOT_PLAN.map(shot => {
+      const asset = params.assets.find(item => item.shot_key === shot);
+      if (!asset || asset.storage_bucket !== "uploads") throw new Error("A required card news photo is missing");
+      return { role: CARDNEWS_SHOTS[shot].role, filePath: asset.file_path };
+    });
+    if (new Set(photos.map(photo => photo.filePath)).size !== photos.length) {
+      throw new Error("Card news requires six different photos");
+    }
+    cardNewsInput = {
+      theme: params.workflow.cardNewsTheme, direction: params.workflow.cardNewsStyle ?? "",
+      storeName: params.store.store_name.slice(0, 200), area: params.store.market_name.slice(0, 200),
+      menuName: targetMenuName.slice(0, 200), photos,
+      caption: Array.from([params.store.store_name, menuIntro, storeSpecialty].filter(Boolean).join("\n\n")).slice(0, 2200).join(""),
+    };
+  }
 
   const { data: submission, error: submissionError } = await params.supabase
     .from("submissions")
@@ -146,8 +164,8 @@ export async function createSubmissionAndGenerationJobFromSession(params: {
       status: "queued",
       style_preset: stylePreset,
       prompt_text: promptText,
-      model_name: "gpt-image-2",
-      image_size: resolveImageSize(stylePreset),
+      model_name: cardNewsInput ? CARDNEWS_PROVIDER : "gpt-image-2",
+      image_size: cardNewsInput ? "1080x1350" : resolveImageSize(stylePreset),
       quality: "medium",
       request_payload: {
         source: "ad-session",
@@ -158,6 +176,7 @@ export async function createSubmissionAndGenerationJobFromSession(params: {
         precomputedHashtags: draftHashtags,
         precomputedFoodCardNewsPlan: draftFoodCardNewsPlan,
         precomputedCarouselPrompts: draftCarouselPrompts,
+        ...(cardNewsInput ? { cardNewsInput } : {}),
       },
     })
     .select("id, created_at, status")

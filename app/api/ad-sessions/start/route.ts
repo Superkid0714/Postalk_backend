@@ -1,6 +1,8 @@
 import { requireStoreAccess } from "@/lib/auth/store-access";
 import { readRequestBody } from "@/lib/api/request-body";
 import { after } from "next/server";
+import { isReelsEnabled, REELS_SHOT_PLAN } from "@/lib/ai/reels";
+import { isCardNewsEnabled, type CardNewsTheme } from "@/lib/ai/cardnews-service";
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/response";
@@ -20,6 +22,8 @@ type StartAdSessionBody = {
   menuIntro?: string;
   storeSpecialty?: string;
   introText?: string;
+  cardNewsTheme?: CardNewsTheme;
+  cardNewsStyle?: string;
 };
 
 function buildCombinedIntroText(body: StartAdSessionBody) {
@@ -51,6 +55,12 @@ export async function POST(request: NextRequest) {
 
   const details: Array<{ field: string; reason: string }> = [];
   const combinedIntroText = buildCombinedIntroText(body);
+  if (body.cardNewsTheme !== undefined && body.cardNewsTheme !== "minimal" && body.cardNewsTheme !== "christmas") {
+    details.push({ field: "cardNewsTheme", reason: "Choose minimal or christmas" });
+  }
+  if (body.cardNewsStyle !== undefined && (typeof body.cardNewsStyle !== "string" || body.cardNewsStyle.length > 500)) {
+    details.push({ field: "cardNewsStyle", reason: "Must be at most 500 characters" });
+  }
 
   if (!body.storeId || !isUuid(body.storeId)) {
     details.push({
@@ -118,6 +128,9 @@ export async function POST(request: NextRequest) {
     adType: body.adType,
     menuIntro: body.menuIntro?.trim() ?? null,
     storeSpecialty: body.storeSpecialty?.trim() ?? null,
+    videoShotPlan: isReelsEnabled() ? REELS_SHOT_PLAN : undefined,
+    cardNewsTheme: isCardNewsEnabled() ? body.cardNewsTheme ?? "minimal" : undefined,
+    cardNewsStyle: body.cardNewsStyle?.trim(),
   });
   const category = getDefaultSessionCategory(store.category);
   const firstRequest = getRequestedShot(workflow, category);
@@ -148,7 +161,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  if (body.adType === "photo") {
+  if (body.adType === "photo" && !workflow.cardNewsTheme) {
     after(async () => {
       try {
         await prepareAdSessionDrafts(session.id);
