@@ -27,4 +27,4 @@ values
     '횟집',
     '활어회와 해산물 메뉴를 판매하는 가게'
   )
-on conflict (market_name, store_name) do nothing;
+on conflict (market_name, store_name) where guest_session_hash is null do nothing;

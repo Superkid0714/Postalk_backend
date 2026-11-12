@@ -1,6 +1,6 @@
 import { readRequestBody } from "@/lib/api/request-body";
 import { errorResponse, successResponse } from "@/lib/api/response";
-import { requireStoreAccess } from "@/lib/auth/store-access";
+import { requireMerchantStoreAccess } from "@/lib/auth/store-access";
 import { isUuid } from "@/lib/validation";
 import { isInstagramConfigured, startInstagramPublishForSubmission } from "@/lib/instagram/publish";
 import { PublishBusyError } from "@/lib/instagram/publish-lock";
@@ -15,7 +15,7 @@ export async function handleMerchantPublish(request: Request, submissionId?: str
   if (selectedType !== undefined && selectedType !== "photo" && selectedType !== "video") {
     return errorResponse("mediaType must be photo or video", 400, { code: "VALIDATION_ERROR" });
   }
-  const accessError = await requireStoreAccess(request, { submissionId: id });
+  const accessError = await requireMerchantStoreAccess(request, { submissionId: id });
   if (accessError) return accessError;
   if (!isInstagramConfigured()) return errorResponse("Instagram publishing is not configured", 503, { code: "INSTAGRAM_NOT_CONFIGURED" });
   try {

@@ -4,7 +4,7 @@ import { parseCorsOrigins } from "@/lib/cors";
 const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "GET, POST, PATCH, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, x-merchant-qr-token, x-user-id, x-creation-token",
+    "Content-Type, Authorization, x-merchant-qr-token, x-guest-session, x-user-id, x-creation-token",
   "Access-Control-Max-Age": "86400",
 };
 

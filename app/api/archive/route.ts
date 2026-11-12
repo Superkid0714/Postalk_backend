@@ -84,13 +84,14 @@ function buildCountQuery(params: {
   return query;
 }
 
-async function getMediaSubmissionIds(storeId: string, mediaType: "photo" | "video") {
+async function getMediaSubmissionIds(storeId: string, mediaType: "photo" | "video", submissionId?: string) {
   const supabase = getSupabaseServiceClient();
-  const { data, error } = await supabase
+  const query = supabase
     .from("submission_assets")
     .select("submission_id, submissions!inner(store_id)")
     .eq("asset_type", mediaType === "photo" ? "generated_image" : "generated_video")
     .eq("submissions.store_id", storeId);
+  const { data, error } = await (submissionId ? query.eq("submission_id", submissionId) : query);
 
   if (error) {
     return { data: null, error };
@@ -112,6 +113,10 @@ export async function GET(request: NextRequest) {
     rawMediaTypeValue === "image" ? "photo" : rawMediaTypeValue;
   const statusValue = request.nextUrl.searchParams.get("status") ?? "all";
   const limitParam = request.nextUrl.searchParams.get("limit");
+  const submissionId = request.nextUrl.searchParams.get("submissionId");
+  if (submissionId !== null && !isUuid(submissionId)) {
+    return errorResponse("Invalid submissionId", 400, { code: "VALIDATION_ERROR" });
+  }
 
   if (!storeId) {
     return errorResponse("storeId is required", 400, {
@@ -168,7 +173,7 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const mediaIds = await getMediaSubmissionIds(storeId, mediaTypeValue);
+  const mediaIds = await getMediaSubmissionIds(storeId, mediaTypeValue, submissionId ?? undefined);
   if (mediaIds.error) return errorResponse("Unable to load archive assets", 503, { code: "ARCHIVE_LOAD_FAILED" });
   const mediaSubmissionIds = mediaIds.data ?? [];
 

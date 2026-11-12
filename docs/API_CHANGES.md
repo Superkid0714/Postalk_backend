@@ -2,6 +2,33 @@
 
 > 현재 운영 기준: 관리자는 사용하지 않습니다. 상인이 콘텐츠를 만들고 직접 게시합니다.
 
+## 게스트 제작 연동
+
+1. 앱 주소를 열면 프론트에서 브라우저 저장소의 게스트 키를 읽습니다. 처음이면 아래처럼 만들어 **API 호출 전에** 저장합니다.
+
+   ```js
+   const guestKey = Array.from(crypto.getRandomValues(new Uint8Array(32)),
+     byte => byte.toString(16).padStart(2, "0")).join("");
+   ```
+
+2. `POST /api/guest-session`에 `x-guest-session: <guestKey>`를 보내면 `data.storeId`와 `data.canPublish`를 받습니다. 본문 없이 시작할 수 있으며 같은 키로 재시도해도 같은 `storeId`가 반환됩니다. 제작 전에 입력한 가게·시장 이름을 반영하려면 같은 키와 함께 JSON의 `storeName`, `marketName` 중 입력된 값을 보내면 됩니다.
+3. 기존 상인용 홈, 업로드, 제작 세션, 생성 상태 조회 및 보관함 API에 같은 헤더를 보냅니다. `storeId`가 필요한 요청에는 받은 ID를 넣습니다. QR 토큰 필드는 생략합니다.
+4. 게스트 응답의 `canPublish`는 `false`입니다. 게스트 화면에서는 Instagram 게시 및 성과 조회를 숨깁니다.
+
+키는 작업 공간에 접근할 수 있는 비밀 값입니다. URL이나 로그에 넣지 않습니다. 브라우저 저장소를 지우거나 다른 기기에서 접속하면 새 작업 공간이 열립니다.
+
+운영 DB에 `20261111_guest_sessions.sql`을 적용하고 Railway에서 `GUEST_CREATION_ENABLED=true`로 설정합니다. 프론트가 별도 도메인이면 Railway의 `CORS_ALLOWED_ORIGINS`에 추가합니다.
+
+### 릴스 서비스 연결 후 영상 제작
+
+`REELS_API_URL`이 설정된 백엔드에서 새 일반 영상 제작 세션을 시작하면, 서버가 요청하는 장면은 간판, 대표 메뉴, 대표 메뉴 상세, 가게 입구 순으로 4개입니다. 화면은 응답의 다음 촬영 요청을 사용하고, `status=generating`이 되면 기존 작업 조회를 계속합니다. 완성 영상은 1080×1920, 13초이며 자막과 배경음악이 들어갑니다. 실패한 새 릴스 작업은 `POST /api/video-creations/:jobId/regenerate`로 같은 입력을 다시 제작할 수 있습니다.
+
+### 카드뉴스 서비스 연결 후 사진 제작
+
+`CARDNEWS_API_URL`이 설정된 백엔드에서 `POST /api/ad-sessions/start`의 `adType: "photo"`로 새 카드뉴스 세션을 시작합니다. 선택 필드 `cardNewsTheme`은 `minimal` 또는 `christmas`이며 기본값은 `minimal`입니다. `cardNewsStyle`에 최대 500자의 디자인 요청을 보낼 수 있습니다.
+
+프론트는 서버 응답의 `request`를 따라 대표 음식 전체, 확대, 음식 2장, 매장 외관, 매장 내부를 올립니다. 여섯 장의 `assetType`은 `food_photo`입니다. 사진마다 기존 업로드 API와 세션 사진 API를 사용합니다. 마지막 사진을 제출하면 기존 작업 조회로 상태를 확인하고, 완료 시 보관함에서 1080×1350 PNG 3장을 볼 수 있습니다.
+
 ## 전시 업로드·대표 이미지 정책
 
 - GET /api/exhibition/uploads?user_id=1: 사진/영상 MIME과 최대 바이트, multipart 전체 상한 조회.
@@ -21,7 +48,7 @@
 ## 관리자 제거·상인 권한
 
 `/api/admin/*`와 검수·승인·반려 API는 제거되었습니다.
-상인 API는 해당 가게의 활성 QR 토큰만 인정하며 관리자·내부 워커 키로 우회하지 않습니다.
+기존 가게의 API는 해당 가게의 활성 QR 토큰을 사용합니다. 게스트 세션은 브라우저 작업 공간의 제작과 조회에 사용할 수 있습니다.
 
 ```http
 x-merchant-qr-token: <해당 가게의 activated QR 토큰>
@@ -76,7 +103,7 @@ x-merchant-qr-token: ...
 | 상태 | 대응 |
 | --- | --- |
 | 400 | 입력 타입·필수 항목·파일 경로 확인 |
-| 401 | 활성 QR 토큰 확인 |
+| 401 | 게스트 키 또는 활성 QR 토큰 확인 |
 | 403 | 본인 가게 자료인지 확인 |
 | 404 | 자료 없음 또는 제거된 API |
 | 409 | 생성·게시 진행 상태 조회 후 재시도 판단 |

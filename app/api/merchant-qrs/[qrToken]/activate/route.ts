@@ -1,5 +1,5 @@
 import { readRequestBody } from "@/lib/api/request-body";
-import { requireStoreAccess } from "@/lib/auth/store-access";
+import { requireMerchantStoreAccess } from "@/lib/auth/store-access";
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/response";
@@ -157,7 +157,7 @@ export async function POST(
     let assignedStoreId = existingStoreResult.data?.id ?? null;
 
     if (assignedStoreId) {
-      const accessError = await requireStoreAccess(request, { storeId: assignedStoreId });
+      const accessError = await requireMerchantStoreAccess(request, { storeId: assignedStoreId });
       if (accessError) return accessError;
     }
 

@@ -58,6 +58,7 @@ export async function loadMerchantQrStore(
     .from("stores")
     .select("id, market_name, store_name, owner_name, category, description")
     .eq("id", assignedStoreId)
+    .is("guest_session_hash", null)
     .maybeSingle<MerchantQrStoreRecord>();
 }
 

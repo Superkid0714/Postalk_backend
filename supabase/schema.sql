@@ -20,12 +20,16 @@ create table if not exists public.stores (
   latitude double precision,
   longitude double precision,
   location_address text,
+  guest_session_hash text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 create unique index if not exists stores_market_name_store_name_key
-  on public.stores (market_name, store_name);
+  on public.stores (market_name, store_name) where guest_session_hash is null;
+
+create unique index if not exists stores_guest_session_hash_key
+  on public.stores (guest_session_hash);
 
 create table if not exists public.submissions (
   id uuid primary key default gen_random_uuid(),
@@ -141,7 +145,8 @@ create table if not exists public.ad_creation_session_assets (
       'video_signature_interaction',
       'video_cooking_scene',
       'video_side_menu',
-      'video_side_menu_interaction'
+      'video_side_menu_interaction',
+      'card_bowl', 'card_zoom', 'card_food1', 'card_food2', 'card_store1', 'card_store2'
     )),
   asset_type text not null
     check (asset_type in ('menu_board', 'food_photo', 'video_clip')),
@@ -161,6 +166,13 @@ create table if not exists public.ad_creation_session_assets (
 
 create index if not exists ad_creation_session_assets_session_id_idx
   on public.ad_creation_session_assets (session_id);
+
+create unique index if not exists cardnews_session_shot_key
+  on public.ad_creation_session_assets (session_id, shot_key)
+  where shot_key in ('card_bowl', 'card_zoom', 'card_food1', 'card_food2', 'card_store1', 'card_store2');
+create unique index if not exists cardnews_session_photo_path
+  on public.ad_creation_session_assets (session_id, file_path)
+  where shot_key in ('card_bowl', 'card_zoom', 'card_food1', 'card_food2', 'card_store1', 'card_store2');
 
 create table if not exists public.merchant_qr_tokens (
   id uuid primary key default gen_random_uuid(),

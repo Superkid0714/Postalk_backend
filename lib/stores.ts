@@ -29,5 +29,6 @@ export async function resolveStore(
     .select("id, market_name, store_name")
     .eq("market_name", params.marketName)
     .eq("store_name", params.storeName)
+    .is("guest_session_hash", null)
     .single();
 }

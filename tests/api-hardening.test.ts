@@ -20,7 +20,7 @@ function merchantClient(status = "activated", resourceStore = STORE, failure = f
     const result = table === "merchant_qr_tokens"
       ? { qr_token: "secret", status, assigned_store_id: STORE }
       : table === "stores" ? { id: STORE } : { store_id: resourceStore };
-    const query = { select() { return query; }, eq() { return query; }, async maybeSingle() {
+    const query = { select() { return query; }, eq() { return query; }, is() { return query; }, async maybeSingle() {
       return { data: failure ? null : result, error: failure ? { message: "offline" } : null };
     } };
     return query;
