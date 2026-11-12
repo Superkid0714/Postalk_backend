@@ -443,8 +443,8 @@ export function pickAssetsForInstagram(
     }
 
     return mediaType === "video"
-      ? job.model_name.startsWith("veo") || ["render-quote-video", "render-exhibition-video"].includes(job.model_name)
-      : !job.model_name.startsWith("veo") && !["render-quote-video", "render-exhibition-video"].includes(job.model_name);
+      ? job.model_name.startsWith("veo") || ["postalk-reels", "render-quote-video", "render-exhibition-video"].includes(job.model_name)
+      : !job.model_name.startsWith("veo") && !["postalk-reels", "render-quote-video", "render-exhibition-video"].includes(job.model_name);
   });
 
   if (mediaType === "photo") {

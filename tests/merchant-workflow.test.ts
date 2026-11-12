@@ -27,6 +27,12 @@ test("rendered session videos are eligible as videos and never as photos", () =>
   assert.equal(pickAssetsForInstagram(input, "photo"), null);
 });
 
+test("Postalk reels output is eligible as a video", () => {
+  const input = submission("postalk-reels");
+  assert.equal(pickAssetsForInstagram(input, "video")?.assets[0].id, "asset");
+  assert.equal(pickAssetsForInstagram(input, "photo"), null);
+});
+
 test("partial generation assets cannot be published before their job completes", () => {
   for (const status of ["queued", "processing", "failed"]) {
     assert.equal(pickAssetsForInstagram(submission("gpt-image-2", "generated_image", status), "photo"), null);
