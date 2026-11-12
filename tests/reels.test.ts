@@ -32,7 +32,7 @@ test("reels sends four signed clips in scene order and resumes an already accept
     if (init.method === "POST") {
       const body = JSON.parse(String(init.body));
       assert.equal(body.ad_id, "job");
-      assert.equal(body.concept, "simple");
+      assert.equal(body.concept, "christmas");
       assert.deepEqual(body.media.map((item: { key: string; menu_index: number | null }) => [item.key, item.menu_index]),
         REELS_SHOT_PLAN.map((shot, index) => [shot, index === 1 || index === 2 ? 0 : null]));
       assert.ok(body.media.every((item: { download_url: string }) => item.download_url.startsWith("https://storage.example/")));
@@ -49,6 +49,7 @@ test("reels sends four signed clips in scene order and resumes an already accept
     client, jobId: "job", filePath,
     sources: [...REELS_SHOT_PLAN].reverse().map(shotKey => ({ shotKey, storageBucket: "uploads", filePath: shotKey })),
     input: buildReelsInput({ storeName: "가게", storeDescription: "소개", menuName: "떡볶이",
+      concept: "christmas",
       script: { hookText: "🍜".repeat(20), caption: "가게 소개", hashtags: [], workingCaptions: [] } }),
   });
   assert.deepEqual(calls, ["/reels/renders", "/reels/renders/rr_abc"]);

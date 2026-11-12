@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getMediaStorage, getUploadStorageBucket } from "@/lib/storage/media";
 
 export const REELS_PROVIDER = "postalk-reels";
+export type ReelsConcept = "simple" | "christmas";
 export const REELS_SHOT_PLAN = [
   "video_storefront_sign",
   "video_signature_menu",
@@ -16,6 +17,7 @@ export function isReelsEnabled() {
 
 type SourceVideo = { shotKey: string; storageBucket: string; filePath: string };
 export type ReelsInput = {
+  concept: ReelsConcept;
   store: { name: string; description: string };
   menuName: string;
   subtitles: [string, string, string, string];
@@ -25,10 +27,12 @@ export type ReelsInput = {
 
 export function buildReelsInput(params: {
   storeName: string; storeDescription: string; menuName: string; menuDescription?: string;
+  concept?: ReelsConcept;
   script: { hookText: string; caption: string; hashtags: string[]; workingCaptions: string[] };
 }): ReelsInput {
   const caption = (value: string, max: number) => Array.from(value.replace(/\s+/g, " ").trim()).slice(0, max).join("");
   return {
+    concept: params.concept ?? "simple",
     store: { name: params.storeName, description: params.storeDescription },
     menuName: params.menuName,
     subtitles: [
@@ -91,7 +95,7 @@ export async function renderReelInStorage(params: {
   const body = JSON.stringify({
     user_id: 1,
     ad_id: params.jobId,
-    concept: "simple",
+    concept: params.input.concept,
     store: params.input.store,
     menus: [{ menu_index: 0, name: params.input.menuName }],
     media,

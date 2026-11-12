@@ -75,6 +75,7 @@ export async function createVideoSubmissionAndGenerationJobFromSession(params: {
     storeDescription: params.workflow.storeSpecialty || params.session.intro_text.trim(),
     menuName: targetMenuName,
     menuDescription: params.workflow.menuIntro ?? undefined,
+    concept: params.workflow.reelsConcept,
     script,
   }) : null;
   const captionMarkdown = buildCaptionMarkdown({

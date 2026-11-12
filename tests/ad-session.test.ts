@@ -42,6 +42,16 @@ test("buildSessionWorkflowSeed initializes video shot plan when adType is video"
   assert.equal(workflow.shotPlan?.length, 8);
 });
 
+test("buildSessionWorkflowSeed preserves the requested reels concept", () => {
+  const workflow = buildSessionWorkflowSeed("대표 메뉴는 제육볶음입니다.", {
+    adType: "video",
+    reelsConcept: "christmas",
+  });
+
+  assert.equal(workflow.reelsConcept, "christmas");
+  assert.equal(normalizeAdSessionWorkflow(workflow).reelsConcept, "christmas");
+});
+
 test("normalizeAdSessionWorkflow preserves prepared draft fields", () => {
   const workflow = normalizeAdSessionWorkflow({
     currentShotIndex: 2,

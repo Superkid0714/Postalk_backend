@@ -1,5 +1,6 @@
 import { getPhotoGuideByCategory } from "@/lib/photo-guides";
 import { CARDNEWS_SHOTS, CARDNEWS_SHOT_PLAN, isCardNewsShot, type CardNewsShot, type CardNewsTheme } from "@/lib/ai/cardnews-service";
+import type { ReelsConcept } from "@/lib/ai/reels";
 import {
   getStoreCategoryLabel,
   isStoreCategoryCode,
@@ -41,6 +42,7 @@ export type AdSessionWorkflow = {
   shotPlan?: AdSessionShotKey[];
   cardNewsTheme?: CardNewsTheme;
   cardNewsStyle?: string;
+  reelsConcept?: ReelsConcept;
   caption?: string | null;
   hashtags?: string[];
   draftCaption?: string | null;
@@ -199,6 +201,9 @@ export function normalizeAdSessionWorkflow(value: unknown): AdSessionWorkflow {
     ...(value.cardNewsTheme === "minimal" || value.cardNewsTheme === "christmas"
       ? { cardNewsTheme: value.cardNewsTheme, cardNewsStyle: typeof value.cardNewsStyle === "string" ? value.cardNewsStyle : "" }
       : {}),
+    ...(value.reelsConcept === "simple" || value.reelsConcept === "christmas"
+      ? { reelsConcept: value.reelsConcept }
+      : {}),
     caption: typeof value.caption === "string" ? value.caption : null,
     hashtags: Array.isArray(value.hashtags)
       ? value.hashtags.filter((item): item is string => typeof item === "string")
@@ -244,6 +249,7 @@ export function buildSessionWorkflowSeed(
     videoShotPlan?: readonly AdSessionShotKey[];
     cardNewsTheme?: CardNewsTheme;
     cardNewsStyle?: string;
+    reelsConcept?: ReelsConcept;
   },
 ): AdSessionWorkflow {
   const adType = options?.adType === "video" ? "video" : "photo";
@@ -265,6 +271,9 @@ export function buildSessionWorkflowSeed(
     shotPlan,
     ...(adType === "photo" && options?.cardNewsTheme
       ? { cardNewsTheme: options.cardNewsTheme, cardNewsStyle: options.cardNewsStyle ?? "" }
+      : {}),
+    ...(adType === "video" && options?.reelsConcept
+      ? { reelsConcept: options.reelsConcept }
       : {}),
     caption: null,
     hashtags: [],

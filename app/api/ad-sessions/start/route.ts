@@ -1,7 +1,7 @@
 import { requireStoreAccess } from "@/lib/auth/store-access";
 import { readRequestBody } from "@/lib/api/request-body";
 import { after } from "next/server";
-import { isReelsEnabled, REELS_SHOT_PLAN } from "@/lib/ai/reels";
+import { isReelsEnabled, REELS_SHOT_PLAN, type ReelsConcept } from "@/lib/ai/reels";
 import { isCardNewsEnabled, type CardNewsTheme } from "@/lib/ai/cardnews-service";
 import type { NextRequest } from "next/server";
 
@@ -24,6 +24,7 @@ type StartAdSessionBody = {
   introText?: string;
   cardNewsTheme?: CardNewsTheme;
   cardNewsStyle?: string;
+  reelsConcept?: ReelsConcept;
 };
 
 function buildCombinedIntroText(body: StartAdSessionBody) {
@@ -60,6 +61,9 @@ export async function POST(request: NextRequest) {
   }
   if (body.cardNewsStyle !== undefined && (typeof body.cardNewsStyle !== "string" || body.cardNewsStyle.length > 500)) {
     details.push({ field: "cardNewsStyle", reason: "Must be at most 500 characters" });
+  }
+  if (body.reelsConcept !== undefined && body.reelsConcept !== "simple" && body.reelsConcept !== "christmas") {
+    details.push({ field: "reelsConcept", reason: "Choose simple or christmas" });
   }
 
   if (!body.storeId || !isUuid(body.storeId)) {
@@ -131,6 +135,7 @@ export async function POST(request: NextRequest) {
     videoShotPlan: isReelsEnabled() ? REELS_SHOT_PLAN : undefined,
     cardNewsTheme: isCardNewsEnabled() ? body.cardNewsTheme ?? "minimal" : undefined,
     cardNewsStyle: body.cardNewsStyle?.trim(),
+    reelsConcept: isReelsEnabled() ? body.reelsConcept ?? "simple" : undefined,
   });
   const category = getDefaultSessionCategory(store.category);
   const firstRequest = getRequestedShot(workflow, category);
