@@ -85,7 +85,7 @@ POST /guest-session
 
 ## 데이터 구조
 
-상세 ERD는 [현재 스키마](docs/erd/current.dbml)와 [제작 흐름 중심 ERD](docs/erd/workflow.dbml)에 있습니다. 두 파일은 dbdiagram.io에 붙여 넣어 시각화할 수 있습니다.
+팀 공유에는 [팀 제작 흐름 ERD](docs/erd/team-workflow.dbml)를 사용합니다. 현재 스키마 전체는 [현재 스키마](docs/erd/current.dbml), 확장 제작 모델은 [제작 흐름 중심 ERD](docs/erd/workflow.dbml)에 있습니다. 세 파일 모두 dbdiagram.io에 붙여 넣어 시각화할 수 있습니다.
 
 ```text
 stores
@@ -148,4 +148,5 @@ npm test
 - [Supabase 적용 기록](docs/SUPABASE_DEPLOYMENT_20261103.md)
 - [변경 기록](docs/CHANGELOG.md)
 - [ERD: 전체](docs/erd/current.dbml)
+- [ERD: 팀 공유용 제작 흐름](docs/erd/team-workflow.dbml)
 - [ERD: 제작 흐름](docs/erd/workflow.dbml)

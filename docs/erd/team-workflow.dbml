@@ -1,0 +1,121 @@
+// POSTALK 팀 공유용 ERD
+// 범위: 게스트/상인 인증 → 업로드 → 카드뉴스·릴스 생성 → 보관함 → Instagram 게시
+// 전체 구현 스키마는 current.dbml을 참고한다.
+
+Project postalk_team_workflow {
+  database_type: 'PostgreSQL'
+  Note: '프론트, 카드뉴스 AI, 릴스 AI, 백엔드 협업을 위한 축약 ERD. 실제 파일은 Supabase Storage uploads 버킷에 있고 DB에는 경로만 저장한다.'
+}
+
+Table stores {
+  id uuid [pk]
+  market_name text [not null]
+  store_name text [not null]
+  owner_name text
+  category text
+  description text
+  guest_session_hash text [unique, note: '게스트 브라우저 키의 해시. 원문 키는 저장하지 않음']
+  created_at timestamptz
+
+  Note: '상인 가게와 게스트 작업 공간의 공통 소유 단위'
+}
+
+Table merchant_qr_tokens {
+  id uuid [pk]
+  qr_token text [unique, not null]
+  status text [not null, note: 'ready | activated | disabled']
+  assigned_store_id uuid
+  assigned_at timestamptz
+
+  Note: '기존 상인 권한. 게스트는 사용하지 않음'
+}
+
+Table ad_creation_sessions {
+  id uuid [pk]
+  store_id uuid [not null]
+  ad_type text [not null, note: 'photo | video']
+  intro_text text [not null]
+  status text [not null, note: 'collecting | generating | completed | failed']
+  workflow jsonb [not null, note: '촬영 순서, cardNewsTheme 또는 reelsConcept, 소개 문구']
+  submission_id uuid
+  generation_job_id uuid
+  created_at timestamptz
+  updated_at timestamptz
+
+  Note: '프론트의 제작 화면 1회와 대응하는 세션'
+}
+
+Table ad_creation_session_assets {
+  id uuid [pk]
+  session_id uuid [not null]
+  shot_key text [not null, note: '카드뉴스 6장 또는 릴스 4장 촬영 슬롯']
+  asset_type text [not null, note: 'food_photo | video_clip']
+  storage_bucket text [not null, default: 'uploads']
+  file_path text [not null]
+  mime_type text
+  file_size bigint
+  sort_order int
+  review_passed boolean
+  created_at timestamptz
+
+  Note: 'Supabase Storage의 원본 파일 참조'
+}
+
+Table submissions {
+  id uuid [pk]
+  store_id uuid [not null]
+  title text
+  caption text
+  hashtags jsonb
+  target_menu_name text
+  ai_metadata jsonb [not null, note: '생성·Instagram 게시 상태']
+  status text [not null, note: 'draft | published']
+  created_at timestamptz
+  updated_at timestamptz
+
+  Note: '보관함과 게시의 기준 콘텐츠'
+}
+
+Table generation_jobs {
+  id uuid [pk]
+  submission_id uuid [not null]
+  store_id uuid [not null]
+  status text [not null, note: 'queued | processing | completed | failed']
+  model_name text [not null, note: 'postalk-cardnews | postalk-reels']
+  request_payload jsonb [not null]
+  result_payload jsonb [not null]
+  failure_reason text
+  result_storage_bucket text
+  result_file_path text
+  started_at timestamptz
+  completed_at timestamptz
+  created_at timestamptz
+
+  Note: '진행률 API가 조회하는 비동기 생성 작업'
+}
+
+Table submission_assets {
+  id uuid [pk]
+  submission_id uuid [not null]
+  generation_job_id uuid
+  asset_type text [not null, note: 'generated_image | generated_video | video_thumbnail']
+  storage_bucket text [not null, default: 'uploads']
+  file_path text [not null]
+  mime_type text
+  file_size bigint
+  sort_order int
+  created_at timestamptz
+
+  Note: '보관함과 Instagram 게시에 사용하는 생성 결과 파일'
+}
+
+Ref: merchant_qr_tokens.assigned_store_id > stores.id
+Ref: ad_creation_sessions.store_id > stores.id
+Ref: ad_creation_session_assets.session_id > ad_creation_sessions.id [delete: cascade]
+Ref: ad_creation_sessions.submission_id > submissions.id
+Ref: ad_creation_sessions.generation_job_id > generation_jobs.id
+Ref: submissions.store_id > stores.id
+Ref: generation_jobs.submission_id > submissions.id [delete: cascade]
+Ref: generation_jobs.store_id > stores.id
+Ref: submission_assets.submission_id > submissions.id [delete: cascade]
+Ref: submission_assets.generation_job_id > generation_jobs.id
