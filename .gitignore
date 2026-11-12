@@ -53,6 +53,9 @@ dev-server.log
 .env*
 !.env.example
 
+# local AI assistant settings
+.claude/
+
 # vercel
 .vercel
 
