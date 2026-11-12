@@ -24,7 +24,7 @@ test("readiness checks Supabase database and the private uploads bucket without 
 
     if (url.pathname.endsWith("/rest/v1/stores")) {
       assert.equal(request.method, "GET");
-      assert.equal(url.searchParams.get("select"), "id");
+      assert.equal(url.searchParams.get("select"), "id,guest_session_hash");
       assert.equal(url.searchParams.get("limit"), "1");
       return databaseStatus === 200
         ? Response.json([])

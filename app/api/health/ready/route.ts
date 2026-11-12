@@ -17,7 +17,7 @@ export async function GET() {
   const supabase = getSupabaseServiceClient();
 
   const [databaseResult, bucketsResult] = await Promise.allSettled([
-    supabase.from("stores").select("id").limit(1),
+    supabase.from("stores").select("id, guest_session_hash").limit(1),
     mediaConfig.provider === "supabase"
       ? supabase.storage.listBuckets()
       : Promise.resolve(null),
