@@ -1,3 +1,11 @@
+import {
+  archiveResponse,
+  homeResponse,
+  sessionResultResponse,
+  submitPhotoResponse,
+  submitVideoResponse,
+} from "./openapi-responses";
+
 const successEnvelope = {
   type: "object",
   required: ["success", "message", "data"],
@@ -25,6 +33,7 @@ const errorEnvelope = {
 };
 
 const guestSecurity = [{ GuestSession: [] }];
+const storeSecurity = [...guestSecurity, { MerchantQr: [] }];
 const json = (schema: object) => ({
   content: { "application/json": { schema } },
 });
@@ -90,25 +99,36 @@ export const openApiDocument = {
     },
     "/api/ad-sessions/{sessionId}": {
       get: {
-        tags: ["Creation"], summary: "제작 세션과 생성 결과 조회", security: guestSecurity,
+        tags: ["Creation"], summary: "제작 세션과 생성 결과 조회", security: storeSecurity,
         parameters: [{ $ref: "#/components/parameters/SessionId" }],
-        responses: { "200": success("수집 파일, 생성 작업, 결과를 반환합니다."), ...standardErrors, "404": success("제작 세션을 찾을 수 없습니다.", errorEnvelope) },
+        responses: { "200": sessionResultResponse, ...standardErrors, "404": success("제작 세션을 찾을 수 없습니다.", errorEnvelope) },
       },
     },
     "/api/ad-sessions/{sessionId}/photos": {
       post: {
-        tags: ["Creation"], summary: "카드뉴스 사진 제출", security: guestSecurity,
+        tags: ["Creation"], summary: "카드뉴스 사진 제출", security: storeSecurity,
         parameters: [{ $ref: "#/components/parameters/SessionId" }],
         requestBody: json({ $ref: "#/components/schemas/UploadedFile" }),
-        responses: { "200": success("다음 촬영 요청 또는 generationJobId를 반환합니다."), ...standardErrors, "409": success("같은 카드뉴스 사진을 재사용했습니다.", errorEnvelope) },
+        responses: { "200": submitPhotoResponse, ...standardErrors, "409": success("같은 카드뉴스 사진을 재사용했습니다.", errorEnvelope) },
       },
     },
     "/api/ad-sessions/{sessionId}/videos": {
       post: {
-        tags: ["Creation"], summary: "릴스 영상 제출", security: guestSecurity,
+        tags: ["Creation"], summary: "릴스 영상 제출", security: storeSecurity,
         parameters: [{ $ref: "#/components/parameters/SessionId" }],
-        requestBody: json({ $ref: "#/components/schemas/UploadedFile" }),
-        responses: { "200": success("다음 촬영 요청 또는 generationJobId를 반환합니다."), ...standardErrors },
+        requestBody: json({
+          allOf: [
+            { $ref: "#/components/schemas/UploadedFile" },
+            {
+              type: "object",
+              properties: {
+                durationSeconds: { type: "number", nullable: true },
+                durationMs: { type: "number", nullable: true },
+              },
+            },
+          ],
+        }),
+        responses: { "200": submitVideoResponse, ...standardErrors },
       },
     },
     "/api/generation-jobs/{jobId}/progress": {
@@ -120,20 +140,37 @@ export const openApiDocument = {
     },
     "/api/archive": {
       get: {
-        tags: ["Results"], summary: "보관함 조회", security: guestSecurity,
+        tags: ["Results"], summary: "보관함 조회", security: storeSecurity,
         parameters: [
-          { name: "storeId", in: "query", required: true, schema: { type: "string", format: "uuid" } },
-          { name: "mediaType", in: "query", schema: { type: "string", enum: ["photo", "video"] } },
+          { $ref: "#/components/parameters/StoreId" },
+          { name: "mediaType", in: "query", schema: { type: "string", enum: ["photo", "video"], default: "photo" } },
           { name: "status", in: "query", schema: { type: "string", enum: ["all", "draft", "published"], default: "all" } },
-          { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } },
+          { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 50, default: 20 } },
+          { name: "submissionId", in: "query", schema: { type: "string", format: "uuid" } },
         ],
-        responses: { "200": success("생성 결과 목록과 서명 URL을 반환합니다."), ...standardErrors },
+        responses: { "200": archiveResponse, ...standardErrors },
+      },
+    },
+    "/api/home": {
+      get: {
+        tags: ["Results"], summary: "홈 요약 조회", security: storeSecurity,
+        parameters: [{ $ref: "#/components/parameters/StoreId" }],
+        responses: {
+          "200": homeResponse,
+          ...standardErrors,
+          "404": success("점포를 찾을 수 없습니다.", errorEnvelope),
+          "500": success("홈 요약을 불러오지 못했습니다.", errorEnvelope),
+        },
       },
     },
   },
   components: {
-    securitySchemes: { GuestSession: { type: "apiKey", in: "header", name: "x-guest-session", description: "브라우저별 64자리 게스트 작업 공간 키" } },
+    securitySchemes: {
+      GuestSession: { type: "apiKey", in: "header", name: "x-guest-session", description: "브라우저별 64자리 게스트 작업 공간 키" },
+      MerchantQr: { type: "apiKey", in: "header", name: "x-merchant-qr-token", description: "활성화된 상인 QR 토큰" },
+    },
     parameters: {
+      StoreId: { name: "storeId", in: "query", required: true, schema: { type: "string", format: "uuid" } },
       SessionId: { name: "sessionId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
       JobId: { name: "jobId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
     },
