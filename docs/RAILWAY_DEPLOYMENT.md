@@ -48,7 +48,7 @@ Railway에는 영구 DB·Volume·Object Storage를 만들지 않습니다. 이�
 | `NEXT_PUBLIC_SUPABASE_URL` | 기존 Supabase 프로젝트 URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | 동일 프로젝트 anon/publishable key |
 | `SUPABASE_SERVICE_ROLE_KEY` | 동일 프로젝트 service role key — API에만 등록 |
-| `CORS_ALLOWED_ORIGINS` | 실제 프론트 origin. 예: `https://posttalk.vercel.app` |
+| `CORS_ALLOWED_ORIGINS` | 운영 프론트와 로컬 개발용 origin을 쉼표로 구분해 등록합니다. 현재 값은 `https://posttalk.vercel.app,http://localhost:5173`입니다. |
 | `GUEST_CREATION_ENABLED` | 게스트 세션 SQL 적용 후 `true` |
 | `INTERNAL_WORKER_API_KEY` | 워커를 만들 때만 32자 이상 무작위 값 등록 |
 | `EXHIBITION_MODE_ENABLED` | 초기에는 `false` |
@@ -97,7 +97,7 @@ Railway의 private domain은 서비스 간 통신용이며 외부에 공개하�
 2. Railway API가 `main`을 Source Branch로 사용하고 있는지 확인합니다.
 3. public domain의 `/api/health`가 200인지 확인합니다. Supabase 변수 등록 후에는 `/api/health/ready`도 확인합니다. 이 readiness 경로는 데이터를 만들지 않고 DB 읽기와 Supabase `uploads` 버킷 확인만 수행하며, 정상일 때 `database: "ok"`, `storage: "ok"`를 응답합니다.
 4. 프론트 `NEXT_PUBLIC_API_BASE_URL`을 API public domain으로 설정하고 프론트를 재배포합니다.
-5. `CORS_ALLOWED_ORIGINS`에 정확한 프론트 origin을 넣고, 로그인 없이 작업 공간 열기·목록·자막·업로드를 확인합니다.
+5. 운영 프론트와 `http://localhost:5173`에서 보낸 `OPTIONS` 요청에 `Access-Control-Allow-Origin`이 각각의 요청 origin으로 돌아오는지 확인합니다. 로그인 없이 작업 공간 열기·목록·자막·업로드도 확인합니다.
 6. 사진 10MiB와 영상 50MiB 이하를 실제로 올려 Supabase Storage·Railway 업로드 경로를 확인합니다.
 7. 카드뉴스와 BGM이 들어간 자막 릴스를 각각 1건 만들어 확인합니다. 이 단계까지 `GENERATION_WORKER_ENABLED=false`를 유지합니다.
 8. 상인이 직접 누르는 Instagram 게시 동작은 별도 리허설에서 1건 확인합니다.

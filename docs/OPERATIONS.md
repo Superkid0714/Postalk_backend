@@ -19,10 +19,10 @@ EXHIBITION_MODE_ENABLED=false
 GENERATION_WORKER_ENABLED=false
 ```
 
-프론트 도메인이 정해지면 추가합니다.
+현재 운영 프론트와 로컬 개발 프론트의 CORS 허용 목록입니다.
 
 ```dotenv
-CORS_ALLOWED_ORIGINS=https://actual-frontend-domain.example
+CORS_ALLOWED_ORIGINS=https://posttalk.vercel.app,http://localhost:5173
 ```
 
 이 버전을 배포하기 전에 기존 DB에 `supabase/migrations/20261111_guest_sessions.sql`을 적용합니다. 신규 DB의 `schema.sql`에는 포함되어 있습니다. QR 없이 제작하려면 Railway에 `GUEST_CREATION_ENABLED=true`를 설정합니다.
@@ -39,7 +39,8 @@ GET https://postalkbackend-production.up.railway.app/api/health/ready
 운영 API, 게스트 경로, 프론트 CORS를 한 번에 확인할 수 있습니다. 아래 명령은 데이터 생성이나 외부 AI·Instagram 호출을 하지 않습니다.
 
 ```powershell
-node scripts/smoke-deployment.mjs https://postalkbackend-production.up.railway.app https://actual-frontend-domain.example --ready --guest
+node scripts/smoke-deployment.mjs https://postalkbackend-production.up.railway.app https://posttalk.vercel.app --ready --guest
+node scripts/smoke-deployment.mjs https://postalkbackend-production.up.railway.app http://localhost:5173 --guest
 ```
 
 ## 기능 점검

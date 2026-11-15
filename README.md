@@ -24,6 +24,7 @@
 | 서버 상태 | `GET /api/health` |
 | DB·Storage 연결 | `GET /api/health/ready` |
 | 운영 API | `https://postalkbackend-production.up.railway.app` |
+| API 명세 | [운영 Swagger](https://postalkbackend-production.up.railway.app/api-docs) |
 
 `/api/health/ready`가 아래처럼 응답하면 Railway, Supabase DB, Storage 연결이 정상입니다.
 
@@ -50,7 +51,9 @@
 
 ## 프론트 연동 API
 
-모든 응답은 `success`, `message`, `data` 구조를 사용합니다. 게스트 제작 화면은 아래 헤더를 모든 제작·조회 요청에 함께 보냅니다. 상인 QR 흐름에서는 같은 자리에 `x-merchant-qr-token`을 사용합니다.
+제작·조회 API의 성공 응답은 `success`, `message`, `data` 구조를 사용합니다. [운영 Swagger](https://postalkbackend-production.up.railway.app/api-docs)에서 제작 결과, 보관함, 홈 요약, 사진·영상 제출의 HTTP 200 응답을 펼치면 JSON 예시와 `data` 스키마를 볼 수 있습니다. 사진 재촬영이 필요하면 HTTP 200 응답의 `data.response`가 `"fail"`이고 `data.retryMessage`에 안내 문구가 들어갑니다.
+
+게스트 제작 화면은 아래 헤더를 모든 제작·조회 요청에 함께 보냅니다. 상인 QR 흐름에서는 같은 자리에 `x-merchant-qr-token`을 사용합니다.
 
 ```http
 x-guest-session: 브라우저에만 보관하는 64자리 난수
@@ -63,11 +66,14 @@ x-guest-session: 브라우저에만 보관하는 64자리 난수
 | 카드뉴스 세션 시작 | `POST /api/ad-sessions/start` | `adType: "photo"`, 소개 문구, `cardNewsTheme` | `sessionId`, 다음 촬영 요청 |
 | 카드뉴스 사진 제출 | `POST /api/ad-sessions/:sessionId/photos` | 앞 단계의 `bucket`, `filePath` | 다음 촬영 요청 또는 `generationJobId` |
 | 릴스 세션 시작 | `POST /api/ad-sessions/start` | `adType: "video"`, 소개 문구, `reelsConcept` | `sessionId`, 다음 촬영 요청 |
-| 릴스 영상 제출 | `POST /api/ad-sessions/:sessionId/videos` | 앞 단계의 `bucket`, `filePath` | 다음 촬영 요청 또는 `generationJobId` |
+| 릴스 영상 제출 | `POST /api/ad-sessions/:sessionId/videos` | 업로드 응답의 `bucket`, `filePath`, 선택 `mimeType` | 다음 촬영 요청 또는 `generationJobId` |
 | 생성 진행률 | `GET /api/generation-jobs/:jobId/progress` | 없음 | `status`, `percent`, `stage`, `failureReason` |
 | 세션·결과 조회 | `GET /api/ad-sessions/:sessionId` | 없음 | 수집 파일, 제출물, 생성 결과 |
 | 보관함 조회 | `GET /api/archive?storeId=...` | `mediaType`, `status` 선택 | 생성물 목록과 서명 URL |
+| 홈 요약 조회 | `GET /api/home?storeId=...` | `storeId` | 광고 집계, 확인할 광고, 최근 광고 |
 | Instagram 게시 | `POST /api/submissions/:id/instagram-publish` | 상인 QR 권한, `mediaType` | 게시 요청 상태 |
+
+릴스 원본은 `POST /api/uploads`에 `assetType=video_clip`으로 보냅니다. 파일당 최대 50 MiB이며 `video/mp4`, `video/quicktime`, `video/webm`을 지원합니다. WebM 원본도 그대로 업로드할 수 있고 완성된 릴스는 MP4로 제공됩니다. 영상 제출에 `mimeType`을 보낼 때는 업로드 응답의 값을 사용합니다.
 
 카드뉴스 테마는 `minimal`, `christmas`이고, 릴스 콘셉트는 `simple`, `christmas`입니다. 마지막 파일 제출이 생성 작업을 시작하므로, 프론트는 `generationJobId`를 저장한 뒤 진행률 API를 폴링하면 됩니다. 게스트 작업 공간은 게시와 성과 조회를 할 수 없으므로 해당 버튼을 표시하지 않습니다.
 
