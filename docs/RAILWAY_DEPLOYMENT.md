@@ -81,9 +81,9 @@ Railway의 private domain은 서비스 간 통신용이며 외부에 공개하�
 
 ### 릴스 서비스 연결
 
-릴스 저장소를 같은 Railway 환경에 별도 Docker 서비스로 배포합니다. 해당 서비스에는 `SUPABASE_URL`, `REELS_INTERNAL_API_KEY`, `PORT=8000`을 설정합니다. 백엔드에는 `REELS_API_URL=http://<릴스 서비스 이름>.railway.internal:8000`과 동일한 `REELS_INTERNAL_API_KEY`를 설정합니다.
+릴스 저장소를 같은 Railway 환경에 별도 Docker 서비스로 배포합니다. 해당 서비스에는 `SUPABASE_URL`, `REELS_INTERNAL_API_KEY`, `OPENAI_API_KEY`, `PORT=8000`을 설정합니다. `OPENAI_API_KEY`는 백엔드 서비스의 같은 이름 변수를 Railway 참조로 연결합니다. 릴스 서비스는 이 키로 장면 자막·게시글 캡션·해시태그를 생성하며, 키가 없으면 기본 문구로 대체됩니다. 백엔드에는 `REELS_API_URL=http://<릴스 서비스 이름>.railway.internal:8000`과 동일한 `REELS_INTERNAL_API_KEY`를 설정합니다.
 
-릴스 서비스에 연결한 뒤 일반 제작 화면의 새 영상 세션은 대표 메뉴 1개와 영상 4개로 13초짜리 릴스를 만듭니다. 이 결과물에는 자막과 BGM이 들어갑니다. 실제 검증은 게스트 진입, 업로드, 생성, 보관함 재생까지 한 번 이어서 하고, 브라우저에서 BGM과 썸네일을 확인합니다.
+릴스 서비스에 연결한 뒤 일반 제작 화면은 메뉴 1~3개에 따라 영상 4·6·8개로 릴스를 만듭니다. 이 결과물에는 AI가 만든 장면 자막·게시글 캡션·해시태그와 BGM이 들어갑니다. 실제 검증은 게스트 진입, 업로드, 생성, 보관함 재생까지 한 번 이어서 하고, 브라우저에서 BGM과 썸네일을 확인합니다.
 
 ### 카드뉴스 서비스 연결
 

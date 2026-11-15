@@ -36,7 +36,7 @@ Table ad_creation_sessions {
   ad_type text [not null, note: 'photo | video']
   intro_text text [not null]
   status text [not null, note: 'collecting | generating | completed | failed']
-  workflow jsonb [not null, note: '촬영 순서, cardNewsTheme 또는 reelsConcept, 소개 문구']
+  workflow jsonb [not null, note: '촬영 순서, cardNewsTheme 또는 reelsConcept, reelsMenus(최대 3개), 소개 문구']
   submission_id uuid
   generation_job_id uuid
   created_at timestamptz
@@ -48,7 +48,7 @@ Table ad_creation_sessions {
 Table ad_creation_session_assets {
   id uuid [pk]
   session_id uuid [not null]
-  shot_key text [not null, note: '카드뉴스 6장 또는 릴스 4장 촬영 슬롯']
+  shot_key text [not null, note: '카드뉴스 6장 또는 릴스 메뉴 수에 따른 4·6·8개 촬영 슬롯']
   asset_type text [not null, note: 'food_photo | video_clip']
   storage_bucket text [not null, default: 'uploads']
   file_path text [not null]

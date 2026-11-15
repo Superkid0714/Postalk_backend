@@ -106,7 +106,7 @@ submissions ──< Instagram 게시 상태·성과 정보(JSON)
 ```
 
 - `stores`: 상인 가게 또는 게스트 작업 공간. 게스트는 `guest_session_hash`만 저장하며 원문 키는 DB에 남기지 않습니다.
-- `ad_creation_sessions`: 촬영 순서와 선택한 카드뉴스 테마·릴스 콘셉트를 보관하는 제작 세션입니다.
+- `ad_creation_sessions`: 촬영 순서와 선택한 카드뉴스 테마·릴스 콘셉트, 릴스 메뉴 목록(최대 3개)을 보관하는 제작 세션입니다.
 - `generation_jobs`: AI 서비스 호출 상태와 결과 경로를 보관합니다. 상태는 `queued`, `processing`, `completed`, `failed`입니다.
 - `submission_assets`: 원본과 생성 결과의 Storage 경로를 연결합니다. 실제 파일은 Supabase `uploads` 버킷에 있습니다.
 - `submissions`: 보관함에서 보여 줄 제목, 캡션, 해시태그, 게시 상태의 기준 레코드입니다.
