@@ -29,7 +29,7 @@ export async function processReelsJob(
   try {
     const sources = Array.isArray(payload.sourceVideos) ? payload.sourceVideos : [];
     const input = payload.reelsInput as ReelsInput | undefined;
-    if (!input || !Array.isArray(input.subtitles) || input.subtitles.length !== 4 ||
+    if (!input ||
         !sources.every(source => source && typeof source.shotKey === "string" &&
           source.storageBucket === bucket && typeof source.filePath === "string" &&
           source.filePath.startsWith(`stores/${job.store_id}/`))) {
@@ -73,11 +73,14 @@ export async function processReelsJob(
     const thumbnailAssetId = await saveAsset(render.thumbnailPath, "video_thumbnail", "image/jpeg", render.thumbnailBytes);
     const completedAt = new Date().toISOString();
     const submission = await client.from("submissions").update({
+      caption: render.caption,
+      hashtags: render.hashtags,
       ai_metadata: mergeSubmissionVideoWorkflowMetadata(metadata, {
         status: "generated", currentJobId: job.id, lastCompletedJobId: job.id,
         providerOperationName: render.renderId, generatedAt: completedAt, lastFailureReason: null,
         durationSeconds: 13, aspectRatio: "9:16", resolution: "1080p",
         resultStorageBucket: bucket, resultFilePath: filePath, modelName: REELS_PROVIDER,
+        scriptFallback: render.scriptFallback,
       }),
     }).eq("id", job.submission_id);
     if (submission.error) throw new Error(submission.error.message);
@@ -87,6 +90,7 @@ export async function processReelsJob(
       result_payload: {
         ...job.result_payload, provider: REELS_PROVIDER, renderId: render.renderId,
         durationSeconds: render.durationSeconds, thumbnailAssetId, thumbnailFilePath: render.thumbnailPath,
+        caption: render.caption, hashtags: render.hashtags, scriptFallback: render.scriptFallback,
       },
     }).eq("id", job.id);
     if (updated.error) throw new Error(updated.error.message);

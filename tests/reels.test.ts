@@ -29,6 +29,18 @@ test("reels sends four signed clips in scene order and resumes an already accept
   t.mock.method(globalThis, "fetch", async (url: URL, init: RequestInit) => {
     calls.push(url.pathname);
     assert.equal(new Headers(init.headers).get("x-reels-api-key"), "reels-test");
+    if (url.pathname === "/reels/scripts") {
+      const body = JSON.parse(String(init.body));
+      assert.equal(body.menus[0].description, "");
+      return Response.json({ script_id: "rs_abc", status: "pending" }, { status: 202 });
+    }
+    if (url.pathname === "/reels/scripts/rs_abc") {
+      return Response.json({
+        script_id: "rs_abc", status: "done", is_fallback: false,
+        scenes: ["가게 소개", "대표 메뉴", "메뉴 특징", "지금 방문해요"].map((text, scene_index) => ({ scene_index, text })),
+        caption: "AI가 만든 릴스 소개글입니다.", hashtags: ["#전통시장", "#떡볶이"], error: null,
+      });
+    }
     if (init.method === "POST") {
       const body = JSON.parse(String(init.body));
       assert.equal(body.ad_id, "job");
@@ -37,7 +49,8 @@ test("reels sends four signed clips in scene order and resumes an already accept
         REELS_SHOT_PLAN.map((shot, index) => [shot, index === 1 || index === 2 ? 0 : null]));
       assert.ok(body.media.every((item: { download_url: string }) => item.download_url.startsWith("https://storage.example/")));
       assert.equal(body.uploads.video_url, `https://storage.example/object/upload/sign/${filePath}`);
-      assert.equal(Array.from(body.scenes[0].text).length, 14);
+      assert.equal(body.caption, "AI가 만든 릴스 소개글입니다.");
+      assert.deepEqual(body.hashtags, ["#전통시장", "#떡볶이"]);
       return Response.json({ detail: { code: "ALREADY_RENDERING", render_id: "rr_abc" } }, { status: 409 });
     }
     return Response.json({ status: "done", result: {
@@ -52,6 +65,9 @@ test("reels sends four signed clips in scene order and resumes an already accept
       concept: "christmas",
       script: { hookText: "🍜".repeat(20), caption: "가게 소개", hashtags: [], workingCaptions: [] } }),
   });
-  assert.deepEqual(calls, ["/reels/renders", "/reels/renders/rr_abc"]);
-  assert.deepEqual(result, { renderId: "rr_abc", thumbnailPath, videoBytes: 123, thumbnailBytes: 40, durationSeconds: 13 });
+  assert.deepEqual(calls, ["/reels/scripts", "/reels/scripts/rs_abc", "/reels/renders", "/reels/renders/rr_abc"]);
+  assert.deepEqual(result, {
+    renderId: "rr_abc", thumbnailPath, videoBytes: 123, thumbnailBytes: 40, durationSeconds: 13,
+    caption: "AI가 만든 릴스 소개글입니다.", hashtags: ["#전통시장", "#떡볶이"], scriptFallback: false,
+  });
 });

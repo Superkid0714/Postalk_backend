@@ -21,6 +21,7 @@ export type SubmissionVideoWorkflowMetadata = {
   lastCompletedJobId?: string | null;
   providerOperationName?: string | null;
   status?: VideoWorkflowStatus;
+  scriptFallback?: boolean;
   durationSeconds?: VideoDurationSeconds | 13;
   aspectRatio?: VideoAspectRatio;
   resolution?: VideoResolution;

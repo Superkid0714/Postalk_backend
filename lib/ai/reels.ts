@@ -20,9 +20,7 @@ export type ReelsInput = {
   concept: ReelsConcept;
   store: { name: string; description: string };
   menuName: string;
-  subtitles: [string, string, string, string];
-  caption: string;
-  hashtags: string[];
+  menuDescription?: string;
 };
 
 export function buildReelsInput(params: {
@@ -30,19 +28,11 @@ export function buildReelsInput(params: {
   concept?: ReelsConcept;
   script: { hookText: string; caption: string; hashtags: string[]; workingCaptions: string[] };
 }): ReelsInput {
-  const caption = (value: string, max: number) => Array.from(value.replace(/\s+/g, " ").trim()).slice(0, max).join("");
   return {
     concept: params.concept ?? "simple",
     store: { name: params.storeName, description: params.storeDescription },
     menuName: params.menuName,
-    subtitles: [
-      caption(params.script.hookText || params.storeName, 14),
-      caption(params.menuName, 12),
-      caption(params.menuDescription || params.script.workingCaptions[3] || params.menuName, 16),
-      caption(params.script.workingCaptions.at(-1) || "오늘 들러 보세요", 16),
-    ],
-    caption: params.script.caption,
-    hashtags: params.script.hashtags,
+    menuDescription: params.menuDescription,
   };
 }
 
@@ -52,6 +42,16 @@ type RenderResponse = {
   detail?: { code?: string; render_id?: string };
   error?: { code?: string };
   result?: { video_key?: string; thumbnail_key?: string; video_bytes?: number; thumbnail_bytes?: number; duration_sec?: number };
+};
+
+type ScriptResponse = {
+  script_id?: string;
+  status?: "pending" | "done" | "failed";
+  is_fallback?: boolean;
+  scenes?: Array<{ scene_index?: number; text?: string }>;
+  caption?: string;
+  hashtags?: string[];
+  error?: { code?: string };
 };
 
 export async function renderReelInStorage(params: {
@@ -92,19 +92,6 @@ export async function renderReelInStorage(params: {
     return data.signedUrl;
   };
   const [video_url, thumbnail_url] = await Promise.all([signUpload(params.filePath), signUpload(thumbnailPath)]);
-  const body = JSON.stringify({
-    user_id: 1,
-    ad_id: params.jobId,
-    concept: params.input.concept,
-    store: params.input.store,
-    menus: [{ menu_index: 0, name: params.input.menuName }],
-    media,
-    scenes: params.input.subtitles.map((text, scene_index) => ({ scene_index, text })),
-    caption: params.input.caption,
-    hashtags: params.input.hashtags,
-    uploads: { video_url, thumbnail_url },
-  });
-
   const signal = AbortSignal.timeout(200_000);
   const request = async (path: string, body?: string) => {
     const response = await fetch(new URL(path, base), {
@@ -115,13 +102,63 @@ export async function renderReelInStorage(params: {
       redirect: "error",
       cache: "no-store",
     });
-    const data: RenderResponse = await response.json();
+    const data: RenderResponse | ScriptResponse = await response.json();
     return { response, data };
   };
+  const scriptRequest = JSON.stringify({
+    user_id: 1,
+    concept: params.input.concept,
+    store: params.input.store,
+    menus: [{ menu_index: 0, name: params.input.menuName, description: params.input.menuDescription ?? "" }],
+  });
+  const acceptedScript = await request("/reels/scripts", scriptRequest);
+  const scriptId = acceptedScript.response.ok && typeof (acceptedScript.data as ScriptResponse).script_id === "string"
+    ? (acceptedScript.data as ScriptResponse).script_id
+    : null;
+  if (!scriptId || !/^rs_[0-9a-f]+$/.test(scriptId)) {
+    throw new Error(`Reels service rejected script generation (HTTP ${acceptedScript.response.status})`);
+  }
+
+  let script: ScriptResponse | null = null;
+  while (!signal.aborted) {
+    const { response, data } = await request(`/reels/scripts/${scriptId}`);
+    const candidate = data as ScriptResponse;
+    if (!response.ok) throw new Error(`Unable to check reel script status (HTTP ${response.status})`);
+    if (candidate.status === "failed") throw new Error(`Reels script generation failed (${candidate.error?.code ?? "SCRIPT_GENERATION_FAILED"})`);
+    if (candidate.status === "done") {
+      script = candidate;
+      break;
+    }
+    await delay(500, undefined, { signal });
+  }
+  if (!script || !Array.isArray(script.scenes) || script.scenes.length !== 4 ||
+      typeof script.caption !== "string" || !script.caption.trim() ||
+      !Array.isArray(script.hashtags) || script.hashtags.length === 0) {
+    throw new Error("Reels service returned an incomplete script");
+  }
+  const scenes = script.scenes.map((scene, scene_index) => {
+    if (scene.scene_index !== scene_index || typeof scene.text !== "string" || !scene.text.trim()) {
+      throw new Error("Reels service returned invalid scene captions");
+    }
+    return { scene_index, text: scene.text };
+  });
+  const body = JSON.stringify({
+    user_id: 1,
+    ad_id: params.jobId,
+    concept: params.input.concept,
+    store: params.input.store,
+    menus: [{ menu_index: 0, name: params.input.menuName, description: params.input.menuDescription ?? "" }],
+    media,
+    scenes,
+    caption: script.caption,
+    hashtags: script.hashtags,
+    uploads: { video_url, thumbnail_url },
+  });
   const submit = async () => {
     const { response, data } = await request("/reels/renders", body);
-    const id = response.ok ? data.render_id
-      : response.status === 409 && data.detail?.code === "ALREADY_RENDERING" ? data.detail.render_id : null;
+    const render = data as RenderResponse;
+    const id = response.ok ? render.render_id
+      : response.status === 409 && render.detail?.code === "ALREADY_RENDERING" ? render.detail.render_id : null;
     if (!id || !/^rr_[0-9a-f]+$/.test(id)) throw new Error(`Reels service rejected the render (HTTP ${response.status})`);
     return id;
   };
@@ -130,23 +167,28 @@ export async function renderReelInStorage(params: {
   let resumed = false;
   while (!signal.aborted) {
     const { response, data } = await request(`/reels/renders/${renderId}`);
+    const render = data as RenderResponse;
     if (response.status === 404 && !resumed) {
       resumed = true;
       renderId = await submit();
       continue;
     }
     if (!response.ok) throw new Error(`Unable to check reel status (HTTP ${response.status})`);
-    if (data.status === "failed") throw new Error(`Reels rendering failed (${data.error?.code ?? "RENDER_FAILED"})`);
-    if (data.status === "done") {
-      const result = data.result;
+    if (render.status === "failed") throw new Error(`Reels rendering failed (${render.error?.code ?? "RENDER_FAILED"})`);
+    if (render.status === "done") {
+      const result = render.result;
       if (!result || result.video_key !== params.filePath || result.thumbnail_key !== thumbnailPath ||
           !validBytes(result.video_bytes) || !validBytes(result.thumbnail_bytes) ||
           typeof result.duration_sec !== "number" || !Number.isFinite(result.duration_sec) || result.duration_sec <= 0) {
         throw new Error("Reels service returned invalid output metadata");
       }
-      return { renderId, thumbnailPath, videoBytes: result.video_bytes, thumbnailBytes: result.thumbnail_bytes, durationSeconds: result.duration_sec };
+      return {
+        renderId, thumbnailPath, videoBytes: result.video_bytes, thumbnailBytes: result.thumbnail_bytes,
+        durationSeconds: result.duration_sec, caption: script.caption, hashtags: script.hashtags,
+        scriptFallback: script.is_fallback === true,
+      };
     }
-    if (data.status !== "queued" && data.status !== "rendering") throw new Error("Reels service returned an unknown status");
+    if (render.status !== "queued" && render.status !== "rendering") throw new Error("Reels service returned an unknown status");
     await delay(2000, undefined, { signal });
   }
   throw new Error("Reels service timed out");
