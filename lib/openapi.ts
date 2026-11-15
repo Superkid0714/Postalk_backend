@@ -94,7 +94,29 @@ export const openApiDocument = {
       post: {
         tags: ["Creation"], summary: "카드뉴스 또는 릴스 제작 시작", security: guestSecurity,
         description: "릴스는 reelsMenus에 메뉴를 1~3개 전달할 수 있습니다. 메뉴 수에 따라 간판·메뉴별 클로즈업/상세·입구 순서로 영상 4·6·8개를 요청합니다. reelsMenus를 생략하면 menuIntro를 메뉴 1개로 처리합니다.",
-        requestBody: json({ type: "object", required: ["storeId", "adType", "menuIntro", "storeSpecialty"], properties: { storeId: { type: "string", format: "uuid" }, adType: { type: "string", enum: ["photo", "video"] }, menuIntro: { type: "string" }, storeSpecialty: { type: "string" }, cardNewsTheme: { type: "string", enum: ["minimal", "christmas"] }, cardNewsStyle: { type: "string", maxLength: 500 }, reelsConcept: { type: "string", enum: ["simple", "christmas"] }, reelsMenus: { type: "array", minItems: 1, maxItems: 3, items: { type: "object", required: ["name"], properties: { name: { type: "string", maxLength: 80 }, description: { type: "string", maxLength: 300 } } } } } } }),
+        requestBody: json({
+          type: "object",
+          required: ["storeId", "adType", "menuIntro", "storeSpecialty"],
+          properties: {
+            storeId: { type: "string", format: "uuid" },
+            adType: { type: "string", enum: ["photo", "video"] },
+            menuIntro: { type: "string" },
+            storeSpecialty: { type: "string" },
+            cardNewsTheme: { type: "string", enum: ["minimal", "christmas"] },
+            cardNewsStyle: { type: "string", maxLength: 500 },
+            reelsConcept: { type: "string", enum: ["simple", "christmas"] },
+            reelsMenus: {
+              type: "array", minItems: 1, maxItems: 3,
+              items: {
+                type: "object", required: ["name"],
+                properties: {
+                  name: { type: "string", maxLength: 80 },
+                  description: { type: "string", maxLength: 300 },
+                },
+              },
+            },
+          },
+        }),
         responses: { "201": success("sessionId와 첫 촬영 요청을 반환합니다."), ...standardErrors },
       },
     },
