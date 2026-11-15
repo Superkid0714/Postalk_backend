@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { buildReelsInput, isReelsEnabled, REELS_PROVIDER, REELS_SHOT_PLAN } from "@/lib/ai/reels";
+import { buildReelsInput, buildReelsShotPlan, isReelsEnabled, REELS_PROVIDER } from "@/lib/ai/reels";
 
 import { mergeSubmissionWorkflowMetadata } from "@/lib/ad-creation";
 import {
@@ -63,9 +63,13 @@ export async function createVideoSubmissionAndGenerationJobFromSession(params: {
     },
   };
   const script = await buildSubmissionVideoScript(submissionSeed, "market_story");
+  const reelsMenus = params.workflow.reelsMenus?.length
+    ? params.workflow.reelsMenus
+    : [{ name: targetMenuName, description: params.workflow.menuIntro ?? undefined }];
   const savedShotPlan = params.workflow.shotPlan;
-  const hasReelsShotPlan = savedShotPlan?.length === REELS_SHOT_PLAN.length &&
-    REELS_SHOT_PLAN.every((shot, index) => savedShotPlan[index] === shot);
+  const expectedReelsShotPlan = buildReelsShotPlan(reelsMenus.length);
+  const hasReelsShotPlan = savedShotPlan?.length === expectedReelsShotPlan.length &&
+    expectedReelsShotPlan.every((shot, index) => savedShotPlan[index] === shot);
   const useReels = isReelsEnabled() || hasReelsShotPlan;
   const modelName = useReels ? REELS_PROVIDER : "render-quote-video";
   const durationSeconds = useReels ? 13 : 8;
@@ -73,8 +77,7 @@ export async function createVideoSubmissionAndGenerationJobFromSession(params: {
   const reelsInput = useReels ? buildReelsInput({
     storeName: params.store.store_name,
     storeDescription: params.workflow.storeSpecialty || params.session.intro_text.trim(),
-    menuName: targetMenuName,
-    menuDescription: params.workflow.menuIntro ?? undefined,
+    menus: reelsMenus,
     concept: params.workflow.reelsConcept,
     script,
   }) : null;

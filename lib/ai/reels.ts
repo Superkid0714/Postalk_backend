@@ -10,6 +10,21 @@ export const REELS_SHOT_PLAN = [
   "video_signature_interaction",
   "video_storefront_entry",
 ] as const;
+export type ReelsShot =
+  | "video_storefront_sign" | "video_storefront_entry" | "video_menu_board"
+  | "video_signature_menu" | "video_signature_interaction" | "video_cooking_scene"
+  | "video_side_menu" | "video_side_menu_interaction";
+
+const REELS_MENU_SHOTS = [
+  ["video_signature_menu", "video_signature_interaction"],
+  ["video_side_menu", "video_side_menu_interaction"],
+  ["video_cooking_scene", "video_menu_board"],
+] as const;
+
+export function buildReelsShotPlan(menuCount: number): ReelsShot[] {
+  if (!Number.isInteger(menuCount) || menuCount < 1 || menuCount > 3) throw new Error("Reels requires 1 to 3 menus");
+  return ["video_storefront_sign", ...REELS_MENU_SHOTS.slice(0, menuCount).flat(), "video_storefront_entry"] as ReelsShot[];
+}
 
 export function isReelsEnabled() {
   return Boolean(process.env.REELS_API_URL?.trim());
@@ -19,20 +34,20 @@ type SourceVideo = { shotKey: string; storageBucket: string; filePath: string };
 export type ReelsInput = {
   concept: ReelsConcept;
   store: { name: string; description: string };
-  menuName: string;
-  menuDescription?: string;
+  menus: Array<{ name: string; description?: string }>;
+  shotPlan: string[];
 };
 
 export function buildReelsInput(params: {
-  storeName: string; storeDescription: string; menuName: string; menuDescription?: string;
+  storeName: string; storeDescription: string; menus: Array<{ name: string; description?: string }>;
   concept?: ReelsConcept;
   script: { hookText: string; caption: string; hashtags: string[]; workingCaptions: string[] };
 }): ReelsInput {
   return {
     concept: params.concept ?? "simple",
     store: { name: params.storeName, description: params.storeDescription },
-    menuName: params.menuName,
-    menuDescription: params.menuDescription,
+    menus: params.menus,
+    shotPlan: buildReelsShotPlan(params.menus.length),
   };
 }
 
@@ -69,7 +84,7 @@ export async function renderReelInStorage(params: {
     throw new Error("Invalid reels service URL");
   }
 
-  const selected = REELS_SHOT_PLAN.map(shot => params.sources.find(source => source.shotKey === shot));
+  const selected = params.input.shotPlan.map(shot => params.sources.find(source => source.shotKey === shot));
   const media = await Promise.all(selected.map(async (source, scene_index) => {
     if (!source) throw new Error("A required reel clip is missing");
     const { data, error } = await getMediaStorage(params.client).from(source.storageBucket)
@@ -77,7 +92,7 @@ export async function renderReelInStorage(params: {
     if (error || !data?.signedUrl) throw new Error("Unable to sign a source clip");
     return {
       scene_index,
-      menu_index: scene_index === 1 || scene_index === 2 ? 0 : null,
+      menu_index: scene_index === 0 || scene_index === selected.length - 1 ? null : Math.floor((scene_index - 1) / 2),
       key: source.filePath,
       storage: "supabase",
       download_url: data.signedUrl,
@@ -109,7 +124,7 @@ export async function renderReelInStorage(params: {
     user_id: 1,
     concept: params.input.concept,
     store: params.input.store,
-    menus: [{ menu_index: 0, name: params.input.menuName, description: params.input.menuDescription ?? "" }],
+    menus: params.input.menus.map((menu, menu_index) => ({ menu_index, name: menu.name, description: menu.description ?? "" })),
   });
   const acceptedScript = await request("/reels/scripts", scriptRequest);
   const scriptId = acceptedScript.response.ok && typeof (acceptedScript.data as ScriptResponse).script_id === "string"
@@ -131,7 +146,8 @@ export async function renderReelInStorage(params: {
     }
     await delay(500, undefined, { signal });
   }
-  if (!script || !Array.isArray(script.scenes) || script.scenes.length !== 4 ||
+  const expectedSceneCount = params.input.menus.length * 2 + 2;
+  if (!script || !Array.isArray(script.scenes) || script.scenes.length !== expectedSceneCount ||
       typeof script.caption !== "string" || !script.caption.trim() ||
       !Array.isArray(script.hashtags) || script.hashtags.length === 0) {
     throw new Error("Reels service returned an incomplete script");
@@ -147,7 +163,7 @@ export async function renderReelInStorage(params: {
     ad_id: params.jobId,
     concept: params.input.concept,
     store: params.input.store,
-    menus: [{ menu_index: 0, name: params.input.menuName, description: params.input.menuDescription ?? "" }],
+    menus: params.input.menus.map((menu, menu_index) => ({ menu_index, name: menu.name, description: menu.description ?? "" })),
     media,
     scenes,
     caption: script.caption,

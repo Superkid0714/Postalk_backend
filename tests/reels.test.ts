@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { buildReelsInput, renderReelInStorage, REELS_SHOT_PLAN } from "../lib/ai/reels.ts";
+import { buildReelsInput, buildReelsShotPlan, renderReelInStorage, REELS_SHOT_PLAN } from "../lib/ai/reels.ts";
+
+test("reels uses 4, 6 or 8 capture slots for one to three menus", () => {
+  assert.equal(buildReelsShotPlan(1).length, 4);
+  assert.equal(buildReelsShotPlan(2).length, 6);
+  assert.equal(buildReelsShotPlan(3).length, 8);
+  assert.throws(() => buildReelsShotPlan(0));
+  assert.throws(() => buildReelsShotPlan(4));
+});
 
 test("reels sends four signed clips in scene order and resumes an already accepted render", async (t) => {
   const env = { REELS_API_URL: "http://reels.example:8000", REELS_INTERNAL_API_KEY: "reels-test" };
@@ -61,7 +69,7 @@ test("reels sends four signed clips in scene order and resumes an already accept
   const result = await renderReelInStorage({
     client, jobId: "job", filePath,
     sources: [...REELS_SHOT_PLAN].reverse().map(shotKey => ({ shotKey, storageBucket: "uploads", filePath: shotKey })),
-    input: buildReelsInput({ storeName: "가게", storeDescription: "소개", menuName: "떡볶이",
+    input: buildReelsInput({ storeName: "가게", storeDescription: "소개", menus: [{ name: "떡볶이" }],
       concept: "christmas",
       script: { hookText: "🍜".repeat(20), caption: "가게 소개", hashtags: [], workingCaptions: [] } }),
   });

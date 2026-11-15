@@ -1,7 +1,7 @@
 import { requireStoreAccess } from "@/lib/auth/store-access";
 import { readRequestBody } from "@/lib/api/request-body";
 import { after } from "next/server";
-import { isReelsEnabled, REELS_SHOT_PLAN, type ReelsConcept } from "@/lib/ai/reels";
+import { buildReelsShotPlan, isReelsEnabled, REELS_SHOT_PLAN, type ReelsConcept } from "@/lib/ai/reels";
 import { isCardNewsEnabled, type CardNewsTheme } from "@/lib/ai/cardnews-service";
 import type { NextRequest } from "next/server";
 
@@ -25,6 +25,7 @@ type StartAdSessionBody = {
   cardNewsTheme?: CardNewsTheme;
   cardNewsStyle?: string;
   reelsConcept?: ReelsConcept;
+  reelsMenus?: Array<{ name?: string; description?: string }>;
 };
 
 function buildCombinedIntroText(body: StartAdSessionBody) {
@@ -64,6 +65,12 @@ export async function POST(request: NextRequest) {
   }
   if (body.reelsConcept !== undefined && body.reelsConcept !== "simple" && body.reelsConcept !== "christmas") {
     details.push({ field: "reelsConcept", reason: "Choose simple or christmas" });
+  }
+  const reelsMenus: Array<{ name: string; description?: string }> = body.adType === "video" && Array.isArray(body.reelsMenus) && body.reelsMenus.length > 0
+    ? body.reelsMenus.map(menu => ({ name: menu.name?.trim() ?? "", description: menu.description?.trim() || undefined }))
+    : body.adType === "video" ? [{ name: body.menuIntro?.trim() || "대표 메뉴" }] : [];
+  if (body.adType === "video" && (!Array.isArray(body.reelsMenus) && body.reelsMenus !== undefined || reelsMenus.length < 1 || reelsMenus.length > 3 || reelsMenus.some(menu => !menu.name || menu.name.length > 80 || (menu.description?.length ?? 0) > 300))) {
+    details.push({ field: "reelsMenus", reason: "Provide 1 to 3 menus with a name up to 80 characters" });
   }
 
   if (!body.storeId || !isUuid(body.storeId)) {
@@ -132,7 +139,8 @@ export async function POST(request: NextRequest) {
     adType: body.adType,
     menuIntro: body.menuIntro?.trim() ?? null,
     storeSpecialty: body.storeSpecialty?.trim() ?? null,
-    videoShotPlan: isReelsEnabled() ? REELS_SHOT_PLAN : undefined,
+    videoShotPlan: isReelsEnabled() ? buildReelsShotPlan(reelsMenus.length) : REELS_SHOT_PLAN,
+    reelsMenus,
     cardNewsTheme: isCardNewsEnabled() ? body.cardNewsTheme ?? "minimal" : undefined,
     cardNewsStyle: body.cardNewsStyle?.trim(),
     reelsConcept: isReelsEnabled() ? body.reelsConcept ?? "simple" : undefined,
@@ -191,6 +199,7 @@ export async function POST(request: NextRequest) {
         storeSpecialty: body.storeSpecialty?.trim() ?? null,
         combinedText: combinedIntroText,
       },
+      reelsMenus: body.adType === "video" ? reelsMenus : undefined,
       store: buildSessionSummary(store, workflow),
       currentRequest: {
         response: "success",

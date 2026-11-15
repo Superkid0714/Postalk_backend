@@ -43,6 +43,7 @@ export type AdSessionWorkflow = {
   cardNewsTheme?: CardNewsTheme;
   cardNewsStyle?: string;
   reelsConcept?: ReelsConcept;
+  reelsMenus?: Array<{ name: string; description?: string }>;
   caption?: string | null;
   hashtags?: string[];
   draftCaption?: string | null;
@@ -204,6 +205,9 @@ export function normalizeAdSessionWorkflow(value: unknown): AdSessionWorkflow {
     ...(value.reelsConcept === "simple" || value.reelsConcept === "christmas"
       ? { reelsConcept: value.reelsConcept }
       : {}),
+    reelsMenus: Array.isArray(value.reelsMenus)
+      ? value.reelsMenus.filter((item): item is { name: string; description?: string } => isObject(item) && typeof item.name === "string" && item.name.trim().length > 0).slice(0, 3)
+      : [],
     caption: typeof value.caption === "string" ? value.caption : null,
     hashtags: Array.isArray(value.hashtags)
       ? value.hashtags.filter((item): item is string => typeof item === "string")
@@ -250,6 +254,7 @@ export function buildSessionWorkflowSeed(
     cardNewsTheme?: CardNewsTheme;
     cardNewsStyle?: string;
     reelsConcept?: ReelsConcept;
+    reelsMenus?: Array<{ name: string; description?: string }>;
   },
 ): AdSessionWorkflow {
   const adType = options?.adType === "video" ? "video" : "photo";
@@ -275,6 +280,7 @@ export function buildSessionWorkflowSeed(
     ...(adType === "video" && options?.reelsConcept
       ? { reelsConcept: options.reelsConcept }
       : {}),
+    ...(adType === "video" ? { reelsMenus: options?.reelsMenus ?? [] } : {}),
     caption: null,
     hashtags: [],
     draftCaption: null,
@@ -305,8 +311,12 @@ export function getRequestedShot(
     return null;
   }
 
+  const menuIndex = adType === "video" && currentShotIndex > 0 && currentShotIndex < shotPlan.length - 1
+    ? Math.floor((currentShotIndex - 1) / 2)
+    : 0;
+  const menu = workflow.reelsMenus?.[menuIndex];
   return buildCaptureRequest(adType, category, shotKey, {
-    primarySubject: workflow.primarySubject ?? "주력 메뉴",
+    primarySubject: menu?.name ?? workflow.primarySubject ?? "주력 메뉴",
     storeSpecialty: workflow.storeSpecialty ?? null,
   });
 }
@@ -332,7 +342,7 @@ export function getNextShot(
   return {
     nextIndex,
     request: buildCaptureRequest(adType, category, shotKey, {
-      primarySubject: workflow.primarySubject ?? "주력 메뉴",
+      primarySubject: workflow.reelsMenus?.[adType === "video" ? Math.floor((nextIndex - 1) / 2) : 0]?.name ?? workflow.primarySubject ?? "주력 메뉴",
       storeSpecialty: workflow.storeSpecialty ?? null,
     }),
   };
