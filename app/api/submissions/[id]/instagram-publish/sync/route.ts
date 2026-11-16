@@ -1,5 +1,5 @@
 import { errorResponse, successResponse } from "@/lib/api/response";
-import { requireMerchantStoreAccess } from "@/lib/auth/store-access";
+import { requireStoreAccess } from "@/lib/auth/store-access";
 import { isInstagramConfigured, syncInstagramPublishForSubmission } from "@/lib/instagram/publish";
 import { PublishBusyError } from "@/lib/instagram/publish-lock";
 import { isUuid } from "@/lib/validation";
@@ -18,7 +18,7 @@ export async function POST(request: Request, context: Context) {
     return errorResponse("Invalid submission id", 400, { code: "VALIDATION_ERROR" });
   }
 
-  const accessError = await requireMerchantStoreAccess(request, { submissionId: id });
+  const accessError = await requireStoreAccess(request, { submissionId: id });
   if (accessError) return accessError;
 
   if (!isInstagramConfigured()) {

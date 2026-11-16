@@ -43,6 +43,23 @@ const generationJobId = "44444444-4444-4444-8444-444444444444";
 const createdAt = "2026-11-14T09:00:00Z";
 const updatedAt = "2026-11-14T09:05:00Z";
 
+export const instagramPublishResponse = ok(
+  "Instagram 게시 상태입니다. published가 실제 게시 완료이며 processing은 아직 처리 중입니다.",
+  object({
+    ok: boolean, submissionId: uuid, mediaType: choices("photo", "video"),
+    status: choices("processing", "published", "failed"),
+    containerId: nullable(string), publishedMediaId: nullable(string), permalink: nullable(url),
+    caption: nullable(string), lastError: nullable(string),
+    requiresVerification: boolean,
+  }, ["requiresVerification"]),
+  {
+    published: { summary: "Instagram 게시 완료", message: "Instagram post already published", data: {
+      ok: true, submissionId, mediaType: "photo", status: "published", containerId: "instagram-container-id",
+      publishedMediaId: "instagram-media-id", permalink: "https://www.instagram.com/p/example/", caption: "가게 소개", lastError: null,
+    } },
+  },
+);
+
 export const generationProgressResponse = ok(
   "현재 작업 단계와 진행률을 반환합니다. percent는 단계별 가중치이며, estimated=true는 시간·바이트 단위 실측값이 아니라는 뜻입니다.",
   object({

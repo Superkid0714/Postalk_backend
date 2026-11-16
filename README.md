@@ -47,7 +47,7 @@
 주소 접속 → 게스트 작업 공간 → 업로드 → 광고 생성 → 보관함
 ```
 
-사진은 최대 10MiB, 영상은 최대 50MiB입니다. 기존 가게 보관함과 Instagram 게시에는 기존 상인 권한이 필요합니다. 프론트 호출 방식과 배포 설정은 [게스트 제작 연동](docs/API_CHANGES.md#게스트-제작-연동)을 참고하세요.
+사진은 최대 10MiB, 영상은 최대 50MiB입니다. 게스트도 본인 작업 공간의 광고를 서버에 연결된 Instagram 계정에 게시할 수 있습니다. 기존 가게 보관함에는 해당 상인 권한이 필요합니다. 프론트 호출 방식과 배포 설정은 [게스트 제작 연동](docs/API_CHANGES.md#게스트-제작-연동)을 참고하세요.
 
 ## 프론트 연동 API
 
@@ -61,7 +61,7 @@ x-guest-session: 브라우저에만 보관하는 64자리 난수
 
 | 목적 | 메서드·경로 | 핵심 입력 | 결과 |
 | --- | --- | --- | --- |
-| 게스트 작업 공간 열기 | `POST /api/guest-session` | 선택: `storeName`, `marketName` | `storeId`, `canPublish: false` |
+| 게스트 작업 공간 열기 | `POST /api/guest-session` | 선택: `storeName`, `marketName` | `storeId`, Instagram 연결 시 `canPublish: true` |
 | 파일 업로드 | `POST /api/uploads` | multipart 파일, `storeId`, `assetType` | `bucket`, `filePath` |
 | 카드뉴스 세션 시작 | `POST /api/ad-sessions/start` | `adType: "photo"`, 소개 문구, `cardNewsTheme` | `sessionId`, 다음 촬영 요청 |
 | 카드뉴스 사진 제출 | `POST /api/ad-sessions/:sessionId/photos` | 앞 단계의 `bucket`, `filePath` | 다음 촬영 요청 또는 `generationJobId` |
@@ -71,11 +71,11 @@ x-guest-session: 브라우저에만 보관하는 64자리 난수
 | 세션·결과 조회 | `GET /api/ad-sessions/:sessionId` | 없음 | 수집 파일, 제출물, 생성 결과 |
 | 보관함 조회 | `GET /api/archive?storeId=...` | `mediaType`, `status` 선택 | 생성물 목록과 서명 URL |
 | 홈 요약 조회 | `GET /api/home?storeId=...` | `storeId` | 광고 집계, 확인할 광고, 최근 광고 |
-| Instagram 게시 | `POST /api/submissions/:id/instagram-publish` | 상인 QR 권한, `mediaType` | 게시 요청 상태 |
+| Instagram 게시 | `POST /api/submissions/:id/publish` | 게스트 키 또는 상인 QR | 실제 게시 완료 시 `published` |
 
 릴스 원본은 `POST /api/uploads`에 `assetType=video_clip`으로 보냅니다. 파일당 최대 50 MiB이며 `video/mp4`, `video/quicktime`, `video/webm`을 지원합니다. WebM 원본도 그대로 업로드할 수 있고 완성된 릴스는 MP4로 제공됩니다. 영상 제출에 `mimeType`을 보낼 때는 업로드 응답의 값을 사용합니다.
 
-카드뉴스 테마는 `minimal`, `christmas`이고, 릴스 콘셉트는 `simple`, `christmas`입니다. 마지막 파일 제출이 생성 작업을 시작하므로, 프론트는 `generationJobId`를 저장한 뒤 진행률 API를 폴링하면 됩니다. 게스트 작업 공간은 게시와 성과 조회를 할 수 없으므로 해당 버튼을 표시하지 않습니다.
+카드뉴스 테마는 `minimal`, `christmas`이고, 릴스 콘셉트는 `simple`, `christmas`입니다. 마지막 파일 제출이 생성 작업을 시작하므로, 프론트는 `generationJobId`를 저장한 뒤 진행률 API를 폴링하면 됩니다. 게시 버튼은 `canPublish`를 따르며, 게스트의 성과 조회는 지원하지 않습니다.
 
 ### 호출 순서
 
@@ -86,7 +86,7 @@ POST /guest-session
   → POST /ad-sessions/:id/photos 또는 /videos
   → GET /generation-jobs/:id/progress
   → GET /ad-sessions/:id 또는 /archive
-  → (상인 QR만) POST /submissions/:id/instagram-publish
+  → POST /submissions/:id/publish
 ```
 
 ## 데이터 구조

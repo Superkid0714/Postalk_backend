@@ -2,6 +2,7 @@ import {
   archiveResponse,
   homeResponse,
   generationProgressResponse,
+  instagramPublishResponse,
   sessionResultResponse,
   sessionStartResponse,
   submitPhotoResponse,
@@ -64,6 +65,7 @@ export const openApiDocument = {
     { name: "Uploads", description: "사진·영상 업로드" },
     { name: "Creation", description: "카드뉴스·릴스 제작" },
     { name: "Results", description: "생성 진행률과 보관함" },
+    { name: "Instagram", description: "게스트·상인이 직접 요청한 광고 게시" },
   ],
   paths: {
     "/api/health": {
@@ -76,7 +78,7 @@ export const openApiDocument = {
       post: {
         tags: ["Workspace"],
         summary: "게스트 작업 공간 열기",
-        description: "같은 x-guest-session 키로 다시 요청하면 같은 작업 공간을 반환합니다.",
+        description: "같은 x-guest-session 키로 다시 요청하면 같은 작업 공간을 반환합니다. Instagram 연결이 설정되면 canPublish=true이며, 같은 키로 본인이 만든 광고를 연결된 Instagram 계정에 게시할 수 있습니다.",
         security: guestSecurity,
         requestBody: {
           required: false,
@@ -169,6 +171,36 @@ export const openApiDocument = {
         responses: { "200": generationProgressResponse, ...standardErrors, "404": success("생성 작업을 찾을 수 없습니다.", errorEnvelope) },
       },
     },
+    "/api/submissions/{id}/publish": {
+      post: {
+        tags: ["Instagram"], summary: "광고를 Instagram에 게시하고 완료 확인", security: storeSecurity,
+        description: "게스트 키 또는 상인 QR로 본인 작업 공간의 광고만 게시합니다. 본문 없이 호출할 수 있고 사진·영상 형식은 생성물에서 판단합니다. 실제 Instagram 게시 완료를 확인한 경우에만 HTTP 200, data.status=published를 반환합니다. 409 INSTAGRAM_PROCESSING이면 인스타 처리 중이므로 잠시 후 같은 경로를 재호출해 확인합니다. 409 INSTAGRAM_VERIFICATION_REQUIRED이면 외부 계정에서 게시 여부를 확인해야 하며 자동 재게시하지 않습니다. 같은 광고를 재호출해도 게시 완료된 광고를 중복 게시하지 않습니다.",
+        parameters: [{ $ref: "#/components/parameters/SubmissionId" }],
+        requestBody: json({ type: "object", properties: { mediaType: { type: "string", enum: ["photo", "video"] }, captionOverride: { type: "string" } } }),
+        responses: { "200": instagramPublishResponse, ...standardErrors, "409": success("Instagram 처리 중 또는 게시 결과 확인이 필요합니다. error.code를 확인합니다.", errorEnvelope), "502": success("Instagram 게시 처리에 실패했습니다.", errorEnvelope) },
+      },
+    },
+    "/api/submissions/{id}/instagram-publish": {
+      post: {
+        tags: ["Instagram"], summary: "Instagram 게시 요청 접수", security: storeSecurity,
+        description: "비동기 연동용입니다. HTTP 202/data.status=processing은 완료가 아닙니다. POST /api/submissions/{id}/instagram-publish/sync를 약 2초 간격으로 호출해야 실제 게시가 진행됩니다. 완료 확인을 한 요청에서 처리하려면 /publish를 사용합니다.",
+        parameters: [{ $ref: "#/components/parameters/SubmissionId" }],
+        responses: { "200": instagramPublishResponse, "202": success("Instagram 처리 중이며 /sync 호출이 필요합니다."), ...standardErrors, "409": success("게시 처리가 이미 진행 중입니다.", errorEnvelope), "502": success("Instagram 게시 실패", errorEnvelope) },
+      },
+      get: {
+        tags: ["Instagram"], summary: "저장된 Instagram 게시 상태 조회", security: storeSecurity,
+        description: "저장된 상태만 조회하며 실제 게시를 실행하지 않습니다.",
+        parameters: [{ $ref: "#/components/parameters/SubmissionId" }],
+        responses: { "200": instagramPublishResponse, ...standardErrors, "404": success("게시 상태가 없습니다.", errorEnvelope) },
+      },
+    },
+    "/api/submissions/{id}/instagram-publish/sync": {
+      post: {
+        tags: ["Instagram"], summary: "Instagram 처리 상태를 확인하고 준비 완료 시 게시", security: storeSecurity,
+        parameters: [{ $ref: "#/components/parameters/SubmissionId" }],
+        responses: { "200": instagramPublishResponse, "202": success("Instagram이 아직 처리 중입니다."), ...standardErrors, "409": success("게시 처리가 이미 진행 중입니다.", errorEnvelope), "502": success("Instagram 게시 실패", errorEnvelope) },
+      },
+    },
     "/api/archive": {
       get: {
         tags: ["Results"], summary: "보관함 조회", security: storeSecurity,
@@ -204,6 +236,7 @@ export const openApiDocument = {
       StoreId: { name: "storeId", in: "query", required: true, schema: { type: "string", format: "uuid" } },
       SessionId: { name: "sessionId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
       JobId: { name: "jobId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+      SubmissionId: { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
     },
     schemas: {
       UploadedFile: { type: "object", required: ["bucket", "filePath"], properties: { bucket: { type: "string", example: "uploads" }, filePath: { type: "string" }, fileName: { type: "string" }, mimeType: { type: "string" }, fileSize: { type: "integer", minimum: 1 } } },

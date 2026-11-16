@@ -1,4 +1,4 @@
-import { getMediaStorage } from "@/lib/storage/media";
+import { createInstagramMediaUrl } from "@/lib/instagram/media";
 import { withPublishLock } from "@/lib/instagram/publish-lock";
 import { getInstagramEnv } from "@/lib/env";
 import { fetchWithTimeout } from "@/lib/http";
@@ -475,19 +475,6 @@ export function pickAssetsForInstagram(
   return null;
 }
 
-async function createSignedAssetUrl(bucket: string, filePath: string) {
-  const supabase = getSupabaseServiceClient();
-  const { data, error } = await getMediaStorage(supabase)
-    .from(bucket)
-    .createSignedUrl(filePath, 60 * 60 * 6);
-
-  if (error || !data?.signedUrl) {
-    throw new Error("Failed to create signed asset URL");
-  }
-
-  return data.signedUrl;
-}
-
 async function publishInstagramMedia(
   mediaType: InstagramMediaType,
   mediaUrls: string[],
@@ -744,7 +731,7 @@ async function startClaimedInstagramPublish(
   const caption = options?.captionOverride?.trim() || buildInstagramCaption(submission);
   const mediaUrls = await Promise.all(
     assetSelection.assets.map((asset) =>
-      createSignedAssetUrl(asset.storage_bucket, asset.file_path),
+      createInstagramMediaUrl(getSupabaseServiceClient(), asset),
     ),
   );
 
@@ -902,7 +889,7 @@ export async function waitForInstagramPublishCompletion(
   let latestResult = await syncInstagramPublishForSubmission(submissionId);
 
   for (let attempt = 1; attempt < maxAttempts; attempt += 1) {
-    if (latestResult.status !== "processing") {
+    if (latestResult.status !== "processing" || latestResult.requiresVerification) {
       return latestResult;
     }
 

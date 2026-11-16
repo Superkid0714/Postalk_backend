@@ -50,7 +50,7 @@ node scripts/smoke-deployment.mjs https://postalkbackend-production.up.railway.a
 3. 영상 1개 업로드
 4. 카드뉴스 1건 생성
 5. 릴스 서비스를 연결하고 자막과 배경음악이 들어간 릴스 1건 생성
-6. 게스트의 Instagram 게시 요청이 거절되는지 확인
+6. 게스트가 본인 광고만 게시할 수 있고 다른 작업 공간의 광고는 거절되는지 확인
 7. 기존 상인 게시를 사용하는 경우 별도 Instagram 계정으로 게시 1건 리허설
 
 외부 AI와 Instagram은 비용 또는 실제 게시가 발생할 수 있으므로 운영 계정으로 반복 호출하지 않습니다.

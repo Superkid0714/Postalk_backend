@@ -13,7 +13,7 @@
 
 2. `POST /api/guest-session`에 `x-guest-session: <guestKey>`를 보내면 `data.storeId`와 `data.canPublish`를 받습니다. 본문 없이 시작할 수 있으며 같은 키로 재시도해도 같은 `storeId`가 반환됩니다. 제작 전에 입력한 가게·시장 이름을 반영하려면 같은 키와 함께 JSON의 `storeName`, `marketName` 중 입력된 값을 보내면 됩니다.
 3. 기존 상인용 홈, 업로드, 제작 세션, 생성 상태 조회 및 보관함 API에 같은 헤더를 보냅니다. `storeId`가 필요한 요청에는 받은 ID를 넣습니다. QR 토큰 필드는 생략합니다.
-4. 게스트 응답의 `canPublish`는 `false`입니다. 게스트 화면에서는 Instagram 게시 및 성과 조회를 숨깁니다.
+4. Instagram 연결이 설정되어 있으면 게스트 응답의 `canPublish`는 `true`입니다. 게스트도 같은 작업 공간 키로 본인이 만든 광고를 서버에 연결된 Instagram 계정에 게시할 수 있습니다. 성과 조회는 기존 상인 권한을 사용합니다.
 
 키는 작업 공간에 접근할 수 있는 비밀 값입니다. URL이나 로그에 넣지 않습니다. 브라우저 저장소를 지우거나 다른 기기에서 접속하면 새 작업 공간이 열립니다.
 
@@ -36,6 +36,14 @@
 `GET /api/generation-jobs/:jobId/progress`를 같은 작업 공간 키로 약 2초 간격으로 조회합니다. 카드뉴스와 릴스는 실제 단계 변경에 따라 `0 → 10 → 25 → 40 → 60 → 80 → 95 → 100%`를 반환합니다. 순서대로 대기, 입력 준비, AI 문구·구성, 디자인·장면 구성 준비 완료, 렌더링, 업로드, 보관함 저장, 완료입니다. 빠르게 끝나는 단계는 폴링 사이에 지나갈 수 있습니다.
 
 `estimated: true`는 단계별 가중치라는 뜻이며, 경과 시간이나 파일 바이트의 비율이 아닙니다. `100%`는 결과 저장이 성공한 `status: "completed"`에서만 반환합니다. 실패 시 마지막 진행률과 별개로 `status: "failed"`, `failureReason`을 처리합니다. Swagger HTTP 200 응답에서 각 단계의 예시와 `data` 스키마를 확인할 수 있습니다.
+
+### Instagram 게시: 접수와 완료 구분
+
+배포된 프론트는 `POST /api/submissions/:id/publish`를 본문 없이 호출할 수 있습니다. 같은 게스트 키 또는 상인 QR 헤더가 필요하며 다른 작업 공간의 광고는 거절합니다. 서버가 컨테이너 상태 확인과 실제 게시까지 진행하고, 완료가 확인된 경우에만 HTTP 200과 `data.status: "published"`를 반환합니다. 처리 중이면 HTTP 409와 `INSTAGRAM_PROCESSING`을 반환하므로 잠시 후 같은 요청으로 상태를 다시 확인합니다. `INSTAGRAM_VERIFICATION_REQUIRED`는 외부 게시 결과가 불확실한 경우이며 계정에서 확인해야 합니다. 재호출로 중복 게시하지 않습니다.
+
+비동기 연동에서는 `POST /api/submissions/:id/instagram-publish`의 202를 완료로 표시하지 않습니다. 같은 헤더로 `POST /api/submissions/:id/instagram-publish/sync`를 약 2초 간격으로 호출해 `published`가 될 때까지 확인합니다. GET은 저장된 상태만 조회하며 게시를 진행하지 않습니다.
+
+카드뉴스 PNG는 게시 시 JPEG 사본으로 변환해 Instagram에 전달합니다. 원본 PNG와 보관함 미리보기는 유지합니다.
 
 ## 관리자 제거·상인 권한
 

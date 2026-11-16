@@ -79,7 +79,7 @@ test("guest access reopens the same workspace and enforces store and publishing 
   assert.equal((await home(new NextRequest(`http://localhost/api/home?storeId=${SECOND_STORE}`, { headers }))).status, 403);
   assert.equal((await publish(new Request("http://localhost/api/publish-requests", {
     method: "POST", headers, body: JSON.stringify({ submissionId: FIRST_STORE }),
-  }))).status, 403);
+  }))).status, 404);
 
   process.env.GUEST_CREATION_ENABLED = "false";
   assert.equal((await entry(FIRST_KEY)).status, 404);

@@ -2,6 +2,7 @@ import { errorResponse, successResponse } from "@/lib/api/response";
 import { readRequestBody } from "@/lib/api/request-body";
 import { GUEST_SESSION_HEADER, guestCreationEnabled, guestSessionHash, openGuestStore } from "@/lib/auth/guest-session";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { isInstagramConfigured } from "@/lib/instagram/publish";
 
 export async function POST(request: Request) {
   if (!guestCreationEnabled()) {
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
   if (error || !data) {
     return errorResponse("Unable to open a guest workspace", 503, { code: "AUTH_UNAVAILABLE" });
   }
-  const response = successResponse({ storeId: data.id, canPublish: false });
+  const response = successResponse({ storeId: data.id, canPublish: isInstagramConfigured() });
   response.headers.set("Cache-Control", "no-store");
   return response;
 }
