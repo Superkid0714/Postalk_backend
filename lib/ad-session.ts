@@ -1,5 +1,5 @@
 import { getPhotoGuideByCategory } from "@/lib/photo-guides";
-import { CARDNEWS_SHOTS, CARDNEWS_SHOT_PLAN, isCardNewsShot, type CardNewsShot, type CardNewsTheme } from "@/lib/ai/cardnews-service";
+import { CARDNEWS_SHOTS, CARDNEWS_SHOT_PLAN, isCardNewsShot, parseCardNewsMenus, type CardNewsMenu, type CardNewsShot, type CardNewsTheme } from "@/lib/ai/cardnews-service";
 import type { ReelsConcept } from "@/lib/ai/reels";
 import {
   getStoreCategoryLabel,
@@ -42,6 +42,8 @@ export type AdSessionWorkflow = {
   shotPlan?: AdSessionShotKey[];
   cardNewsTheme?: CardNewsTheme;
   cardNewsStyle?: string;
+  cardNewsMenus?: CardNewsMenu[];
+  storeAddress?: string;
   reelsConcept?: ReelsConcept;
   reelsMenus?: Array<{ name: string; description?: string }>;
   caption?: string | null;
@@ -202,6 +204,8 @@ export function normalizeAdSessionWorkflow(value: unknown): AdSessionWorkflow {
     ...(value.cardNewsTheme === "minimal" || value.cardNewsTheme === "christmas"
       ? { cardNewsTheme: value.cardNewsTheme, cardNewsStyle: typeof value.cardNewsStyle === "string" ? value.cardNewsStyle : "" }
       : {}),
+    cardNewsMenus: parseCardNewsMenus(value.cardNewsMenus),
+    storeAddress: typeof value.storeAddress === "string" ? value.storeAddress : undefined,
     ...(value.reelsConcept === "simple" || value.reelsConcept === "christmas"
       ? { reelsConcept: value.reelsConcept }
       : {}),
@@ -253,6 +257,8 @@ export function buildSessionWorkflowSeed(
     videoShotPlan?: readonly AdSessionShotKey[];
     cardNewsTheme?: CardNewsTheme;
     cardNewsStyle?: string;
+    cardNewsMenus?: CardNewsMenu[];
+    storeAddress?: string;
     reelsConcept?: ReelsConcept;
     reelsMenus?: Array<{ name: string; description?: string }>;
   },
@@ -266,7 +272,7 @@ export function buildSessionWorkflowSeed(
     currentShotIndex: 0,
     requestedShotKey: shotPlan[0],
     adType,
-    primarySubject: inferPrimarySubject({
+    primarySubject: options?.cardNewsMenus?.[0]?.name ?? inferPrimarySubject({
       introText,
       menuIntro: options?.menuIntro ?? null,
       storeSpecialty: options?.storeSpecialty ?? null,
@@ -275,7 +281,8 @@ export function buildSessionWorkflowSeed(
     storeSpecialty: options?.storeSpecialty ?? null,
     shotPlan,
     ...(adType === "photo" && options?.cardNewsTheme
-      ? { cardNewsTheme: options.cardNewsTheme, cardNewsStyle: options.cardNewsStyle ?? "" }
+      ? { cardNewsTheme: options.cardNewsTheme, cardNewsStyle: options.cardNewsStyle ?? "",
+          cardNewsMenus: options.cardNewsMenus, storeAddress: options.storeAddress }
       : {}),
     ...(adType === "video" && options?.reelsConcept
       ? { reelsConcept: options.reelsConcept }

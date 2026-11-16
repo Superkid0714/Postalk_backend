@@ -70,7 +70,9 @@ export async function createSubmissionAndGenerationJobFromSession(params: {
       storeName: params.store.store_name.slice(0, 200), area: params.store.market_name.slice(0, 200),
       menuName: targetMenuName.slice(0, 200), photos,
       storeDescription: (storeSpecialty ?? "").slice(0, 500),
-      menus: menuIntro.split(/[,\n·/]/).map(name => name.trim().slice(0, 80)).filter(Boolean).slice(0, 3),
+      storeAddress: params.workflow.storeAddress,
+      menus: params.workflow.cardNewsMenus?.map(menu => menu.name) ?? menuIntro.split(/[,\n·/]/).map(name => name.trim().slice(0, 80)).filter(Boolean).slice(0, 3),
+      menuDetails: params.workflow.cardNewsMenus,
     };
   }
 

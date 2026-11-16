@@ -49,6 +49,8 @@ test("card news adapter signs six inputs and accepts only the expected three out
     assert.deepEqual(body.uploads, paths.map(path => `https://storage.test/upload/${path}`));
     assert.equal(body.store_description, "매일 직접 만든 떡");
     assert.deepEqual(body.menus, ["쑥떡", "인절미"]);
+    assert.equal(body.store_address, "시장로 15");
+    assert.deepEqual(body.menu_details, [{ name: "쑥떡", description: "현미, 쑥으로 만들어요.\n매일 준비합니다." }, { name: "인절미" }]);
     const result = { template: "x1", fallback: true, caption: "오늘은 쑥떡을 만나보세요.", hashtags: ["#쑥떡"],
       cards: paths.map((path, index) => ({ key: wrongOutput && index === 0 ? "foreign.png" : path, bytes: 10 })) };
     if (!streaming) return Response.json(result);
@@ -64,6 +66,7 @@ test("card news adapter signs six inputs and accepts only the expected three out
   const input = {
     theme: "christmas" as const, direction: "따뜻하게", storeName: "떡집", area: "시장", menuName: "쑥떡",
     storeDescription: "매일 직접 만든 떡", menus: ["쑥떡", "인절미"],
+    storeAddress: "시장로 15", menuDetails: [{ name: "쑥떡", description: "현미, 쑥으로 만들어요.\n매일 준비합니다." }, { name: "인절미" }],
     photos: Object.values(CARDNEWS_SHOTS).map(shot => ({ role: shot.role, filePath: `stores/store/food_photo/${shot.role}.jpg` })),
   };
   const ids = { storeId: "store", submissionId: "submission", jobId: "job" };

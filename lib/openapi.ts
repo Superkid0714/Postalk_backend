@@ -101,7 +101,8 @@ export const openApiDocument = {
         description: "먼저 게스트 작업 공간을 열고 반환된 storeId와 동일한 x-guest-session 키를 사용합니다. 카드뉴스(adType=photo)는 reelsMenus 없이 시작하며, cardNewsTheme은 minimal 또는 christmas입니다(기본 minimal). 카드뉴스 서비스 연결 시 대표 음식 전체(card_bowl)부터 사진 6장을 요청합니다. 릴스(adType=video)는 reelsMenus에 메뉴를 1~3개 전달할 수 있습니다. 메뉴 수에 따라 간판·메뉴별 클로즈업/상세·입구 순서로 영상 4·6·8개를 요청합니다. reelsMenus를 생략하면 menuIntro를 메뉴 1개로 처리합니다. 릴스 메뉴 배열은 사진 제작에 필요하지 않습니다.",
         requestBody: { required: true, ...json({
           type: "object",
-          required: ["storeId", "adType", "menuIntro", "storeSpecialty"],
+          required: ["storeId", "adType", "storeSpecialty"],
+          anyOf: [{ required: ["menuIntro"] }, { required: ["cardNewsMenus"], properties: { adType: { enum: ["photo"] } } }],
           properties: {
             storeId: { type: "string", format: "uuid" },
             adType: { type: "string", enum: ["photo", "video"] },
@@ -109,6 +110,14 @@ export const openApiDocument = {
             storeSpecialty: { type: "string" },
             cardNewsTheme: { type: "string", enum: ["minimal", "christmas"], default: "minimal", description: "사진 카드뉴스 테마" },
             cardNewsStyle: { type: "string", maxLength: 500 },
+            storeAddress: { type: "string", maxLength: 200, description: "카드뉴스 Instagram 캡션에 표시할 상세 주소" },
+            cardNewsMenus: {
+              type: "array", minItems: 1, maxItems: 3, description: "카드뉴스 메뉴의 이름과 설명. 첫 항목이 대표 메뉴입니다.",
+              items: { type: "object", required: ["name"], properties: {
+                name: { type: "string", minLength: 1, maxLength: 80 },
+                description: { type: "string", maxLength: 300 },
+              } },
+            },
             reelsConcept: { type: "string", enum: ["simple", "christmas"], description: "영상 릴스 콘셉트(기본 simple)" },
             reelsMenus: {
               type: "array", minItems: 1, maxItems: 3, description: "영상 릴스용 메뉴 1~3개. 사진 요청에서는 생략합니다. 영상 요청에서 생략하면 menuIntro를 메뉴 1개로 사용합니다.",
@@ -122,7 +131,7 @@ export const openApiDocument = {
             },
           },
         }, {
-          photo: { summary: "사진 카드뉴스: reelsMenus 없이 시작", value: { storeId: "22222222-2222-4222-8222-222222222222", adType: "photo", menuIntro: "제육볶음", storeSpecialty: "매일 직접 만드는 양념", cardNewsTheme: "minimal" } },
+          photo: { summary: "사진 카드뉴스: 상세 주소와 메뉴별 설명", value: { storeId: "22222222-2222-4222-8222-222222222222", adType: "photo", storeSpecialty: "매일 직접 만드는 양념", storeAddress: "광주광역시 서구 천변좌로 238", cardNewsMenus: [{ name: "제육볶음", description: "매콤한 양념, 아삭한 양파" }, { name: "채소비빔밥", description: "제철 채소를 곁들여요" }], cardNewsTheme: "minimal", cardNewsStyle: "잡지처럼 깔끔하게" } },
           video: { summary: "릴스: menuIntro를 메뉴 1개로 사용", value: { storeId: "22222222-2222-4222-8222-222222222222", adType: "video", menuIntro: "제육볶음", storeSpecialty: "매일 직접 만드는 양념", reelsConcept: "simple" } },
           videoThreeMenus: { summary: "릴스: 메뉴 3개, 영상 8개 촬영", value: { storeId: "22222222-2222-4222-8222-222222222222", adType: "video", menuIntro: "제육볶음, 순대, 튀김", storeSpecialty: "매일 직접 만드는 양념", reelsMenus: [{ name: "제육볶음" }, { name: "순대" }, { name: "튀김" }], reelsConcept: "simple" } },
         }) },

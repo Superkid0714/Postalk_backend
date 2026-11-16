@@ -14,6 +14,20 @@ export const CARDNEWS_SHOTS = {
 export type CardNewsShot = keyof typeof CARDNEWS_SHOTS;
 export const CARDNEWS_SHOT_PLAN = Object.keys(CARDNEWS_SHOTS) as CardNewsShot[];
 export type CardNewsTheme = "minimal" | "christmas";
+export type CardNewsMenu = { name: string; description?: string };
+
+export function parseCardNewsMenus(value: unknown): CardNewsMenu[] | undefined {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 3) return undefined;
+  const menus: CardNewsMenu[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return undefined;
+    const { name, description } = item as Record<string, unknown>;
+    if (typeof name !== "string" || !name.trim() || name.trim().length > 80 ||
+        (description !== undefined && (typeof description !== "string" || description.trim().length > 300))) return undefined;
+    menus.push({ name: name.trim(), ...(typeof description === "string" && description.trim() ? { description: description.trim() } : {}) });
+  }
+  return menus;
+}
 
 export function isCardNewsShot(value: unknown): value is CardNewsShot {
   return typeof value === "string" && Object.hasOwn(CARDNEWS_SHOTS, value);
@@ -30,7 +44,9 @@ export type CardNewsInput = {
   area: string;
   menuName: string;
   storeDescription?: string;
+  storeAddress?: string;
   menus?: string[];
+  menuDetails?: CardNewsMenu[];
   photos: Array<{ role: string; filePath: string }>;
 };
 
@@ -68,7 +84,8 @@ export async function renderCardNews(
     headers: { "Content-Type": "application/json", "Accept": "application/x-ndjson", "x-cardnews-api-key": key },
     body: JSON.stringify({ job_id: ids.jobId, theme: input.theme, direction: input.direction,
       store_name: input.storeName, area: input.area, menu_name: input.menuName,
-      store_description: input.storeDescription ?? "", menus: input.menus ?? [input.menuName], photos, uploads }),
+      store_description: input.storeDescription ?? "", store_address: input.storeAddress ?? "",
+      menus: input.menus ?? [input.menuName], menu_details: input.menuDetails ?? [], photos, uploads }),
   });
   if (!response.ok) throw new Error(`Card news render failed (HTTP ${response.status})`);
   const result = (response.headers.get("content-type")?.includes("application/x-ndjson")

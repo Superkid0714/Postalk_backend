@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { NextRequest } from "next/server";
 import { POST as startSession } from "../app/api/ad-sessions/start/route.ts";
-import type { AdSessionWorkflow } from "../lib/ad-session.ts";
+import { normalizeAdSessionWorkflow, type AdSessionWorkflow } from "../lib/ad-session.ts";
 import { CARDNEWS_SHOT_PLAN } from "../lib/ai/cardnews-service.ts";
 import { REELS_SHOT_PLAN } from "../lib/ai/reels.ts";
 
@@ -39,13 +39,14 @@ test("session start keeps photo capture independent of the enabled reels service
     return Response.json({ id: STORE, status: "collecting", style_preset: "food_card_news", created_at: "2026-11-16T00:00:00Z" });
   });
 
-  async function start(adType: "photo" | "video", reelsMenus?: Array<{ name: string }>) {
-    workflow = undefined;
-    const response = await startSession(new NextRequest("http://localhost/api/ad-sessions/start", {
+  const request = (body: Record<string, unknown>) => startSession(new NextRequest("http://localhost/api/ad-sessions/start", {
       method: "POST",
       headers: { "x-guest-session": "a".repeat(64) },
-      body: JSON.stringify({ storeId: STORE, adType, menuIntro: "떡볶이", storeSpecialty: "직접 만든 양념", reelsMenus }),
-    }));
+      body: JSON.stringify({ storeId: STORE, storeSpecialty: "직접 만든 양념", ...body }),
+  }));
+  async function start(adType: "photo" | "video", reelsMenus?: Array<{ name: string }>) {
+    workflow = undefined;
+    const response = await request({ adType, menuIntro: "떡볶이", reelsMenus });
     assert.equal(response.status, 201);
     return (await response.json()).data;
   }
@@ -55,6 +56,17 @@ test("session start keeps photo capture independent of the enabled reels service
   assert.equal(photo.currentRequest.assetType, "food_photo");
   assert.deepEqual(workflow?.shotPlan, CARDNEWS_SHOT_PLAN);
   assert.equal(workflow?.reelsMenus, undefined);
+
+  const menuDetails = [{ name: "쑥떡 세트", description: "현미, 쑥으로 만들어요.\n매일 준비합니다." }, { name: "인절미" }];
+  const structured = await request({ adType: "photo", cardNewsMenus: menuDetails, storeAddress: " 시장로 15 " });
+  assert.equal(structured.status, 201);
+  const saved = normalizeAdSessionWorkflow(workflow);
+  assert.equal(saved.primarySubject, "쑥떡 세트");
+  assert.equal(saved.storeAddress, "시장로 15");
+  assert.deepEqual(saved.cardNewsMenus, menuDetails);
+  const malformed = await request({ adType: "photo", menuIntro: "떡볶이", cardNewsMenus: [null], storeAddress: 123 });
+  assert.equal(malformed.status, 400);
+  assert.deepEqual((await malformed.json()).error.details.map(({ field }: { field: string }) => field), ["cardNewsMenus", "storeAddress"]);
 
   const video = await start("video");
   assert.equal(video.currentRequest.shotKey, "video_storefront_sign");

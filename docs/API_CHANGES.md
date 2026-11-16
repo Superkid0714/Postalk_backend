@@ -29,6 +29,8 @@
 
 사진 제작에는 `reelsMenus`가 필요하지 않습니다. 릴스 서비스가 함께 연결되어 있어도 사진 촬영 흐름으로 시작합니다. 운영 Swagger의 요청 예시 `photo`, `video`, `videoThreeMenus`와 HTTP 201 응답의 사진·릴스 예시를 참고하세요. 예시의 `storeId`는 게스트 작업 공간 API에서 받은 실제 ID로 바꿉니다.
 
+`storeAddress`(선택, 최대 200자)는 `marketName`과 별도로 입력하며 카드뉴스 캡션 하단에 표시합니다. `cardNewsMenus`는 `{ name, description? }` 객체 1~3개를 받습니다. 이름은 최대 80자, 설명은 최대 300자이고 첫 번째가 대표 메뉴입니다. 이 배열을 보내면 `menuIntro`를 생략할 수 있습니다. 이전 클라이언트는 `menuIntro`를 계속 사용할 수 있습니다.
+
 프론트는 서버의 촬영 요청에 따라 대표 음식 전체, 확대, 음식 2장, 매장 외관, 매장 내부를 올립니다. 여섯 장의 `assetType`은 `food_photo`입니다. 마지막 사진을 제출하면 기존 작업 조회로 상태를 확인합니다. 새 결과는 1080×1350 PNG 4장(표지, 대표 사진, 음식 확대, 상세 카드)이며 `generation.generatedAssets` 배열의 첫 이미지가 표지입니다. 캡션과 해시태그는 `submission.caption`과 `submission.hashtags`에서 확인합니다. 기존 3장 결과도 같은 응답 구조를 사용합니다.
 
 ### 생성 진행률

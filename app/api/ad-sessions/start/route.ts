@@ -2,7 +2,7 @@ import { requireStoreAccess } from "@/lib/auth/store-access";
 import { readRequestBody } from "@/lib/api/request-body";
 import { after } from "next/server";
 import { buildReelsShotPlan, isReelsEnabled, REELS_SHOT_PLAN, type ReelsConcept } from "@/lib/ai/reels";
-import { isCardNewsEnabled, type CardNewsTheme } from "@/lib/ai/cardnews-service";
+import { isCardNewsEnabled, parseCardNewsMenus, type CardNewsTheme } from "@/lib/ai/cardnews-service";
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/response";
@@ -24,6 +24,8 @@ type StartAdSessionBody = {
   introText?: string;
   cardNewsTheme?: CardNewsTheme;
   cardNewsStyle?: string;
+  cardNewsMenus?: unknown;
+  storeAddress?: unknown;
   reelsConcept?: ReelsConcept;
   reelsMenus?: Array<{ name?: string; description?: string }>;
 };
@@ -56,6 +58,17 @@ export async function POST(request: NextRequest) {
   }
 
   const details: Array<{ field: string; reason: string }> = [];
+  const cardNewsMenus = body.adType === "photo" ? parseCardNewsMenus(body.cardNewsMenus) : undefined;
+  if (body.adType === "photo" && body.cardNewsMenus !== undefined && !cardNewsMenus) {
+    details.push({ field: "cardNewsMenus", reason: "Provide 1 to 3 menus with names up to 80 characters and descriptions up to 300 characters" });
+  }
+  const storeAddress = typeof body.storeAddress === "string" ? body.storeAddress.trim() : undefined;
+  if (body.storeAddress !== undefined && (storeAddress === undefined || storeAddress.length > 200)) {
+    details.push({ field: "storeAddress", reason: "Must be a string of at most 200 characters" });
+  }
+  if (!body.menuIntro?.trim() && cardNewsMenus) {
+    body.menuIntro = cardNewsMenus.map(({ name, description }) => description ? `${name} - ${description}` : name).join("\n");
+  }
   const combinedIntroText = buildCombinedIntroText(body);
   if (body.cardNewsTheme !== undefined && body.cardNewsTheme !== "minimal" && body.cardNewsTheme !== "christmas") {
     details.push({ field: "cardNewsTheme", reason: "Choose minimal or christmas" });
@@ -143,6 +156,8 @@ export async function POST(request: NextRequest) {
     reelsMenus,
     cardNewsTheme: isCardNewsEnabled() ? body.cardNewsTheme ?? "minimal" : undefined,
     cardNewsStyle: body.cardNewsStyle?.trim(),
+    cardNewsMenus,
+    storeAddress,
     reelsConcept: isReelsEnabled() ? body.reelsConcept ?? "simple" : undefined,
   });
   const category = getDefaultSessionCategory(store.category);
