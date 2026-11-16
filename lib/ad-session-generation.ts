@@ -69,7 +69,8 @@ export async function createSubmissionAndGenerationJobFromSession(params: {
       theme: params.workflow.cardNewsTheme, direction: params.workflow.cardNewsStyle ?? "",
       storeName: params.store.store_name.slice(0, 200), area: params.store.market_name.slice(0, 200),
       menuName: targetMenuName.slice(0, 200), photos,
-      caption: Array.from([params.store.store_name, menuIntro, storeSpecialty].filter(Boolean).join("\n\n")).slice(0, 2200).join(""),
+      storeDescription: (storeSpecialty ?? "").slice(0, 500),
+      menus: menuIntro.split(/[,\n·/]/).map(name => name.trim().slice(0, 80)).filter(Boolean).slice(0, 3),
     };
   }
 

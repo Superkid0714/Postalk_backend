@@ -18,11 +18,9 @@ export async function processCardNewsJob(
   const reportProgress = createProgressReporter(client, job.id);
 
   let result;
-  let caption: string;
   try {
     const input = (job.request_payload as { cardNewsInput?: CardNewsInput } | null)?.cardNewsInput;
     if (!input) throw new Error("Card news input is missing");
-    caption = input.caption;
     result = await renderCardNews(client, input, { storeId: job.store_id, submissionId: job.submission_id, jobId: job.id }, reportProgress);
   } catch (error) {
     const reason = error instanceof Error ? error.message : "Card news render failed";
@@ -59,7 +57,8 @@ export async function processCardNewsJob(
 
     const completedAt = new Date().toISOString();
     const submission = await client.from("submissions").update({
-      caption,
+      caption: result.caption,
+      hashtags: result.hashtags,
       ai_metadata: mergeSubmissionWorkflowMetadata(metadata, {
         adType: "photo", publishRequestStatus: "generated", currentJobId: job.id,
         lastCompletedJobId: job.id, generatedAt: completedAt, lastFailureReason: null,

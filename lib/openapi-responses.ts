@@ -82,7 +82,7 @@ export const generationProgressResponse = ok(
   }])),
 );
 const signedUrl = (filePath: string) => `https://storage.example.com/${filePath}?token=example`;
-const generatedCards = [1, 2, 3].map((index) => {
+const generatedCards = [1, 2, 3, 4].map((index) => {
   const filePath = `${storeId}/${submissionId}/generated/${generationJobId}-${index}.png`;
   return {
     assetId: `55555555-5555-4555-8555-55555555555${index}`,

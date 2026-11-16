@@ -36,7 +36,7 @@ test("card news adapter signs six inputs and accepts only the expected three out
     createSignedUrl: async (path: string) => ({ data: { signedUrl: `https://storage.test/download/${path}` } }),
     createSignedUploadUrl: async (path: string) => ({ data: { signedUrl: `https://storage.test/upload/${path}` } }),
   }) } } as unknown as SupabaseClient;
-  const paths = [1, 2, 3].map(index => `store/submission/generated/job-${index}.png`);
+  const paths = [1, 2, 3, 4].map(index => `store/submission/generated/job-${index}.png`);
   let wrongOutput = false;
   let streaming = false;
   let omitResult = false;
@@ -47,7 +47,9 @@ test("card news adapter signs six inputs and accepts only the expected three out
     assert.equal(body.theme, "christmas");
     assert.deepEqual(body.photos.map((photo: { role: string }) => photo.role), Object.values(CARDNEWS_SHOTS).map(shot => shot.role));
     assert.deepEqual(body.uploads, paths.map(path => `https://storage.test/upload/${path}`));
-    const result = { template: "x1", fallback: true,
+    assert.equal(body.store_description, "매일 직접 만든 떡");
+    assert.deepEqual(body.menus, ["쑥떡", "인절미"]);
+    const result = { template: "x1", fallback: true, caption: "오늘은 쑥떡을 만나보세요.", hashtags: ["#쑥떡"],
       cards: paths.map((path, index) => ({ key: wrongOutput && index === 0 ? "foreign.png" : path, bytes: 10 })) };
     if (!streaming) return Response.json(result);
     assert.equal(new Headers(init.headers).get("accept"), "application/x-ndjson");
@@ -60,17 +62,21 @@ test("card news adapter signs six inputs and accepts only the expected three out
     } }), { headers: { "content-type": "application/x-ndjson" } });
   });
   const input = {
-    theme: "christmas" as const, direction: "따뜻하게", storeName: "떡집", area: "시장", menuName: "쑥떡", caption: "소개",
+    theme: "christmas" as const, direction: "따뜻하게", storeName: "떡집", area: "시장", menuName: "쑥떡",
+    storeDescription: "매일 직접 만든 떡", menus: ["쑥떡", "인절미"],
     photos: Object.values(CARDNEWS_SHOTS).map(shot => ({ role: shot.role, filePath: `stores/store/food_photo/${shot.role}.jpg` })),
   };
   const ids = { storeId: "store", submissionId: "submission", jobId: "job" };
-  assert.equal((await renderCardNews(client, input, ids)).cards.length, 3);
+  const result = await renderCardNews(client, input, ids);
+  assert.equal(result.cards.length, 4);
+  assert.equal(result.caption, "오늘은 쑥떡을 만나보세요.");
+  assert.deepEqual(result.hashtags, ["#쑥떡"]);
   wrongOutput = true;
   await assert.rejects(renderCardNews(client, input, ids), /invalid results/);
   wrongOutput = false;
   streaming = true;
   const stages: string[] = [];
-  assert.equal((await renderCardNews(client, input, ids, async stage => { stages.push(stage); })).cards.length, 3);
+  assert.equal((await renderCardNews(client, input, ids, async stage => { stages.push(stage); })).cards.length, 4);
   assert.deepEqual(stages, ["preparing", "preparing", "scripting", "designing", "rendering", "uploading"]);
   omitResult = true;
   await assert.rejects(renderCardNews(client, input, ids), /ended without results/);

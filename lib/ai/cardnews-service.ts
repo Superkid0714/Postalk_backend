@@ -29,7 +29,8 @@ export type CardNewsInput = {
   storeName: string;
   area: string;
   menuName: string;
-  caption: string;
+  storeDescription?: string;
+  menus?: string[];
   photos: Array<{ role: string; filePath: string }>;
 };
 
@@ -56,7 +57,7 @@ export async function renderCardNews(
     if (error || !data?.signedUrl) throw new Error("Unable to sign a card news photo");
     return { role, download_url: data.signedUrl };
   }));
-  const paths = [1, 2, 3].map(index => `${ids.storeId}/${ids.submissionId}/generated/${ids.jobId}-${index}.png`);
+  const paths = [1, 2, 3, 4].map(index => `${ids.storeId}/${ids.submissionId}/generated/${ids.jobId}-${index}.png`);
   const uploads = await Promise.all(paths.map(async path => {
     const { data, error } = await bucket.createSignedUploadUrl(path, { upsert: true });
     if (error || !data?.signedUrl) throw new Error("Unable to sign a card news output");
@@ -66,18 +67,22 @@ export async function renderCardNews(
     method: "POST", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(180_000),
     headers: { "Content-Type": "application/json", "Accept": "application/x-ndjson", "x-cardnews-api-key": key },
     body: JSON.stringify({ job_id: ids.jobId, theme: input.theme, direction: input.direction,
-      store_name: input.storeName, area: input.area, menu_name: input.menuName, photos, uploads }),
+      store_name: input.storeName, area: input.area, menu_name: input.menuName,
+      store_description: input.storeDescription ?? "", menus: input.menus ?? [input.menuName], photos, uploads }),
   });
   if (!response.ok) throw new Error(`Card news render failed (HTTP ${response.status})`);
   const result = (response.headers.get("content-type")?.includes("application/x-ndjson")
     ? await readCardNewsEvents(response, reportProgress)
-    : await response.json()) as { template: string; fallback: boolean; cards: Array<{ key: string; bytes: number }> };
-  if (!Array.isArray(result.cards) || result.cards.length !== paths.length ||
+    : await response.json()) as { template: string; fallback: boolean; cards: Array<{ key: string; bytes: number }>; caption: string; hashtags: string[] };
+  if (!result || !Array.isArray(result.cards) || result.cards.length !== paths.length ||
       !result.cards.every((card, index) => card?.key === paths[index] &&
         Number.isSafeInteger(card.bytes) && card.bytes > 0 && card.bytes <= 10 * 1024 * 1024) ||
       typeof result.template !== "string" ||
       !(input.theme === "christmas" ? /^x[1-4]$/ : /^t[1-4]$/).test(result.template) ||
-      typeof result.fallback !== "boolean") {
+      typeof result.fallback !== "boolean" ||
+      typeof result.caption !== "string" || !result.caption.trim() || [...result.caption].length > 1200 ||
+      !Array.isArray(result.hashtags) || result.hashtags.length > 5 ||
+      !result.hashtags.every(tag => typeof tag === "string" && /^#[A-Za-z0-9_가-힣]{1,20}$/.test(tag))) {
     throw new Error("Card news service returned invalid results");
   }
   return result;
