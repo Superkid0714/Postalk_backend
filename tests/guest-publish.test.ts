@@ -49,7 +49,8 @@ test("guest publishing verifies ownership, completes the container and never rep
     throw new Error(`Unexpected mocked request ${request.method} ${url.pathname}`);
   });
   const headers = { "x-guest-session": "a".repeat(64) };
-  const click = (id = ID, authenticated = true) => publish(new Request("http://localhost/api/submissions/test/publish", { method: "POST", headers: authenticated ? headers : {} }), { params: Promise.resolve({ id }) });
+  // Proxies may forward a zero-byte stream rather than a null Request.body.
+  const click = (id = ID, authenticated = true) => publish(new Request("http://localhost/api/submissions/test/publish", { method: "POST", body: "", headers: authenticated ? headers : {} }), { params: Promise.resolve({ id }) });
   const workspace = await openGuest(new Request("http://localhost/api/guest-session", { method: "POST", headers }));
   assert.equal((await workspace.json()).data.canPublish, true);
   assert.equal((await click(ID, false)).status, 401);

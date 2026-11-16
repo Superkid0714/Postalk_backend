@@ -1,4 +1,4 @@
-import { readRequestBody } from "@/lib/api/request-body";
+import { validateRequestBody } from "@/lib/api/request-body";
 import { errorResponse, successResponse } from "@/lib/api/response";
 import { requireStoreAccess } from "@/lib/auth/store-access";
 import { isUuid } from "@/lib/validation";
@@ -7,7 +7,12 @@ import { PublishBusyError } from "@/lib/instagram/publish-lock";
 
 export async function handleMerchantPublish(request: Request, submissionId?: string, mediaType?: "photo" | "video", options?: { waitForCompletion?: boolean }) {
   let body: Record<string, unknown>;
-  try { body = request.body ? await readRequestBody(request) : {}; }
+  try {
+    const raw = await request.text();
+    const value: unknown = raw.trim() ? JSON.parse(raw) : {};
+    validateRequestBody(value);
+    body = value;
+  }
   catch { return errorResponse("Invalid JSON body", 400, { code: "VALIDATION_ERROR" }); }
   const id = submissionId ?? body.submissionId;
   if (!isUuid(id)) return errorResponse("Invalid submissionId", 400, { code: "VALIDATION_ERROR" });
