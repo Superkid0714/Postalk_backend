@@ -63,7 +63,8 @@ uploads multipart와 submissions / photo-check JSON의 기존 qrToken 입력도 
 
 업로드의 bucket 값은 Supabase의 `uploads`입니다.
 응답의 bucket과 filePath를 그대로 다음 요청에 전달하세요. 클라이언트에서 고정하거나 가공하지 않습니다.
-서명 URL은 만료되므로 영구 주소로 저장하지 말고 조회 API에서 갱신합니다.
+
+`GET /api/home`, `GET /api/archive`, `GET /api/ad-sessions/:sessionId`의 미리보기 서명 URL은 발급 시점부터 1시간 동안 유효합니다. 백엔드는 같은 파일의 서명 URL을 최대 5분간 재사용하므로, 여러 조회에서 같은 주소를 받을 수 있습니다. 영구 참조에는 파일의 `bucket`과 `filePath`를 사용하고, 서명 URL이 만료되면 해당 조회 API를 다시 호출합니다.
 
 ## 상태와 집계
 

@@ -63,7 +63,7 @@ x-guest-session: 브라우저에만 보관하는 64자리 난수
 | --- | --- | --- | --- |
 | 게스트 작업 공간 열기 | `POST /api/guest-session` | 선택: `storeName`, `marketName` | `storeId`, Instagram 연결 시 `canPublish: true` |
 | 파일 업로드 | `POST /api/uploads` | multipart 파일, `storeId`, `assetType` | `bucket`, `filePath` |
-| 카드뉴스 세션 시작 | `POST /api/ad-sessions/start` | `adType: "photo"`, 소개 문구, `cardNewsTheme` | `sessionId`, 다음 촬영 요청 |
+| 카드뉴스 세션 시작 | `POST /api/ad-sessions/start` | `adType: "photo"`, `storeSpecialty`, `cardNewsMenus`, `storeAddress`, `cardNewsTheme`, `cardNewsStyle` | `sessionId`, 다음 촬영 요청 |
 | 카드뉴스 사진 제출 | `POST /api/ad-sessions/:sessionId/photos` | 앞 단계의 `bucket`, `filePath` | 다음 촬영 요청 또는 `generationJobId` |
 | 릴스 세션 시작 | `POST /api/ad-sessions/start` | `adType: "video"`, 소개 문구, `reelsConcept` | `sessionId`, 다음 촬영 요청 |
 | 릴스 영상 제출 | `POST /api/ad-sessions/:sessionId/videos` | 업로드 응답의 `bucket`, `filePath`, 선택 `mimeType` | 다음 촬영 요청 또는 `generationJobId` |
@@ -76,6 +76,8 @@ x-guest-session: 브라우저에만 보관하는 64자리 난수
 릴스 원본은 `POST /api/uploads`에 `assetType=video_clip`으로 보냅니다. 파일당 최대 50 MiB이며 `video/mp4`, `video/quicktime`, `video/webm`을 지원합니다. WebM 원본도 그대로 업로드할 수 있고 완성된 릴스는 MP4로 제공됩니다. 영상 제출에 `mimeType`을 보낼 때는 업로드 응답의 값을 사용합니다.
 
 카드뉴스 테마는 `minimal`, `christmas`이고, 릴스 콘셉트는 `simple`, `christmas`입니다. 마지막 파일 제출이 생성 작업을 시작하므로, 프론트는 `generationJobId`를 저장한 뒤 진행률 API를 폴링하면 됩니다. 게시 버튼은 `canPublish`를 따르며, 게스트의 성과 조회는 지원하지 않습니다.
+
+카드뉴스 입력 예시와 미리보기 URL 갱신 방식은 [프론트엔드 API 연동 문서](docs/API_CHANGES.md)를 참고하세요.
 
 ### 호출 순서
 

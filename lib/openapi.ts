@@ -1,8 +1,11 @@
 import {
   archiveResponse,
+  guestSessionResponse,
+  healthSchema,
   homeResponse,
   generationProgressResponse,
   instagramPublishResponse,
+  readinessSchema,
   sessionResultResponse,
   sessionStartResponse,
   submitPhotoResponse,
@@ -69,10 +72,17 @@ export const openApiDocument = {
   ],
   paths: {
     "/api/health": {
-      get: { tags: ["Health"], summary: "서버 상태", responses: { "200": success("서버가 실행 중입니다.") } },
+      get: { tags: ["Health"], summary: "서버 상태", responses: { "200": success("서버가 실행 중입니다.", healthSchema) } },
     },
     "/api/health/ready": {
-      get: { tags: ["Health"], summary: "DB·Storage 준비 상태", responses: { "200": success("의존성 상태를 반환합니다.") } },
+      get: {
+        tags: ["Health"],
+        summary: "DB·Storage 준비 상태",
+        responses: {
+          "200": success("DB를 읽을 수 있고 uploads 버킷을 확인했습니다.", readinessSchema("ok")),
+          "503": success("DB 또는 uploads 버킷 점검에 실패했습니다.", readinessSchema("error")),
+        },
+      },
     },
     "/api/guest-session": {
       post: {
@@ -84,7 +94,7 @@ export const openApiDocument = {
           required: false,
           content: { "application/json": { schema: { type: "object", properties: { storeName: { type: "string", maxLength: 100 }, marketName: { type: "string", maxLength: 100 } } } } },
         },
-        responses: { "200": success("기존 작업 공간을 반환합니다."), "400": standardErrors["400"], "404": success("게스트 제작 기능이 비활성화되었습니다.", errorEnvelope), "503": standardErrors["503"] },
+        responses: { "200": guestSessionResponse, "400": standardErrors["400"], "404": success("게스트 제작 기능이 비활성화되었습니다.", errorEnvelope), "503": standardErrors["503"] },
       },
     },
     "/api/uploads": {

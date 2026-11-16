@@ -5,8 +5,6 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 
-type DependencyStatus = "ok" | "error" | "skipped";
-
 /**
  * Readiness differs from /api/health: it verifies the configured Supabase
  * service role can read the database and inspect the private uploads bucket.
@@ -18,27 +16,22 @@ export async function GET() {
 
   const [databaseResult, bucketsResult] = await Promise.allSettled([
     supabase.from("stores").select("id, guest_session_hash").limit(1),
-    mediaConfig.provider === "supabase"
-      ? supabase.storage.listBuckets()
-      : Promise.resolve(null),
+    supabase.storage.listBuckets(),
   ]);
 
-  const database: DependencyStatus =
+  const database =
     databaseResult.status === "fulfilled" && !databaseResult.value.error
       ? "ok"
       : "error";
 
-  let storage: DependencyStatus = "skipped";
-  if (mediaConfig.provider === "supabase") {
-    storage =
-      bucketsResult.status === "fulfilled" &&
-      !bucketsResult.value?.error &&
-      Boolean(bucketsResult.value?.data?.some((bucket) => bucket.name === "uploads"))
-        ? "ok"
-        : "error";
-  }
+  const storage =
+    bucketsResult.status === "fulfilled" &&
+    !bucketsResult.value.error &&
+    bucketsResult.value.data?.some((bucket) => bucket.name === mediaConfig.bucket)
+      ? "ok"
+      : "error";
 
-  const ready = database === "ok" && storage !== "error";
+  const ready = database === "ok" && storage === "ok";
 
   return NextResponse.json(
     {

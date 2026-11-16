@@ -41,7 +41,7 @@ export function isArchiveStatus(value: string): value is ArchiveStatus {
   return ARCHIVE_STATUSES.includes(value as ArchiveStatus);
 }
 
-export function normalizeArchiveStore(
+function normalizeArchiveStore(
   store: ArchiveStoreRecord | ArchiveStoreRecord[] | null,
 ) {
   if (Array.isArray(store)) {
@@ -82,18 +82,8 @@ export function attachArchiveSubmissionAssets<
   }));
 }
 
-export function getArchiveStatusLabel(status: ArchiveStatus) {
-  return status === "all" ? "전체" : status === "published" ? "게시 완료" : "보관 중";
-}
-
-export async function getArchiveThumbnailUrl(
-  asset: SubmissionAssetRecord | null,
-) {
-  if (!asset) {
-    return null;
-  }
-
-  return getPreviewSignedUrl(getSupabaseServiceClient(), asset.storage_bucket, asset.file_path);
+function getArchiveStatusLabel(status: ArchiveSubmissionRecord["status"]) {
+  return status === "published" ? "게시 완료" : "보관 중";
 }
 
 async function buildArchivePreviewAssets(
@@ -119,7 +109,7 @@ async function buildArchivePreviewAssets(
       index,
       assetType: asset.asset_type,
       sortOrder: asset.sort_order,
-      url: await getArchiveThumbnailUrl(asset),
+      url: await getPreviewSignedUrl(getSupabaseServiceClient(), asset.storage_bucket, asset.file_path),
     })),
   );
 }
@@ -235,7 +225,9 @@ export async function buildArchiveItem(
   );
   const thumbnailUrl = previewAssets[0]?.url ?? null;
   const generatedAsset = pickGeneratedAsset(submission.submission_assets, mediaType);
-  const generatedAssetUrl = await getArchiveThumbnailUrl(generatedAsset);
+  const generatedAssetUrl = generatedAsset
+    ? await getPreviewSignedUrl(getSupabaseServiceClient(), generatedAsset.storage_bucket, generatedAsset.file_path)
+    : null;
   const publishCaption = buildArchiveCaption(submission);
   const instagramPermalink = getInstagramPermalink(submission.ai_metadata);
 

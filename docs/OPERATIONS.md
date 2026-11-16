@@ -36,6 +36,8 @@ GET https://postalkbackend-production.up.railway.app/api/health/ready
 
 두 번째 요청에서 `database: ok`, `storage: ok`가 나오면 DB와 Storage까지 정상입니다.
 
+`/api/health`의 `revision`으로 운영 커밋을 확인합니다. DB 또는 `uploads` 버킷 점검에 실패하면 `/api/health/ready`는 HTTP 503과 의존성별 상태를 반환합니다.
+
 운영 API, 게스트 경로, 프론트 CORS를 한 번에 확인할 수 있습니다. 아래 명령은 데이터 생성이나 외부 AI·Instagram 호출을 하지 않습니다.
 
 ```powershell
@@ -56,6 +58,8 @@ node scripts/smoke-deployment.mjs https://postalkbackend-production.up.railway.a
 외부 AI와 Instagram은 비용 또는 실제 게시가 발생할 수 있으므로 운영 계정으로 반복 호출하지 않습니다.
 
 ## 장애 확인
+
+홈·보관함·제작 결과에 쓰는 서명 URL 캐시는 백엔드 프로세스마다 최대 512개를 5분간 보관합니다. 작업 공간 접근 권한은 요청마다 확인하며 목록과 상태도 매번 조회합니다.
 
 | 증상 | 먼저 볼 곳 |
 | --- | --- |

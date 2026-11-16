@@ -4,6 +4,10 @@ const string = { type: "string" };
 const uuid = { type: "string", format: "uuid" };
 const timestamp = { type: "string", format: "date-time" };
 const url = { type: "string", format: "uri" };
+const previewUrl = {
+  ...url,
+  description: "발급 시점부터 1시간 동안 유효한 미리보기 서명 URL입니다. 만료되면 이 API를 다시 호출해 갱신하세요.",
+};
 const boolean = { type: "boolean" };
 const integer = { type: "integer" };
 const number = { type: "number" };
@@ -42,6 +46,41 @@ const submissionId = "33333333-3333-4333-8333-333333333333";
 const generationJobId = "44444444-4444-4444-8444-444444444444";
 const createdAt = "2026-11-14T09:00:00Z";
 const updatedAt = "2026-11-14T09:05:00Z";
+
+const healthFields = {
+  service: choices("postalk-backend"),
+  timestamp,
+};
+
+export const healthSchema = object({
+  status: choices("ok"),
+  ...healthFields,
+  revision: nullable(string),
+});
+
+export function readinessSchema(status: "ok" | "error") {
+  const dependencyStatus = status === "ok" ? choices("ok") : choices("ok", "error");
+  return object({
+    status: choices(status),
+    ...healthFields,
+    dependencies: object({
+      database: dependencyStatus,
+      storage: dependencyStatus,
+      mediaProvider: choices("supabase"),
+    }),
+  });
+}
+
+export const guestSessionResponse = ok(
+  "게스트 작업 공간을 열거나 기존 작업 공간을 반환합니다.",
+  object({
+    storeId: uuid,
+    canPublish: { ...boolean, description: "서버의 Instagram 연결 설정 여부입니다." },
+  }),
+  {
+    workspace: { summary: "게시를 사용할 수 있는 작업 공간", message: "OK", data: { storeId, canPublish: true } },
+  },
+);
 
 export const instagramPublishResponse = ok(
   "Instagram 게시 상태입니다. published가 실제 게시 완료이며 processing은 아직 처리 중입니다.",
@@ -301,12 +340,12 @@ export const sessionResultResponse = ok(
       modelName: string,
       failureReason: nullable(string),
       imageCount: nullable(integer),
-      resultUrl: nullable(url),
+      resultUrl: nullable(previewUrl),
       generatedAssets: array(object({
         assetId: nullable(string),
         filePath: nullable(string),
         promptKey: nullable(string),
-        url: nullable(url),
+        url: nullable(previewUrl),
       })),
       templateSlots: { type: "object", nullable: true, additionalProperties: true },
       completedAt: nullable(timestamp),
@@ -492,7 +531,7 @@ export const submitVideoResponse = ok(
 
 const adFields = {
   submissionId: uuid,
-  thumbnailUrl: nullable(url),
+  thumbnailUrl: nullable(previewUrl),
   title: string,
   status: submissionStatus,
   statusLabel: string,
@@ -519,7 +558,7 @@ export const archiveResponse = ok(
     }),
     items: array(object({
       ...adFields,
-      generatedAssetUrl: nullable(url),
+      generatedAssetUrl: nullable(previewUrl),
       storeName: nullable(string),
       marketName: nullable(string),
       createdAt: timestamp,
@@ -531,7 +570,7 @@ export const archiveResponse = ok(
         index: integer,
         assetType: choices("generated_image", "generated_video", "video_thumbnail"),
         sortOrder: integer,
-        url: nullable(url),
+        url: nullable(previewUrl),
       })),
     })),
   }),
