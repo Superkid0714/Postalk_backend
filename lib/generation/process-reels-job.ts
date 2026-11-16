@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { REELS_PROVIDER, renderReelInStorage, type ReelsInput } from "@/lib/ai/reels";
 import { getUploadStorageBucket } from "@/lib/storage/media";
 import { mergeSubmissionVideoWorkflowMetadata } from "@/lib/video-creation";
+import { createProgressReporter, GENERATION_STAGES } from "@/lib/generation/progress";
 
 type ReelsJob = {
   id: string;
@@ -24,6 +25,7 @@ export async function processReelsJob(
     started_at: job.started_at ?? new Date().toISOString(),
   }).eq("id", job.id);
   if (started.error) throw new Error(started.error.message);
+  const reportProgress = createProgressReporter(client, job.id);
 
   let render;
   try {
@@ -35,7 +37,7 @@ export async function processReelsJob(
           source.filePath.startsWith(`stores/${job.store_id}/`))) {
       throw new Error("Invalid reels job input");
     }
-    render = await renderReelInStorage({ client, jobId: job.id, filePath, sources, input });
+    render = await renderReelInStorage({ client, jobId: job.id, filePath, sources, input, reportProgress });
   } catch (error) {
     const reason = error instanceof Error ? error.message : "Reels render failed";
     const failed = await client.from("generation_jobs").update({
@@ -69,6 +71,7 @@ export async function processReelsJob(
   }
 
   try {
+    await reportProgress("saving");
     const assetId = await saveAsset(filePath, "generated_video", "video/mp4", render.videoBytes);
     const thumbnailAssetId = await saveAsset(render.thumbnailPath, "video_thumbnail", "image/jpeg", render.thumbnailBytes);
     const completedAt = new Date().toISOString();
@@ -86,6 +89,7 @@ export async function processReelsJob(
     if (submission.error) throw new Error(submission.error.message);
     const updated = await client.from("generation_jobs").update({
       status: "completed", completed_at: completedAt, failure_reason: null, result_asset_id: assetId,
+      progress: { ...GENERATION_STAGES.completed, stage: "completed", estimated: false },
       result_storage_bucket: bucket, result_file_path: filePath,
       result_payload: {
         ...job.result_payload, provider: REELS_PROVIDER, renderId: render.renderId,

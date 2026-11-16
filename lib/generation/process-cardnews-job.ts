@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { CARDNEWS_PROVIDER, renderCardNews, type CardNewsInput } from "@/lib/ai/cardnews-service";
 import { mergeSubmissionWorkflowMetadata } from "@/lib/ad-creation";
 import { getUploadStorageBucket } from "@/lib/storage/media";
+import { createProgressReporter, GENERATION_STAGES } from "@/lib/generation/progress";
 
 export async function processCardNewsJob(
   client: SupabaseClient,
@@ -14,6 +15,7 @@ export async function processCardNewsJob(
     status: "processing", started_at: new Date().toISOString(),
   }).eq("id", job.id);
   if (started.error) throw new Error(started.error.message);
+  const reportProgress = createProgressReporter(client, job.id);
 
   let result;
   let caption: string;
@@ -21,7 +23,7 @@ export async function processCardNewsJob(
     const input = (job.request_payload as { cardNewsInput?: CardNewsInput } | null)?.cardNewsInput;
     if (!input) throw new Error("Card news input is missing");
     caption = input.caption;
-    result = await renderCardNews(client, input, { storeId: job.store_id, submissionId: job.submission_id, jobId: job.id });
+    result = await renderCardNews(client, input, { storeId: job.store_id, submissionId: job.submission_id, jobId: job.id }, reportProgress);
   } catch (error) {
     const reason = error instanceof Error ? error.message : "Card news render failed";
     const failed = await client.from("generation_jobs").update({
@@ -37,6 +39,7 @@ export async function processCardNewsJob(
   }
 
   try {
+    await reportProgress("saving");
     const generatedImages = [];
     for (const [index, card] of result.cards.entries()) {
       const { data: existing, error } = await client.from("submission_assets").select("id")
@@ -66,6 +69,7 @@ export async function processCardNewsJob(
     const first = generatedImages[0];
     const completed = await client.from("generation_jobs").update({
       status: "completed", completed_at: completedAt, failure_reason: null,
+      progress: { ...GENERATION_STAGES.completed, stage: "completed", estimated: false },
       result_asset_id: first.assetId, result_storage_bucket: bucket, result_file_path: first.filePath,
       result_payload: {
         provider: CARDNEWS_PROVIDER, generatedImages, imageCount: generatedImages.length,

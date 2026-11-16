@@ -24,6 +24,7 @@ test("reels sends four signed clips in scene order and resumes an already accept
   const filePath = "store/submission/generated/job.mp4";
   const thumbnailPath = filePath.replace(".mp4", ".jpg");
   const calls: string[] = [];
+  const stages: string[] = [];
   const client = { storage: { from: (bucket: string) => {
     assert.equal(bucket, "uploads");
     return {
@@ -61,19 +62,21 @@ test("reels sends four signed clips in scene order and resumes an already accept
       assert.deepEqual(body.hashtags, ["#전통시장", "#떡볶이"]);
       return Response.json({ detail: { code: "ALREADY_RENDERING", render_id: "rr_abc" } }, { status: 409 });
     }
-    return Response.json({ status: "done", result: {
+    return Response.json({ status: "done", progress: { stage: "uploading", percent: 100 }, result: {
       video_key: filePath, thumbnail_key: thumbnailPath, video_bytes: 123, thumbnail_bytes: 40, duration_sec: 13,
     } });
   });
 
   const result = await renderReelInStorage({
     client, jobId: "job", filePath,
+    reportProgress: async stage => { stages.push(stage); },
     sources: [...REELS_SHOT_PLAN].reverse().map(shotKey => ({ shotKey, storageBucket: "uploads", filePath: shotKey })),
     input: buildReelsInput({ storeName: "가게", storeDescription: "소개", menus: [{ name: "떡볶이" }],
       concept: "christmas",
       script: { hookText: "🍜".repeat(20), caption: "가게 소개", hashtags: [], workingCaptions: [] } }),
   });
   assert.deepEqual(calls, ["/reels/scripts", "/reels/scripts/rs_abc", "/reels/renders", "/reels/renders/rr_abc"]);
+  assert.deepEqual(stages, ["preparing", "scripting", "designing", "uploading"]);
   assert.deepEqual(result, {
     renderId: "rr_abc", thumbnailPath, videoBytes: 123, thumbnailBytes: 40, durationSeconds: 13,
     caption: "AI가 만든 릴스 소개글입니다.", hashtags: ["#전통시장", "#떡볶이"], scriptFallback: false,

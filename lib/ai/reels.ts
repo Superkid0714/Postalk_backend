@@ -1,6 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getMediaStorage, getUploadStorageBucket } from "@/lib/storage/media";
+import type { ProgressReporter } from "@/lib/generation/progress";
 
 export const REELS_PROVIDER = "postalk-reels";
 export type ReelsConcept = "simple" | "christmas";
@@ -52,6 +53,7 @@ export function buildReelsInput(params: {
 }
 
 type RenderResponse = {
+  progress?: { stage?: string };
   render_id?: string;
   status?: "queued" | "rendering" | "done" | "failed";
   detail?: { code?: string; render_id?: string };
@@ -75,6 +77,7 @@ export async function renderReelInStorage(params: {
   filePath: string;
   sources: SourceVideo[];
   input: ReelsInput;
+  reportProgress?: ProgressReporter;
 }) {
   const apiUrl = process.env.REELS_API_URL?.trim();
   const key = process.env.REELS_INTERNAL_API_KEY?.trim();
@@ -85,6 +88,7 @@ export async function renderReelInStorage(params: {
   }
 
   const selected = params.input.shotPlan.map(shot => params.sources.find(source => source.shotKey === shot));
+  await params.reportProgress?.("preparing");
   const media = await Promise.all(selected.map(async (source, scene_index) => {
     if (!source) throw new Error("A required reel clip is missing");
     const { data, error } = await getMediaStorage(params.client).from(source.storageBucket)
@@ -126,6 +130,7 @@ export async function renderReelInStorage(params: {
     store: params.input.store,
     menus: params.input.menus.map((menu, menu_index) => ({ menu_index, name: menu.name, description: menu.description ?? "" })),
   });
+  await params.reportProgress?.("scripting");
   const acceptedScript = await request("/reels/scripts", scriptRequest);
   const scriptId = acceptedScript.response.ok && typeof (acceptedScript.data as ScriptResponse).script_id === "string"
     ? (acceptedScript.data as ScriptResponse).script_id
@@ -170,6 +175,7 @@ export async function renderReelInStorage(params: {
     hashtags: script.hashtags,
     uploads: { video_url, thumbnail_url },
   });
+  await params.reportProgress?.("designing");
   const submit = async () => {
     const { response, data } = await request("/reels/renders", body);
     const render = data as RenderResponse;
@@ -191,6 +197,9 @@ export async function renderReelInStorage(params: {
     }
     if (!response.ok) throw new Error(`Unable to check reel status (HTTP ${response.status})`);
     if (render.status === "failed") throw new Error(`Reels rendering failed (${render.error?.code ?? "RENDER_FAILED"})`);
+    const stage = render.progress?.stage;
+    if (stage === "uploading") await params.reportProgress?.("uploading");
+    else if (stage === "composing" || render.status === "rendering" && stage !== "preparing") await params.reportProgress?.("rendering");
     if (render.status === "done") {
       const result = render.result;
       if (!result || result.video_key !== params.filePath || result.thumbnail_key !== thumbnailPath ||

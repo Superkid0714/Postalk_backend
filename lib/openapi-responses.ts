@@ -1,3 +1,5 @@
+import { GENERATION_STAGES } from "./generation/progress";
+
 const string = { type: "string" };
 const uuid = { type: "string", format: "uuid" };
 const timestamp = { type: "string", format: "date-time" };
@@ -40,6 +42,28 @@ const submissionId = "33333333-3333-4333-8333-333333333333";
 const generationJobId = "44444444-4444-4444-8444-444444444444";
 const createdAt = "2026-11-14T09:00:00Z";
 const updatedAt = "2026-11-14T09:05:00Z";
+
+export const generationProgressResponse = ok(
+  "현재 작업 단계와 진행률을 반환합니다. percent는 단계별 가중치이며, estimated=true는 시간·바이트 단위 실측값이 아니라는 뜻입니다.",
+  object({
+    jobId: uuid, submissionId: uuid, contentType: choices("cardNews", "reels"),
+    status: choices("queued", "processing", "completed", "failed"),
+    percent: { type: "integer", minimum: 0, maximum: 100 }, estimated: boolean,
+    stage: string, message: nullable(string), failureReason: nullable(string),
+    startedAt: nullable(timestamp), completedAt: nullable(timestamp), updatedAt: timestamp,
+  }),
+  Object.fromEntries(Object.entries(GENERATION_STAGES).map(([stage, progress]) => [stage, {
+    summary: `${progress.percent}% · ${progress.message}`,
+    message: "Generation progress loaded",
+    data: {
+      jobId: generationJobId, submissionId, contentType: "cardNews",
+      status: stage === "queued" ? "queued" : stage === "completed" ? "completed" : "processing",
+      ...progress, stage, estimated: stage !== "queued" && stage !== "completed",
+      failureReason: null, startedAt: stage === "queued" ? null : createdAt,
+      completedAt: stage === "completed" ? updatedAt : null, updatedAt,
+    },
+  }])),
+);
 const signedUrl = (filePath: string) => `https://storage.example.com/${filePath}?token=example`;
 const generatedCards = [1, 2, 3].map((index) => {
   const filePath = `${storeId}/${submissionId}/generated/${generationJobId}-${index}.png`;

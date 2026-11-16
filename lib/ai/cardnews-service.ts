@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getMediaStorage, getUploadStorageBucket } from "@/lib/storage/media";
+import type { ProgressReporter } from "@/lib/generation/progress";
 
 export const CARDNEWS_PROVIDER = "postalk-cardnews";
 export const CARDNEWS_SHOTS = {
@@ -34,6 +35,7 @@ export type CardNewsInput = {
 
 export async function renderCardNews(
   client: SupabaseClient, input: CardNewsInput, ids: { storeId: string; submissionId: string; jobId: string },
+  reportProgress?: ProgressReporter,
 ) {
   const url = process.env.CARDNEWS_API_URL?.trim();
   const key = process.env.CARDNEWS_INTERNAL_API_KEY?.trim();
@@ -41,6 +43,7 @@ export async function renderCardNews(
   const base = new URL(url);
   if (!["http:", "https:"].includes(base.protocol) || base.username || base.password) throw new Error("Invalid card news service URL");
   const bucket = getMediaStorage(client).from(getUploadStorageBucket());
+  await reportProgress?.("preparing");
   const roles = new Set<string>(Object.values(CARDNEWS_SHOTS).map(({ role }) => role));
   if (!Array.isArray(input.photos) || input.photos.length !== roles.size ||
       new Set(input.photos.map(photo => photo.filePath)).size !== roles.size) {
@@ -61,12 +64,14 @@ export async function renderCardNews(
   }));
   const response = await fetch(new URL("/cardnews/renders", base), {
     method: "POST", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(180_000),
-    headers: { "Content-Type": "application/json", "x-cardnews-api-key": key },
+    headers: { "Content-Type": "application/json", "Accept": "application/x-ndjson", "x-cardnews-api-key": key },
     body: JSON.stringify({ job_id: ids.jobId, theme: input.theme, direction: input.direction,
       store_name: input.storeName, area: input.area, menu_name: input.menuName, photos, uploads }),
   });
   if (!response.ok) throw new Error(`Card news render failed (HTTP ${response.status})`);
-  const result = await response.json() as { template: string; fallback: boolean; cards: Array<{ key: string; bytes: number }> };
+  const result = (response.headers.get("content-type")?.includes("application/x-ndjson")
+    ? await readCardNewsEvents(response, reportProgress)
+    : await response.json()) as { template: string; fallback: boolean; cards: Array<{ key: string; bytes: number }> };
   if (!Array.isArray(result.cards) || result.cards.length !== paths.length ||
       !result.cards.every((card, index) => card?.key === paths[index] &&
         Number.isSafeInteger(card.bytes) && card.bytes > 0 && card.bytes <= 10 * 1024 * 1024) ||
@@ -76,4 +81,40 @@ export async function renderCardNews(
     throw new Error("Card news service returned invalid results");
   }
   return result;
+}
+
+async function readCardNewsEvents(response: Response, reportProgress?: ProgressReporter) {
+  if (!response.body) throw new Error("Card news progress stream is missing");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = "";
+  let result: unknown;
+  const consume = async (line: string) => {
+    if (!line.trim()) return;
+    const event = JSON.parse(line);
+    if (event.type === "error") throw new Error("Card news rendering failed");
+    if (event.type === "result") result = event.result;
+    if (event.type === "progress" && ["preparing", "scripting", "designing", "rendering", "uploading"].includes(event.stage)) {
+      await reportProgress?.(event.stage);
+    }
+  };
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      pending += decoder.decode(value, { stream: !done });
+      if (pending.length > 65536) throw new Error("Card news progress event exceeds the size limit");
+      let newline;
+      while ((newline = pending.indexOf("\n")) >= 0) {
+        await consume(pending.slice(0, newline));
+        pending = pending.slice(newline + 1);
+      }
+      if (done) break;
+    }
+    await consume(pending);
+    if (!result) throw new Error("Card news progress stream ended without results");
+    return result;
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
 }

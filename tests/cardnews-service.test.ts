@@ -38,6 +38,8 @@ test("card news adapter signs six inputs and accepts only the expected three out
   }) } } as unknown as SupabaseClient;
   const paths = [1, 2, 3].map(index => `store/submission/generated/job-${index}.png`);
   let wrongOutput = false;
+  let streaming = false;
+  let omitResult = false;
   t.mock.method(globalThis, "fetch", async (url: URL, init: RequestInit) => {
     assert.equal(url.pathname, "/cardnews/renders");
     assert.equal(new Headers(init.headers).get("x-cardnews-api-key"), "test-key");
@@ -45,8 +47,17 @@ test("card news adapter signs six inputs and accepts only the expected three out
     assert.equal(body.theme, "christmas");
     assert.deepEqual(body.photos.map((photo: { role: string }) => photo.role), Object.values(CARDNEWS_SHOTS).map(shot => shot.role));
     assert.deepEqual(body.uploads, paths.map(path => `https://storage.test/upload/${path}`));
-    return Response.json({ template: "x1", fallback: true,
-      cards: paths.map((path, index) => ({ key: wrongOutput && index === 0 ? "foreign.png" : path, bytes: 10 })) });
+    const result = { template: "x1", fallback: true,
+      cards: paths.map((path, index) => ({ key: wrongOutput && index === 0 ? "foreign.png" : path, bytes: 10 })) };
+    if (!streaming) return Response.json(result);
+    assert.equal(new Headers(init.headers).get("accept"), "application/x-ndjson");
+    const events = ["preparing", "scripting", "designing", "rendering", "uploading"].map(stage => ({ type: "progress", stage }));
+    const bytes = new TextEncoder().encode(events.map(event => JSON.stringify(event)).join("\n") + "\n" +
+      (omitResult ? "" : JSON.stringify({ type: "result", result })));
+    return new Response(new ReadableStream({ start(controller) {
+      for (let index = 0; index < bytes.length; index += 7) controller.enqueue(bytes.slice(index, index + 7));
+      controller.close();
+    } }), { headers: { "content-type": "application/x-ndjson" } });
   });
   const input = {
     theme: "christmas" as const, direction: "따뜻하게", storeName: "떡집", area: "시장", menuName: "쑥떡", caption: "소개",
@@ -56,6 +67,13 @@ test("card news adapter signs six inputs and accepts only the expected three out
   assert.equal((await renderCardNews(client, input, ids)).cards.length, 3);
   wrongOutput = true;
   await assert.rejects(renderCardNews(client, input, ids), /invalid results/);
+  wrongOutput = false;
+  streaming = true;
+  const stages: string[] = [];
+  assert.equal((await renderCardNews(client, input, ids, async stage => { stages.push(stage); })).cards.length, 3);
+  assert.deepEqual(stages, ["preparing", "preparing", "scripting", "designing", "rendering", "uploading"]);
+  omitResult = true;
+  await assert.rejects(renderCardNews(client, input, ids), /ended without results/);
 });
 
 test("card news migration keeps legacy shots and adds the six new slots", async () => {

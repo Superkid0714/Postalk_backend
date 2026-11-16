@@ -1,6 +1,7 @@
 import {
   archiveResponse,
   homeResponse,
+  generationProgressResponse,
   sessionResultResponse,
   sessionStartResponse,
   submitPhotoResponse,
@@ -163,8 +164,9 @@ export const openApiDocument = {
     "/api/generation-jobs/{jobId}/progress": {
       get: {
         tags: ["Results"], summary: "생성 진행률 조회", security: guestSecurity,
+        description: "같은 작업 공간 키로 약 2초 간격으로 조회합니다. 단계별 진행률: queued 0% → preparing 10% → scripting 25% → designing 40% → rendering 60% → uploading 80% → saving 95% → completed 100%. 실제 단계 변경 시 갱신하므로 빠르게 끝나는 단계는 폴링 사이에 지나갈 수 있습니다. estimated=true는 작업 단계에 부여한 가중치이며 남은 시간의 비율이 아닙니다. 업로드만 끝나면 100%가 되지 않고 보관함 저장까지 성공해야 status=completed와 percent=100이 됩니다. 실패 시 status=failed와 failureReason을 확인합니다.",
         parameters: [{ $ref: "#/components/parameters/JobId" }],
-        responses: { "200": success("상태, percent, stage, failureReason을 반환합니다."), ...standardErrors, "404": success("생성 작업을 찾을 수 없습니다.", errorEnvelope) },
+        responses: { "200": generationProgressResponse, ...standardErrors, "404": success("생성 작업을 찾을 수 없습니다.", errorEnvelope) },
       },
     },
     "/api/archive": {
