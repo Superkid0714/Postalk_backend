@@ -96,6 +96,60 @@ const videoRequest = {
   helperText: "제육볶음이 잘 보이도록 촬영해주세요.",
 };
 
+const sessionStarted = {
+  sessionId,
+  adType: "photo",
+  status: "collecting",
+  stylePreset: "food_card_news",
+  createdAt,
+  intro: {
+    menuIntro: "제육볶음",
+    storeSpecialty: "매일 직접 만드는 양념",
+    combinedText: "주력 메뉴를 포함한 대표 메뉴 소개: 제육볶음\n가게만의 특별함: 매일 직접 만드는 양념",
+  },
+  store,
+};
+
+export const sessionStartResponse = ok(
+  "제작 세션과 첫 촬영 요청을 반환합니다. 사진 제작에는 reelsMenus가 필요하지 않습니다.",
+  object({
+    sessionId: uuid,
+    adType: mediaType,
+    status: choices("collecting"),
+    stylePreset: string,
+    createdAt: timestamp,
+    intro: object({ menuIntro: nullable(string), storeSpecialty: nullable(string), combinedText: string }),
+    store: storeSchema,
+    reelsMenus: { ...array(object({ name: string, description: string }, ["description"])), minItems: 1, maxItems: 3 },
+    currentRequest: object({ response: choices("success"), status: choices("collecting"), ...captureFields }),
+  }, ["reelsMenus"]),
+  {
+    photo: {
+      summary: "카드뉴스 시작: 메뉴 배열 없이 사진 촬영",
+      message: "Ad session started",
+      data: {
+        ...sessionStarted,
+        currentRequest: {
+          response: "success", status: "collecting", shotKey: "card_bowl", assetType: "food_photo",
+          prompt: "그릇 전체가 보이도록 대표 음식을 찍어주세요.",
+          helperText: "그릇 전체가 보이도록 대표 음식을 찍어주세요.",
+        },
+      },
+    },
+    video: {
+      summary: "릴스 시작: 간판 영상부터 촬영",
+      message: "Ad session started",
+      data: {
+        ...sessionStarted, adType: "video", reelsMenus: [{ name: "제육볶음" }],
+        currentRequest: {
+          response: "success", status: "collecting", shotKey: "video_storefront_sign", assetType: "video_clip",
+          prompt: "가게 간판", helperText: "가게 간판이 잘 보이도록 촬영해주세요.",
+        },
+      },
+    },
+  },
+);
+
 const generation = {
   jobId: generationJobId,
   status: "completed",

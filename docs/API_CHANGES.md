@@ -27,6 +27,8 @@
 
 `CARDNEWS_API_URL`이 설정된 백엔드에서 `POST /api/ad-sessions/start`의 `adType: "photo"`로 새 카드뉴스 세션을 시작합니다. 선택 필드 `cardNewsTheme`은 `minimal` 또는 `christmas`이며 기본값은 `minimal`입니다. `cardNewsStyle`에 최대 500자의 디자인 요청을 보낼 수 있습니다.
 
+사진 제작에는 `reelsMenus`가 필요하지 않습니다. 릴스 서비스가 함께 연결되어 있어도 사진 촬영 흐름으로 시작합니다. 운영 Swagger의 요청 예시 `photo`, `video`, `videoThreeMenus`와 HTTP 201 응답의 사진·릴스 예시를 참고하세요. 예시의 `storeId`는 게스트 작업 공간 API에서 받은 실제 ID로 바꿉니다.
+
 프론트는 서버 응답의 `request`를 따라 대표 음식 전체, 확대, 음식 2장, 매장 외관, 매장 내부를 올립니다. 여섯 장의 `assetType`은 `food_photo`입니다. 사진마다 기존 업로드 API와 세션 사진 API를 사용합니다. 마지막 사진을 제출하면 기존 작업 조회로 상태를 확인하고, 완료 시 보관함에서 1080×1350 PNG 3장을 볼 수 있습니다.
 
 ## 관리자 제거·상인 권한

@@ -2,6 +2,7 @@ import {
   archiveResponse,
   homeResponse,
   sessionResultResponse,
+  sessionStartResponse,
   submitPhotoResponse,
   submitVideoResponse,
 } from "./openapi-responses";
@@ -34,8 +35,8 @@ const errorEnvelope = {
 
 const guestSecurity = [{ GuestSession: [] }];
 const storeSecurity = [...guestSecurity, { MerchantQr: [] }];
-const json = (schema: object) => ({
-  content: { "application/json": { schema } },
+const json = (schema: object, examples?: Record<string, { summary: string; value: object }>) => ({
+  content: { "application/json": { schema, ...(examples ? { examples } : {}) } },
 });
 const success = (description: string, schema: object = successEnvelope) => ({
   description,
@@ -93,9 +94,9 @@ export const openApiDocument = {
     },
     "/api/ad-sessions/start": {
       post: {
-        tags: ["Creation"], summary: "카드뉴스 또는 릴스 제작 시작", security: guestSecurity,
-        description: "릴스는 reelsMenus에 메뉴를 1~3개 전달할 수 있습니다. 메뉴 수에 따라 간판·메뉴별 클로즈업/상세·입구 순서로 영상 4·6·8개를 요청합니다. reelsMenus를 생략하면 menuIntro를 메뉴 1개로 처리합니다.",
-        requestBody: json({
+        tags: ["Creation"], summary: "카드뉴스 또는 릴스 제작 시작", security: storeSecurity,
+        description: "먼저 게스트 작업 공간을 열고 반환된 storeId와 동일한 x-guest-session 키를 사용합니다. 카드뉴스(adType=photo)는 reelsMenus 없이 시작하며, cardNewsTheme은 minimal 또는 christmas입니다(기본 minimal). 카드뉴스 서비스 연결 시 대표 음식 전체(card_bowl)부터 사진 6장을 요청합니다. 릴스(adType=video)는 reelsMenus에 메뉴를 1~3개 전달할 수 있습니다. 메뉴 수에 따라 간판·메뉴별 클로즈업/상세·입구 순서로 영상 4·6·8개를 요청합니다. reelsMenus를 생략하면 menuIntro를 메뉴 1개로 처리합니다. 릴스 메뉴 배열은 사진 제작에 필요하지 않습니다.",
+        requestBody: { required: true, ...json({
           type: "object",
           required: ["storeId", "adType", "menuIntro", "storeSpecialty"],
           properties: {
@@ -103,11 +104,11 @@ export const openApiDocument = {
             adType: { type: "string", enum: ["photo", "video"] },
             menuIntro: { type: "string" },
             storeSpecialty: { type: "string" },
-            cardNewsTheme: { type: "string", enum: ["minimal", "christmas"] },
+            cardNewsTheme: { type: "string", enum: ["minimal", "christmas"], default: "minimal", description: "사진 카드뉴스 테마" },
             cardNewsStyle: { type: "string", maxLength: 500 },
-            reelsConcept: { type: "string", enum: ["simple", "christmas"] },
+            reelsConcept: { type: "string", enum: ["simple", "christmas"], description: "영상 릴스 콘셉트(기본 simple)" },
             reelsMenus: {
-              type: "array", minItems: 1, maxItems: 3,
+              type: "array", minItems: 1, maxItems: 3, description: "영상 릴스용 메뉴 1~3개. 사진 요청에서는 생략합니다. 영상 요청에서 생략하면 menuIntro를 메뉴 1개로 사용합니다.",
               items: {
                 type: "object", required: ["name"],
                 properties: {
@@ -117,8 +118,12 @@ export const openApiDocument = {
               },
             },
           },
-        }),
-        responses: { "201": success("sessionId와 첫 촬영 요청을 반환합니다."), ...standardErrors },
+        }, {
+          photo: { summary: "사진 카드뉴스: reelsMenus 없이 시작", value: { storeId: "22222222-2222-4222-8222-222222222222", adType: "photo", menuIntro: "제육볶음", storeSpecialty: "매일 직접 만드는 양념", cardNewsTheme: "minimal" } },
+          video: { summary: "릴스: menuIntro를 메뉴 1개로 사용", value: { storeId: "22222222-2222-4222-8222-222222222222", adType: "video", menuIntro: "제육볶음", storeSpecialty: "매일 직접 만드는 양념", reelsConcept: "simple" } },
+          videoThreeMenus: { summary: "릴스: 메뉴 3개, 영상 8개 촬영", value: { storeId: "22222222-2222-4222-8222-222222222222", adType: "video", menuIntro: "제육볶음, 순대, 튀김", storeSpecialty: "매일 직접 만드는 양념", reelsMenus: [{ name: "제육볶음" }, { name: "순대" }, { name: "튀김" }], reelsConcept: "simple" } },
+        }) },
+        responses: { "201": sessionStartResponse, ...standardErrors, "404": success("점포를 찾을 수 없습니다.", errorEnvelope), "500": success("제작 세션을 시작하지 못했습니다.", errorEnvelope) },
       },
     },
     "/api/ad-sessions/{sessionId}": {
