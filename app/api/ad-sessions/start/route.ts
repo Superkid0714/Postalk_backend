@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
     adType: body.adType,
     menuIntro: body.menuIntro?.trim() ?? null,
     storeSpecialty: body.storeSpecialty?.trim() ?? null,
-    videoShotPlan: isReelsEnabled() ? buildReelsShotPlan(reelsMenus.length) : REELS_SHOT_PLAN,
+    videoShotPlan: body.adType === "video" && isReelsEnabled() ? buildReelsShotPlan(reelsMenus.length) : REELS_SHOT_PLAN,
     reelsMenus,
     cardNewsTheme: isCardNewsEnabled() ? body.cardNewsTheme ?? "minimal" : undefined,
     cardNewsStyle: body.cardNewsStyle?.trim(),
