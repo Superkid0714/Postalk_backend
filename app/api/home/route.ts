@@ -1,4 +1,4 @@
-import { getMediaStorage } from "@/lib/storage/media";
+import { getPreviewSignedUrl } from "@/lib/storage/preview-url";
 import { requireStoreAccess } from "@/lib/auth/store-access";
 import type { NextRequest } from "next/server";
 
@@ -66,16 +66,7 @@ async function getSignedThumbnailUrl(asset: SubmissionAssetRecord | null) {
     return null;
   }
 
-  const supabase = getSupabaseServiceClient();
-  const { data, error } = await getMediaStorage(supabase)
-    .from(asset.storage_bucket)
-    .createSignedUrl(asset.file_path, 60 * 60);
-
-  if (error || !data?.signedUrl) {
-    return null;
-  }
-
-  return data.signedUrl;
+  return getPreviewSignedUrl(getSupabaseServiceClient(), asset.storage_bucket, asset.file_path);
 }
 
 export async function GET(request: NextRequest) {

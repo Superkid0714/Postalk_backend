@@ -1,4 +1,4 @@
-import { getMediaStorage } from "@/lib/storage/media";
+import { getPreviewSignedUrl } from "@/lib/storage/preview-url";
 import { requireStoreAccess } from "@/lib/auth/store-access";
 import type { NextRequest } from "next/server";
 
@@ -142,11 +142,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       }> = [];
 
       if (job.result_storage_bucket && job.result_file_path) {
-        const { data: signed } = await getMediaStorage(supabase)
-          .from(job.result_storage_bucket)
-          .createSignedUrl(job.result_file_path, 60 * 60);
-
-        resultUrl = signed?.signedUrl ?? null;
+        resultUrl = await getPreviewSignedUrl(supabase, job.result_storage_bucket, job.result_file_path);
       }
 
       if (job.result_payload && typeof job.result_payload === "object") {
@@ -179,15 +175,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
                 };
               }
 
-              const { data: signed } = await getMediaStorage(supabase)
-                .from(job.result_storage_bucket)
-                .createSignedUrl(filePath, 60 * 60);
-
               return {
                 assetId,
                 filePath,
                 promptKey,
-                url: signed?.signedUrl ?? null,
+                url: await getPreviewSignedUrl(supabase, job.result_storage_bucket, filePath),
               };
             }),
           );
