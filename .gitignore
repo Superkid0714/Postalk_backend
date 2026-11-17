@@ -33,18 +33,16 @@ dev-server.log
 .tmp-*/
 .tmp-*.ts
 
-# local docs
+# Keep local drafts out; publish curated operational documentation.
 *.md
 !README.md
 !docs/
 !docs/API_CHANGES.md
-!docs/AWS_MEDIA_MIGRATION.md
 !docs/OPERATIONS.md
 !docs/CHANGELOG.md
-!docs/EXHIBITION_API.md
-!docs/SUPABASE_DEPLOYMENT_20261103.md
-!docs/RENDER_DEPLOYMENT.md
 !docs/RAILWAY_DEPLOYMENT.md
+!docs/incidents/
+!docs/incidents/*.md
 /migration-reports/
 /tmp/
 /public/merchant-*.png

@@ -5,17 +5,20 @@
 ## 현재 운영 구조
 
 ```text
-프론트엔드 → Railway API → Supabase Pro
-                         ├─ PostgreSQL
-                         └─ private uploads Storage
+프론트엔드 → Railway API → Supabase PostgreSQL / private uploads
+                 ├─ 카드뉴스 AI
+                 └─ 릴스 AI
+복구 워커 ──내부 인증──→ Railway API
 ```
 
 - 운영 브랜치: `main`
-- 배포: GitHub Actions 검사 후 Railway 자동 배포
+- 배포: GitHub Actions 검사와 Railway 자동 배포
 - 저장소: Supabase `uploads` 버킷
 - 관리자 검수: 사용하지 않음
 - 게시: 상인이 버튼을 눌렀을 때만 실행
-- 릴스: 별도 릴스 서비스 연결 시 자막과 배경음악이 들어간 MP4
+- 릴스: 별도 릴스 서비스에서 자막과 배경음악이 들어간 MP4 생성
+- 생성 복구: 전용 postalk-recovery 워커가 queued/processing 작업을 점검하며 DB 임대로 중복 실행 방지
+- Instagram 게시 복구: 생성 복구와 별도 설정이며 운영에서는 비활성
 
 ## 빠른 확인
 
@@ -119,29 +122,20 @@ submissions ──< Instagram 게시 상태·성과 정보(JSON)
 
 ## 개발
 
-세 저장소를 함께 편집하려면 상위 폴더의 `Postalk.code-workspace`를 VS Code에서 엽니다. 각 저장소는 독립 Git 저장소입니다.
-
-상위 `Postalk` 폴더에서 다음처럼 로컬 실행을 준비합니다.
-
-```powershell
-npm --prefix postalk-backend ci
-python -m venv .venv
-.venv/Scripts/python.exe -m pip install -r postalk-cardnews/requirements.txt -r postalk_reels_pipeline/requirements.txt
-.venv/Scripts/python.exe -m playwright install chromium
-Copy-Item .env.postalk-dev.example postalk-backend/.env.postalk-dev
-```
-
-카드뉴스 폰트는 `postalk-cardnews` 폴더에서 `../.venv/Scripts/python.exe -c "from cardnews.design import ensure_fonts; ensure_fonts()"`로 내려받습니다. 릴스 서비스에는 `ffmpeg`와 `ffprobe`가 PATH에 있어야 합니다.
-
-`postalk-backend/.env.postalk-dev`에 개발용 Supabase URL과 키를 입력합니다. 개발 DB에는 게스트 세션과 카드뉴스 촬영 마이그레이션을 적용해야 합니다. 상위 폴더에서 `node postalk-dev.mjs`를 실행하면 백엔드 `3000`, 카드뉴스 `8011`, 릴스 `8012`가 열립니다. 프론트의 API 주소는 `http://127.0.0.1:3000`입니다. 코드를 저장하면 서비스가 변경사항을 반영하며, `Ctrl+C`로 모두 종료합니다.
-
-`node postalk-dev.mjs --smoke`는 임시 설정으로 서버 세 개를 실행해 상태 API를 확인하고 종료합니다.
-
-### 백엔드만 실행
+이 저장소를 단독으로 복제한 뒤 실행할 수 있습니다.
 
 ```powershell
 npm ci
+Copy-Item .env.example .env.local
+# .env.local에 개발용 Supabase와 AI 내부 서비스 연결 값을 입력합니다.
 npm run dev
+```
+
+개발 환경은 운영 키와 분리합니다. 카드뉴스·릴스 AI는 각 저장소의 README대로 별도 실행하고, 백엔드의 `CARDNEWS_API_URL`, `REELS_API_URL`과 내부 인증 키를 해당 서비스에 맞춥니다. 이 저장소 밖의 실행 스크립트나 개인 workspace 파일은 필수 조건이 아닙니다.
+
+검증 명령:
+
+```powershell
 npm run lint
 npx tsc --noEmit
 npm test
@@ -157,5 +151,7 @@ npm test
 - [Railway·Supabase 설정](docs/RAILWAY_DEPLOYMENT.md)
 - [상인 API 변경 사항](docs/API_CHANGES.md)
 - [변경 기록](docs/CHANGELOG.md)
+- [생성 복구 적용 기록](docs/incidents/20261118-generation-recovery.md)
+- [실제 Instagram 게시 검증](docs/incidents/20261118-instagram-publication.md)
 - [ERD: 전체](docs/erd/current.dbml)
 - [ERD: 팀 공유용 제작 흐름](docs/erd/team-workflow.dbml)
