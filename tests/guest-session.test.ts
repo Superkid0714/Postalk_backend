@@ -171,6 +171,10 @@ test("guest opening recovers transient failures without duplicating a committed 
       failed = true;
       throw new TypeError("fetch failed after commit");
     }
+    if (!failed && mode === "insert-401" && operation === "insert") {
+      failed = true;
+      return Response.json({ code: "PGRST303", message: "JWT claims validation failed" }, { status: 401 });
+    }
     if (!failed && mode === "update-503" && operation === "update") {
       failed = true;
       return Response.json({ code: "PGRST002", message: "unavailable" }, { status: 503 });
@@ -184,7 +188,7 @@ test("guest opening recovers transient failures without duplicating a committed 
     if (operation === "update") Object.assign(row, JSON.parse(String(init?.body)));
     return Response.json([{ id: row.id }]);
   });
-  for (const scenario of ["lost-insert", "update-503", "empty-lookup"]) {
+  for (const scenario of ["lost-insert", "update-503", "empty-lookup", "insert-401"]) {
     mode = scenario; failed = false; writes = 0;
     const result = await openGuestStore(client, FIRST_KEY, scenario === "update-503" ? { storeName: "updated" } : {});
     assert.equal(result.error, null);

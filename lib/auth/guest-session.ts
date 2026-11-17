@@ -64,7 +64,10 @@ async function openGuestStoreAttempt(
 
 function canRetryGuestStore(result: { data: unknown; error: { code: string } | null; status: number }) {
   if (!result.error) return !result.data;
-  return [0, 408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524].includes(result.status)
+  // Observed upstream 401/PGRST303 on a server-key request; retry only this
+  // claims-validation failure, never arbitrary authentication/permission errors.
+  return (result.status === 401 && result.error.code === "PGRST303")
+    || [0, 408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524].includes(result.status)
     || ["40001", "40P01", "53300", "57P01", "57P02", "57P03", "PGRST000", "PGRST001", "PGRST002", "PGRST003"].includes(result.error.code)
     || result.error.code.startsWith("08");
 }
