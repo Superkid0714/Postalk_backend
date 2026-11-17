@@ -108,7 +108,7 @@ export const openApiDocument = {
     "/api/ad-sessions/start": {
       post: {
         tags: ["Creation"], summary: "카드뉴스 또는 릴스 제작 시작", security: storeSecurity,
-        description: "먼저 게스트 작업 공간을 열고 반환된 storeId와 동일한 x-guest-session 키를 사용합니다. 카드뉴스(adType=photo)는 reelsMenus 없이 시작하며, cardNewsTheme은 minimal 또는 christmas입니다(기본 minimal). 카드뉴스 서비스 연결 시 대표 음식 전체(card_bowl)부터 사진 6장을 요청합니다. 릴스(adType=video)는 reelsMenus에 메뉴를 1~3개 전달할 수 있습니다. 메뉴 수에 따라 간판·메뉴별 클로즈업/상세·입구 순서로 영상 4·6·8개를 요청합니다. reelsMenus를 생략하면 menuIntro를 메뉴 1개로 처리합니다. 릴스 메뉴 배열은 사진 제작에 필요하지 않습니다.",
+        description: "먼저 게스트 작업 공간을 열고 반환된 storeId와 동일한 x-guest-session 키를 사용합니다. 카드뉴스(adType=photo)는 reelsMenus 없이 시작하며, cardNewsTheme은 minimal 또는 christmas입니다(기본 minimal). 카드뉴스 서비스 연결 시 대표 음식 전체(card_bowl)부터 사진 6장을 요청합니다. 릴스(adType=video)는 reelsMenus에 메뉴를 1~3개 전달할 수 있습니다. 메뉴 1·2·3개는 각각 영상 4·6·8개를 요청하고 16·20·24초 MP4를 생성합니다. 촬영 순서는 간판·메뉴별 클로즈업과 상세·입구입니다. reelsMenus를 생략하면 menuIntro를 메뉴 1개로 처리합니다. 시작 응답의 currentRequest와 파일 제출 응답의 request를 따라 다음 촬영을 안내합니다.",
         requestBody: { required: true, ...json({
           type: "object",
           required: ["storeId", "adType", "storeSpecialty"],
@@ -193,7 +193,7 @@ export const openApiDocument = {
     "/api/submissions/{id}/publish": {
       post: {
         tags: ["Instagram"], summary: "광고를 Instagram에 게시하고 완료 확인", security: storeSecurity,
-        description: "게스트 키 또는 상인 QR로 본인 작업 공간의 광고만 게시합니다. 본문 없이 호출할 수 있고 사진·영상 형식은 생성물에서 판단합니다. 실제 Instagram 게시 완료를 확인한 경우에만 HTTP 200, data.status=published를 반환합니다. 409 INSTAGRAM_PROCESSING이면 인스타 처리 중이므로 잠시 후 같은 경로를 재호출해 확인합니다. 409 INSTAGRAM_VERIFICATION_REQUIRED이면 외부 계정에서 게시 여부를 확인해야 하며 자동 재게시하지 않습니다. 같은 광고를 재호출해도 게시 완료된 광고를 중복 게시하지 않습니다.",
+        description: "게스트 키 또는 상인 QR로 본인 작업 공간의 광고만 게시합니다. 본문 없이 호출할 수 있고 사진·영상 형식은 생성물에서 판단합니다. 실제 Instagram 게시 완료를 확인한 경우에만 HTTP 200, data.status=published를 반환합니다. 게시 완료 후 프론트는 홈·보관함의 해당 광고를 갱신하고, data.permalink가 있으면 게시물 링크를 표시합니다. 409 INSTAGRAM_PROCESSING이면 인스타 처리 중이므로 잠시 후 같은 경로를 재호출해 확인합니다. 409 INSTAGRAM_VERIFICATION_REQUIRED이면 외부 계정에서 게시 여부를 확인해야 하며 자동 재게시하지 않습니다. 같은 광고를 재호출해도 게시 완료된 광고를 중복 게시하지 않습니다.",
         parameters: [{ $ref: "#/components/parameters/SubmissionId" }],
         requestBody: json({ type: "object", properties: { mediaType: { type: "string", enum: ["photo", "video"] }, captionOverride: { type: "string" } } }),
         responses: { "200": instagramPublishResponse, ...standardErrors, "409": success("Instagram 처리 중 또는 게시 결과 확인이 필요합니다. error.code를 확인합니다.", errorEnvelope), "502": success("Instagram 게시 처리에 실패했습니다.", errorEnvelope) },

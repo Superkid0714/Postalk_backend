@@ -292,7 +292,7 @@ const sessionResult = {
 };
 
 export const sessionResultResponse = ok(
-  "현재 촬영 요청, 수집 파일, 제출물 및 생성 결과를 반환합니다.",
+  "현재 촬영 요청, 수집 파일, 제출물 및 생성 결과를 반환합니다. 새 카드뉴스는 generation.generatedAssets에 표지부터 PNG 4장을 반환합니다. 배열 순서와 실제 장수를 사용하면 기존 3장 결과도 표시할 수 있습니다. 릴스의 generation.resultUrl은 완성 MP4의 서명 URL입니다.",
   object({
     sessionId: uuid,
     adType: mediaType,
