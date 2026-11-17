@@ -1,3 +1,4 @@
+import sharp from "sharp";
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, writeFile, copyFile, rm } from "node:fs/promises";
 import os from "node:os";
@@ -86,7 +87,22 @@ export async function renderReel(input: CreationInput, load: (scene: Scene) => P
     }
     await writeFile(path.join(directory, "concat.txt"), input.template.scenes.map(scene => `file 'scene-${scene.sceneNumber}.mp4'`).join("\n"));
     await run(["-y", "-f", "concat", "-safe", "0", "-i", "concat.txt", "-c", "copy", "-movflags", "+faststart", "result.mp4"], directory);
-    await run(["-y", "-i", "result.mp4", "-frames:v", "1", "-vf", "scale=360:640", "thumbnail.jpg"], directory);
+    // Prefer a menu scene interior, then try later frames if it is dark.
+    const scenes = input.template.scenes;
+    const menuIndex = Math.max(0, scenes.findIndex(scene => scene.menuId !== null));
+    const preferred = scenes.slice(0, menuIndex).reduce((sum, scene) => sum + scene.durationSeconds, 0) + scenes[menuIndex].durationSeconds / 2;
+    const duration = scenes.reduce((sum, scene) => sum + scene.durationSeconds, 0);
+    let thumbnail: Buffer | undefined;
+    let best = -1;
+    for (const timestamp of new Set([preferred, duration * 0.25, duration * 0.5, duration * 0.7])) {
+      await run(["-y", "-ss", String(timestamp), "-i", "result.mp4", "-frames:v", "1", "-vf", "scale=720:1280", "thumbnail.jpg"], directory);
+      const candidate = await readFile(path.join(directory, "thumbnail.jpg"));
+      const pixels = await sharp(candidate).extract({ left: 72, top: 256, width: 576, height: 768 }).resize(64, 64).greyscale().raw().toBuffer();
+      const brightness = pixels.reduce((sum, pixel) => sum + pixel, 0) / pixels.length;
+      if (brightness > best) { thumbnail = candidate; best = brightness; }
+      if (best >= 35) break;
+    }
+    await writeFile(path.join(directory, "thumbnail.jpg"), thumbnail!);
     return { video: await readFile(path.join(directory, "result.mp4")), thumbnail: await readFile(path.join(directory, "thumbnail.jpg")) };
   } finally { await rm(directory, { recursive: true, force: true }); }
 }

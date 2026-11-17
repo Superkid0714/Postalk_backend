@@ -2,7 +2,6 @@ import {
   buildVideoPrompt,
   buildVideoScriptWithAi,
   type VideoAspectRatio,
-  type VideoDurationSeconds,
   type VideoGenerationScript,
   type VideoResolution,
   type VideoStylePreset,
@@ -22,7 +21,7 @@ export type SubmissionVideoWorkflowMetadata = {
   providerOperationName?: string | null;
   status?: VideoWorkflowStatus;
   scriptFallback?: boolean;
-  durationSeconds?: VideoDurationSeconds | 13;
+  durationSeconds?: number;
   aspectRatio?: VideoAspectRatio;
   resolution?: VideoResolution;
   stylePreset?: VideoStylePreset;

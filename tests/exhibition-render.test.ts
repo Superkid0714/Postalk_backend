@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import sharp from "sharp";
 import test from "node:test";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -37,7 +38,18 @@ test("local rendering produces vertical captioned reels and image thumbnails wit
     assert.equal(captionedInfo.hasAudio, false);
     assert.deepEqual([captionedInfo.width, captionedInfo.height], [720, 1280]);
     const reelThumb = await inspectMedia(captioned.thumbnail);
-    assert.deepEqual([reelThumb.width, reelThumb.height], [360, 640]);
+    assert.deepEqual([reelThumb.width, reelThumb.height], [720, 1280]);
+    // A black menu scene must not become the cover when a later scene is bright.
+    const black = await sharp({ create: { width: 360, height: 640, channels: 3, background: "#000000" } }).png().toBuffer();
+    input.template.usesSubtitles = false;
+    input.template.scenes = [
+      { sceneNumber: 1, target: "메뉴", menuId: "menu", mediaType: "image", durationSeconds: 1 },
+      { sceneNumber: 2, target: "메뉴", menuId: "menu", mediaType: "image", durationSeconds: 1 },
+    ];
+    const recovered = await renderReel(input, async scene => scene.sceneNumber === 1 ? black : bytes, [], async () => {});
+    const pixels = await sharp(recovered.thumbnail).resize(1, 1).greyscale().raw().toBuffer();
+    assert.ok(pixels[0] > 35, "cover must use a bright interior frame");
+
   } finally {
     assert.ok(directory.startsWith(path.join(os.tmpdir(), "postalk-render-test-")));
     await rm(directory, { recursive: true, force: true });

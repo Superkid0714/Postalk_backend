@@ -31,7 +31,7 @@ async function extractVideoThumbnailBytes(videoBytes: Uint8Array) {
       const ffmpeg = spawn(process.env.FFMPEG_PATH || ffmpegStatic || "ffmpeg", [
         "-y",
         "-ss",
-        "0.1",
+        "1",
         "-i",
         inputPath,
         "-frames:v",

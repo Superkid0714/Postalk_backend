@@ -386,6 +386,7 @@ type InstagramPublishAssetSelection = {
   publishMode: "single" | "carousel";
   assets: InstagramPublishAsset[];
   sourceJobId: string | null;
+  coverAsset?: InstagramPublishAsset;
 };
 
 function resolveCarouselAssetsFromJob(
@@ -468,6 +469,15 @@ export function pickAssetsForInstagram(
         publishMode: "single",
         assets: [matchedAsset],
         sourceJobId: relevantJob.id,
+        ...(mediaType === "video" ? { coverAsset: assets.find(asset =>
+          asset.asset_type === "video_thumbnail" &&
+          asset.storage_bucket === matchedAsset.storage_bucket &&
+          (asset.mime_type === "image/jpeg" || !asset.mime_type && /\.jpe?g$/i.test(asset.file_path)) &&
+          (relevantJob.result_payload?.thumbnailAssetId
+            ? asset.id === relevantJob.result_payload.thumbnailAssetId
+            : typeof relevantJob.result_payload?.thumbnailFilePath === "string" &&
+              asset.file_path === relevantJob.result_payload.thumbnailFilePath)
+        ) } : {}),
       };
     }
   }
@@ -479,6 +489,7 @@ async function publishInstagramMedia(
   mediaType: InstagramMediaType,
   mediaUrls: string[],
   caption: string | null,
+  coverUrl?: string,
 ): Promise<{
   publishMode: "single" | "carousel";
   carouselItemCount: number;
@@ -554,6 +565,7 @@ async function publishInstagramMedia(
     {
       media_type: "REELS",
       video_url: mediaUrls[0]!,
+      ...(coverUrl ? { cover_url: coverUrl } : { thumb_offset: "1000" }),
       ...(caption ? { caption } : {}),
     },
   );
@@ -735,6 +747,10 @@ async function startClaimedInstagramPublish(
     ),
   );
 
+  const coverUrl = assetSelection.coverAsset
+    ? await createInstagramMediaUrl(getSupabaseServiceClient(), assetSelection.coverAsset)
+    : undefined;
+
   await updateInstagramMetadata(submissionId, {
     mediaType,
     status: "processing",
@@ -758,7 +774,7 @@ async function startClaimedInstagramPublish(
   });
 
   try {
-    const result = await publishInstagramMedia(mediaType, mediaUrls, caption);
+    const result = await publishInstagramMedia(mediaType, mediaUrls, caption, coverUrl);
 
     await updateInstagramMetadata(submissionId, {
       mediaType,

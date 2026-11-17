@@ -81,7 +81,7 @@ export async function processReelsJob(
       ai_metadata: mergeSubmissionVideoWorkflowMetadata(metadata, {
         status: "generated", currentJobId: job.id, lastCompletedJobId: job.id,
         providerOperationName: render.renderId, generatedAt: completedAt, lastFailureReason: null,
-        durationSeconds: 13, aspectRatio: "9:16", resolution: "1080p",
+        durationSeconds: render.durationSeconds, aspectRatio: "9:16", resolution: "1080p",
         resultStorageBucket: bucket, resultFilePath: filePath, modelName: REELS_PROVIDER,
         scriptFallback: render.scriptFallback,
       }),

@@ -102,3 +102,22 @@ test("a unique active-job collision returns conflict rather than a server failur
   assert.equal(generationConflictResponse({ code: "23505" })?.status, 409);
   assert.equal(generationConflictResponse({ code: "other" }), null);
 });
+
+test("reel cover belongs to the selected completed job and must be JPEG", () => {
+  const input = submission("postalk-reels");
+  const cover = { ...input.submission_assets![0], id: "cover", asset_type: "video_thumbnail", file_path: "cover.jpg", mime_type: "image/jpeg" };
+  input.submission_assets!.push(cover);
+  input.generation_jobs![0].result_payload = { thumbnailAssetId: "cover", thumbnailFilePath: "cover.jpg" };
+  assert.equal(pickAssetsForInstagram(input, "video")?.coverAsset?.id, "cover");
+  input.generation_jobs![0].result_payload = { thumbnailFilePath: "cover.jpg" };
+  assert.equal(pickAssetsForInstagram(input, "video")?.coverAsset?.id, "cover");
+  input.generation_jobs![0].result_payload = { thumbnailAssetId: "missing", thumbnailFilePath: "cover.jpg" };
+  assert.equal(pickAssetsForInstagram(input, "video")?.coverAsset, undefined);
+  input.generation_jobs![0].result_payload = {};
+  assert.equal(pickAssetsForInstagram(input, "video")?.coverAsset, undefined);
+  input.generation_jobs![0].result_payload = { thumbnailAssetId: "cover" };
+  cover.storage_bucket = "other";
+  assert.equal(pickAssetsForInstagram(input, "video")?.coverAsset, undefined);
+  cover.storage_bucket = "uploads"; cover.mime_type = "image/png";
+  assert.equal(pickAssetsForInstagram(input, "video")?.coverAsset, undefined);
+});
