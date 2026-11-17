@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { AdMenu } from "@/lib/ad-menus";
 import { getMediaStorage, getUploadStorageBucket } from "@/lib/storage/media";
 import type { ProgressReporter } from "@/lib/generation/progress";
 
@@ -14,21 +15,6 @@ export const CARDNEWS_SHOTS = {
 export type CardNewsShot = keyof typeof CARDNEWS_SHOTS;
 export const CARDNEWS_SHOT_PLAN = Object.keys(CARDNEWS_SHOTS) as CardNewsShot[];
 export type CardNewsTheme = "minimal" | "christmas";
-export type CardNewsMenu = { name: string; description?: string };
-
-export function parseCardNewsMenus(value: unknown): CardNewsMenu[] | undefined {
-  if (!Array.isArray(value) || value.length < 1 || value.length > 3) return undefined;
-  const menus: CardNewsMenu[] = [];
-  for (const item of value) {
-    if (!item || typeof item !== "object" || Array.isArray(item)) return undefined;
-    const { name, description } = item as Record<string, unknown>;
-    if (typeof name !== "string" || !name.trim() || name.trim().length > 80 ||
-        (description !== undefined && (typeof description !== "string" || description.trim().length > 300))) return undefined;
-    menus.push({ name: name.trim(), ...(typeof description === "string" && description.trim() ? { description: description.trim() } : {}) });
-  }
-  return menus;
-}
-
 export function isCardNewsShot(value: unknown): value is CardNewsShot {
   return typeof value === "string" && Object.hasOwn(CARDNEWS_SHOTS, value);
 }
@@ -46,7 +32,7 @@ export type CardNewsInput = {
   storeDescription?: string;
   storeAddress?: string;
   menus?: string[];
-  menuDetails?: CardNewsMenu[];
+  menuDetails?: AdMenu[];
   photos: Array<{ role: string; filePath: string }>;
 };
 

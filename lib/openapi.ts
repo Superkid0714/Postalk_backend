@@ -130,11 +130,11 @@ export const openApiDocument = {
             },
             reelsConcept: { type: "string", enum: ["simple", "christmas"], description: "영상 릴스 콘셉트(기본 simple)" },
             reelsMenus: {
-              type: "array", minItems: 1, maxItems: 3, description: "영상 릴스용 메뉴 1~3개. 사진 요청에서는 생략합니다. 영상 요청에서 생략하면 menuIntro를 메뉴 1개로 사용합니다.",
+              type: "array", minItems: 1, maxItems: 3, description: "영상 릴스용 메뉴 1~3개. 항목마다 비어 있지 않은 이름과 선택 설명을 문자열로 보냅니다. 빈 배열이나 잘못된 항목은 400 VALIDATION_ERROR를 반환합니다. 영상 요청에서 이 필드를 생략하면 menuIntro를 메뉴 1개로 사용합니다.",
               items: {
                 type: "object", required: ["name"],
                 properties: {
-                  name: { type: "string", maxLength: 80 },
+                  name: { type: "string", minLength: 1, maxLength: 80 },
                   description: { type: "string", maxLength: 300 },
                 },
               },

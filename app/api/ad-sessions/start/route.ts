@@ -2,7 +2,8 @@ import { requireStoreAccess } from "@/lib/auth/store-access";
 import { readRequestBody } from "@/lib/api/request-body";
 import { after } from "next/server";
 import { buildReelsShotPlan, isReelsEnabled, REELS_SHOT_PLAN, type ReelsConcept } from "@/lib/ai/reels";
-import { isCardNewsEnabled, parseCardNewsMenus, type CardNewsTheme } from "@/lib/ai/cardnews-service";
+import { isCardNewsEnabled, type CardNewsTheme } from "@/lib/ai/cardnews-service";
+import { parseAdMenus } from "@/lib/ad-menus";
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/response";
@@ -27,7 +28,7 @@ type StartAdSessionBody = {
   cardNewsMenus?: unknown;
   storeAddress?: unknown;
   reelsConcept?: ReelsConcept;
-  reelsMenus?: Array<{ name?: string; description?: string }>;
+  reelsMenus?: unknown;
 };
 
 function buildCombinedIntroText(body: StartAdSessionBody) {
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
   }
 
   const details: Array<{ field: string; reason: string }> = [];
-  const cardNewsMenus = body.adType === "photo" ? parseCardNewsMenus(body.cardNewsMenus) : undefined;
+  const cardNewsMenus = body.adType === "photo" ? parseAdMenus(body.cardNewsMenus) : undefined;
   if (body.adType === "photo" && body.cardNewsMenus !== undefined && !cardNewsMenus) {
     details.push({ field: "cardNewsMenus", reason: "Provide 1 to 3 menus with names up to 80 characters and descriptions up to 300 characters" });
   }
@@ -79,11 +80,11 @@ export async function POST(request: NextRequest) {
   if (body.reelsConcept !== undefined && body.reelsConcept !== "simple" && body.reelsConcept !== "christmas") {
     details.push({ field: "reelsConcept", reason: "Choose simple or christmas" });
   }
-  const reelsMenus: Array<{ name: string; description?: string }> = body.adType === "video" && Array.isArray(body.reelsMenus) && body.reelsMenus.length > 0
-    ? body.reelsMenus.map(menu => ({ name: menu.name?.trim() ?? "", description: menu.description?.trim() || undefined }))
-    : body.adType === "video" ? [{ name: body.menuIntro?.trim() || "대표 메뉴" }] : [];
-  if (body.adType === "video" && (!Array.isArray(body.reelsMenus) && body.reelsMenus !== undefined || reelsMenus.length < 1 || reelsMenus.length > 3 || reelsMenus.some(menu => !menu.name || menu.name.length > 80 || (menu.description?.length ?? 0) > 300))) {
-    details.push({ field: "reelsMenus", reason: "Provide 1 to 3 menus with a name up to 80 characters" });
+  const reelsMenus = body.adType === "video"
+    ? parseAdMenus(body.reelsMenus === undefined ? [{ name: body.menuIntro?.trim() || "대표 메뉴" }] : body.reelsMenus) ?? []
+    : [];
+  if (body.adType === "video" && reelsMenus.length === 0) {
+    details.push({ field: "reelsMenus", reason: "Provide 1 to 3 menus with names up to 80 characters and optional descriptions up to 300 characters" });
   }
 
   if (!body.storeId || !isUuid(body.storeId)) {

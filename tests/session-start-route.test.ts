@@ -44,7 +44,7 @@ test("session start keeps photo capture independent of the enabled reels service
       headers: { "x-guest-session": "a".repeat(64) },
       body: JSON.stringify({ storeId: STORE, storeSpecialty: "직접 만든 양념", ...body }),
   }));
-  async function start(adType: "photo" | "video", reelsMenus?: Array<{ name: string }>) {
+  async function start(adType: "photo" | "video", reelsMenus?: Array<{ name: string; description?: string }>) {
     workflow = undefined;
     const response = await request({ adType, menuIntro: "떡볶이", reelsMenus });
     assert.equal(response.status, 201);
@@ -74,12 +74,31 @@ test("session start keeps photo capture independent of the enabled reels service
   assert.deepEqual(workflow?.shotPlan, REELS_SHOT_PLAN);
   assert.deepEqual(workflow?.reelsMenus, [{ name: "떡볶이" }]);
 
-  await start("video", [{ name: "떡볶이" }, { name: "순대" }, { name: "튀김" }]);
+  const structuredVideo = await start("video", [{ name: " 떡볶이 ", description: " 직접 만든 소스 " }, { name: "순대" }, { name: "튀김" }]);
   assert.equal(workflow?.shotPlan?.length, 8);
+  assert.deepEqual(workflow?.reelsMenus, [
+    { name: "떡볶이", description: "직접 만든 소스" }, { name: "순대" }, { name: "튀김" },
+  ]);
+  assert.deepEqual(structuredVideo.reelsMenus, workflow?.reelsMenus);
 
   process.env.REELS_API_URL = "";
   await start("photo");
   assert.deepEqual(workflow?.shotPlan, CARDNEWS_SHOT_PLAN);
   await start("video");
   assert.deepEqual(workflow?.shotPlan, REELS_SHOT_PLAN);
+
+  workflow = undefined;
+  for (const reelsMenus of [
+    null, [], [null], ["떡볶이"], [{ name: 23 }], [{ name: " " }],
+    [{ name: "떡볶이", description: 42 }], [{ name: "떡볶이", description: null }],
+    [{ name: "a".repeat(81) }], [{ name: "떡볶이", description: "a".repeat(301) }],
+    Array.from({ length: 4 }, () => ({ name: "떡볶이" })),
+  ]) {
+    const badVideo = await request({ adType: "video", menuIntro: "떡볶이", reelsMenus });
+    assert.equal(badVideo.status, 400);
+    const { error } = await badVideo.json();
+    assert.equal(error.code, "VALIDATION_ERROR");
+    assert.equal(error.details[0].field, "reelsMenus");
+  }
+  assert.equal(workflow, undefined);
 });

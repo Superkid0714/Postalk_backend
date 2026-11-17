@@ -1,5 +1,6 @@
 import { getPhotoGuideByCategory } from "@/lib/photo-guides";
-import { CARDNEWS_SHOTS, CARDNEWS_SHOT_PLAN, isCardNewsShot, parseCardNewsMenus, type CardNewsMenu, type CardNewsShot, type CardNewsTheme } from "@/lib/ai/cardnews-service";
+import { CARDNEWS_SHOTS, CARDNEWS_SHOT_PLAN, isCardNewsShot, type CardNewsShot, type CardNewsTheme } from "@/lib/ai/cardnews-service";
+import { parseAdMenus, type AdMenu } from "@/lib/ad-menus";
 import type { ReelsConcept } from "@/lib/ai/reels";
 import {
   getStoreCategoryLabel,
@@ -42,7 +43,7 @@ export type AdSessionWorkflow = {
   shotPlan?: AdSessionShotKey[];
   cardNewsTheme?: CardNewsTheme;
   cardNewsStyle?: string;
-  cardNewsMenus?: CardNewsMenu[];
+  cardNewsMenus?: AdMenu[];
   storeAddress?: string;
   reelsConcept?: ReelsConcept;
   reelsMenus?: Array<{ name: string; description?: string }>;
@@ -204,7 +205,7 @@ export function normalizeAdSessionWorkflow(value: unknown): AdSessionWorkflow {
     ...(value.cardNewsTheme === "minimal" || value.cardNewsTheme === "christmas"
       ? { cardNewsTheme: value.cardNewsTheme, cardNewsStyle: typeof value.cardNewsStyle === "string" ? value.cardNewsStyle : "" }
       : {}),
-    cardNewsMenus: parseCardNewsMenus(value.cardNewsMenus),
+    cardNewsMenus: parseAdMenus(value.cardNewsMenus),
     storeAddress: typeof value.storeAddress === "string" ? value.storeAddress : undefined,
     ...(value.reelsConcept === "simple" || value.reelsConcept === "christmas"
       ? { reelsConcept: value.reelsConcept }
@@ -257,7 +258,7 @@ export function buildSessionWorkflowSeed(
     videoShotPlan?: readonly AdSessionShotKey[];
     cardNewsTheme?: CardNewsTheme;
     cardNewsStyle?: string;
-    cardNewsMenus?: CardNewsMenu[];
+    cardNewsMenus?: AdMenu[];
     storeAddress?: string;
     reelsConcept?: ReelsConcept;
     reelsMenus?: Array<{ name: string; description?: string }>;
