@@ -204,11 +204,7 @@ function pickGeneratedAsset(
   const sortedAssets = [...assets].sort((left, right) => left.sort_order - right.sort_order);
 
   if (mediaType === "video") {
-    return (
-      sortedAssets.find((asset) => asset.asset_type === "video_thumbnail") ??
-      sortedAssets.find((asset) => asset.asset_type === "generated_video") ??
-      null
-    );
+    return sortedAssets.find((asset) => asset.asset_type === "generated_video") ?? null;
   }
 
   return sortedAssets.find((asset) => asset.asset_type === "generated_image") ?? null;
@@ -223,7 +219,9 @@ export async function buildArchiveItem(
     submission.submission_assets,
     mediaType,
   );
-  const thumbnailUrl = previewAssets[0]?.url ?? null;
+  const thumbnailUrl = mediaType === "video"
+    ? previewAssets.find(asset => asset.assetType === "video_thumbnail")?.url ?? null
+    : previewAssets[0]?.url ?? null;
   const generatedAsset = pickGeneratedAsset(submission.submission_assets, mediaType);
   const generatedAssetUrl = generatedAsset
     ? await getPreviewSignedUrl(getSupabaseServiceClient(), generatedAsset.storage_bucket, generatedAsset.file_path)

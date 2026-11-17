@@ -558,7 +558,7 @@ export const archiveResponse = ok(
     }),
     items: array(object({
       ...adFields,
-      generatedAssetUrl: nullable(previewUrl),
+      generatedAssetUrl: { ...nullable(previewUrl), description: "완성 결과 URL. 릴스는 MP4 영상이며 표지 JPG는 thumbnailUrl에 반환합니다." },
       storeName: nullable(string),
       marketName: nullable(string),
       createdAt: timestamp,
