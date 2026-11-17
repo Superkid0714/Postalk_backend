@@ -72,11 +72,11 @@ Railway에는 영구 DB·Volume·Object Storage를 만들지 않습니다. 이�
 
 | 변수 | 값 |
 | --- | --- |
-| `GENERATION_WORKER_HOSTPORT` | `${{Postalk_backend.RAILWAY_PRIVATE_DOMAIN}}:3000` |
+| `GENERATION_WORKER_HOSTPORT` | `${{Postalk_backend.RAILWAY_PRIVATE_DOMAIN}}:8080` |
 | `INTERNAL_WORKER_API_KEY` | `${{Postalk_backend.INTERNAL_WORKER_API_KEY}}` |
 | `GENERATION_WORKER_ENABLED` | 운영 `true`; 검증 전·일시 중지는 `false` |
 
-Railway의 private domain은 서비스 간 통신용이며 외부에 공개하지 않습니다. API가 기본적으로 3000 포트를 수신하므로 워커 주소에 `:3000`을 붙입니다.
+Railway의 private domain은 서비스 간 통신용이며 외부에 공개하지 않습니다. 컨테이너 기본값보다 Railway 런타임의 PORT가 우선합니다. 운영 시작 로그와 public domain targetPort에서 8080을 확인했으므로 워커 주소에 `:8080`을 붙입니다. 포트 변경 시 함께 갱신합니다.
 
 ## 배포와 검증
 

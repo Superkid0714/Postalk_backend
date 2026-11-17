@@ -100,7 +100,7 @@ node scripts/smoke-deployment.mjs https://postalkbackend-production.up.railway.a
 운영 워커는 같은 Railway 환경의 `postalk-recovery`입니다. GitHub main의 `Dockerfile.worker`로 배포하며 공개 도메인은 만들지 않습니다. 워커에는 DB·AI 키 없이 내부 주소와 전용 인증 키만 전달합니다.
 
 - `GENERATION_WORKER_ENABLED=true`를 명시해야 20초 간격으로 복구를 요청합니다. API 서비스에 값만 설정해도 워커 프로세스가 생기는 것은 아닙니다.
-- `GENERATION_WORKER_HOSTPORT=${{Postalk_backend.RAILWAY_PRIVATE_DOMAIN}}:3000`으로 내부 API에 연결합니다. 다른 배포에서 API 포트를 바꾸면 함께 수정합니다.
+- `GENERATION_WORKER_HOSTPORT=${{Postalk_backend.RAILWAY_PRIVATE_DOMAIN}}:8080`으로 내부 API에 연결합니다. 다른 배포에서 API 포트를 바꾸면 함께 수정합니다.
 - 워커의 `INTERNAL_WORKER_API_KEY=${{Postalk_backend.INTERNAL_WORKER_API_KEY}}`는 API의 전용 키를 참조합니다.
 - 처리 중인 작업은 DB 임대 잠금으로 중복 실행을 막습니다. 임대는 15분이며 실행 중 30초마다 갱신합니다. 프로세스가 중단되면 마지막 임대 만료 후 다음 점검에서 다시 처리합니다.
 - queued/processing만 처리하며 기존 failed 작업을 임의로 재생성하지 않습니다. 한 번에 최대 5개를 점검하고 세션의 완료·실패 상태도 맞춥니다.
