@@ -55,6 +55,8 @@ Railway에는 영구 DB·Volume·Object Storage를 만들지 않습니다. 이�
 | `EXHIBITION_PUBLISH_SECRET` | 새 32자 이상 무작위 값 |
 | `GENERATION_WORKER_ENABLED` | `false` |
 
+이번 게스트 인증 수정에서 `SUPABASE_SERVICE_ROLE_KEY` 변수명은 유지합니다. 값이 `sb_secret_` 형식이면 백엔드는 `apikey`로만 전송하고 SDK가 넣은 동일 값의 Bearer 헤더는 제거합니다. 레거시 JWT 키와 명시적 사용자 토큰은 유지합니다. 키 재발급이나 권한 변경은 필요하지 않습니다. 배포 후 같은 게스트 키로 `POST /api/guest-session`을 반복해 `storeId`가 유지되는지 확인합니다. `503 AUTH_UNAVAILABLE`이 지속되면 [운영 진단 절차](OPERATIONS.md#게스트-인증-장애-대응)를 따릅니다.
+
 `PORT`는 Railway가 자동 제공하므로 직접 고정하지 않습니다. `NEXT_PUBLIC_APP_URL`도 비워 두면 서버가 Railway public domain을 기준으로 URL을 계산합니다.
 
 ### 선택: 워커 — `postalk-recovery`

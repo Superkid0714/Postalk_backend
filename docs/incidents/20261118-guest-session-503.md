@@ -18,6 +18,14 @@
 
 The response body from the original upstream failure was not captured. PGRST303 is confirmed; the exact rejected claim (expiration, not-before, audience, etc.) is not known. The duplicate Bearer header is a verified compatibility issue to remove, not proof of a specific Supabase internal defect. No claim is made that the dashboard's incident banner caused this request.
 
+## Validation after remediation
+
+- Code commit: 2403d4d; investigation document commit: c14b8f7. Railway deployed c14b8f7 successfully.
+- Backend: 174 automated tests passed, including upstream 401/PGRST303 recovery and actual SDK header handling. TypeScript and lint checks passed.
+- Production API: 16 guest creation/reopen requests passed through the public frontend URL and direct backend URL, preserving store IDs.
+- Production API: simple and christmas reels both completed generation and archive storage; each result was a 16-second 1080x1920 MP4 with audio.
+- This validation did not cover browser button interaction, fresh card-news generation, or actual Instagram publishing.
+
 ## References
 
 - https://docs.postgrest.org/en/stable/references/errors.html#group-3-jwt

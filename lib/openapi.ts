@@ -94,7 +94,15 @@ export const openApiDocument = {
           required: false,
           content: { "application/json": { schema: { type: "object", properties: { storeName: { type: "string", maxLength: 100 }, marketName: { type: "string", maxLength: 100 } } } } },
         },
-        responses: { "200": guestSessionResponse, "400": standardErrors["400"], "404": success("게스트 제작 기능이 비활성화되었습니다.", errorEnvelope), "503": standardErrors["503"] },
+        responses: { "200": guestSessionResponse, "400": standardErrors["400"], "404": success("게스트 제작 기능이 비활성화되었습니다.", errorEnvelope), "503": {
+          description: "게스트 가게 저장·조회에 실패했습니다. 서버 내부 복구 후에도 실패하면 AUTH_UNAVAILABLE을 반환합니다. 기존 x-guest-session 키와 입력을 유지하고 잠시 후 재시도하세요. 새 키를 발급하거나 작업 공간이 생성됐다고 처리하지 마세요. Supabase의 내부 401/PGRST303은 이 응답으로 전달되며 프론트에서 Supabase 토큰을 갱신할 필요는 없습니다.",
+          ...json(errorEnvelope, {
+            unavailable: {
+              summary: "게스트 작업 공간 복구 실패",
+              value: { success: false, message: "Unable to open a guest workspace", error: { code: "AUTH_UNAVAILABLE" } },
+            },
+          }),
+        } },
       },
     },
     "/api/uploads": {

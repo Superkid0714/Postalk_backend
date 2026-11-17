@@ -49,6 +49,8 @@
 
 사진은 최대 10MiB, 영상은 최대 50MiB입니다. 게스트도 본인 작업 공간의 광고를 서버에 연결된 Instagram 계정에 게시할 수 있습니다. 기존 가게 보관함에는 해당 상인 권한이 필요합니다. 프론트 호출 방식과 배포 설정은 [게스트 제작 연동](docs/API_CHANGES.md#게스트-제작-연동)을 참고하세요.
 
+게스트 세션의 `503 AUTH_UNAVAILABLE`은 기존 키와 입력을 유지한 채 재시도합니다. 응답 예시와 복구 정책은 [게스트 제작 연동](docs/API_CHANGES.md#게스트-제작-연동), 장애 진단은 [운영 가이드](docs/OPERATIONS.md#게스트-인증-장애-대응)를 참고하세요.
+
 ## 프론트 연동 API
 
 제작·조회 API의 성공 응답은 `success`, `message`, `data` 구조를 사용합니다. [운영 Swagger](https://postalkbackend-production.up.railway.app/api-docs)에서 제작 결과, 보관함, 홈 요약, 사진·영상 제출의 HTTP 200 응답을 펼치면 JSON 예시와 `data` 스키마를 볼 수 있습니다. 사진 재촬영이 필요하면 HTTP 200 응답의 `data.response`가 `"fail"`이고 `data.retryMessage`에 안내 문구가 들어갑니다.
