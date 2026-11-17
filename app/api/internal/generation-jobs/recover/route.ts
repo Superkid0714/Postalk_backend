@@ -17,18 +17,21 @@ export async function POST(request: NextRequest) {
     if (scriptError) return errorResponse("Unable to load script jobs", 503, { code: "RECOVERY_FAILED" });
     for (const job of scripts ?? []) { try { await processExhibitionScript(job.id); } catch (error) { console.error("Exhibition script recovery failed", { jobId: job.id, error }); } }
   }
-  const { data: publishes, error: publishError } = await supabase.from("submissions")
-    .select("id, ai_metadata").eq("ai_metadata->instagramPublish->>status", "processing")
-    .not("ai_metadata->instagramPublish->>containerId", "is", null)
-    .or("ai_metadata->instagramPublish->>outcomeUnknown.is.null,ai_metadata->instagramPublish->>outcomeUnknown.eq.false")
-    .order("updated_at", { ascending: true }).limit(5);
-  if (publishError) return errorResponse("Unable to load pending publishes", 503, { code: "RECOVERY_FAILED" });
-  for (const submission of publishes ?? []) {
-    const metadata = submission.ai_metadata?.instagramPublish;
-    if (!metadata?.containerId || metadata.outcomeUnknown) continue;
-    try { await syncInstagramPublishForSubmission(submission.id); }
-    catch (error) {
-      if (!(error instanceof PublishBusyError)) console.error("Instagram publish sync failed", { submissionId: submission.id, error });
+  // Public posting recovery is separate from generation recovery and opt-in.
+  if (process.env.GENERATION_WORKER_SYNC_INSTAGRAM_ENABLED === "true") {
+    const { data: publishes, error: publishError } = await supabase.from("submissions")
+      .select("id, ai_metadata").eq("ai_metadata->instagramPublish->>status", "processing")
+      .not("ai_metadata->instagramPublish->>containerId", "is", null)
+      .or("ai_metadata->instagramPublish->>outcomeUnknown.is.null,ai_metadata->instagramPublish->>outcomeUnknown.eq.false")
+      .order("updated_at", { ascending: true }).limit(5);
+    if (publishError) return errorResponse("Unable to load pending publishes", 503, { code: "RECOVERY_FAILED" });
+    for (const submission of publishes ?? []) {
+      const metadata = submission.ai_metadata?.instagramPublish;
+      if (!metadata?.containerId || metadata.outcomeUnknown) continue;
+      try { await syncInstagramPublishForSubmission(submission.id); }
+      catch (error) {
+        if (!(error instanceof PublishBusyError)) console.error("Instagram publish sync failed", { submissionId: submission.id, error });
+      }
     }
   }
   const { data: jobs, error } = await supabase.from("generation_jobs")

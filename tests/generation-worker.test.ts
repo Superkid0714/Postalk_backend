@@ -13,7 +13,7 @@ test('cloud worker uses the private hostport and authenticates its recovery requ
   assert.equal(request.method,'POST');
   assert.equal(request.headers['x-internal-worker-key'],'synthetic-worker-test-key');
   response.setHeader('content-type','application/json');
-  response.end('{"data":{"results":[]}}');
+  response.end('{"success":true,"data":{"results":[]}}');
  });
  server.listen(0,'127.0.0.1'); await once(server,'listening');
  const address=server.address(); assert.ok(address&&typeof address==='object');
@@ -39,5 +39,29 @@ test('disabled deployment worker makes no recovery requests',async()=>{
   assert.match(String(chunk),/disabled/);
   await new Promise(resolve=>setTimeout(resolve,150));
   assert.equal(calls,0);
+ }finally{child.kill();await once(child,'exit');server.close();}
+});
+
+test('worker remains disabled without explicit enablement or a key',async()=>{
+ const env={...process.env};
+ delete env.GENERATION_WORKER_ENABLED; delete env.INTERNAL_WORKER_API_KEY;
+ const child=spawn(process.execPath,[fileURLToPath(new URL('../scripts/generation-worker.mjs',import.meta.url))],{env,stdio:'pipe',windowsHide:true});
+ try {
+  const [chunk]=await once(child.stdout!,'data',{signal:AbortSignal.timeout(10000)});
+  assert.match(String(chunk),/disabled/);
+  assert.equal(child.exitCode,null);
+ }finally{child.kill();await once(child,'exit');}
+});
+
+test('worker reports malformed recovery responses rather than treating them as healthy',async()=>{
+ const server=createServer((_,response)=>{response.setHeader('content-type','application/json');response.end('{}');});
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ const address=server.address();assert.ok(address&&typeof address==='object');
+ const child=spawn(process.execPath,[fileURLToPath(new URL('../scripts/generation-worker.mjs',import.meta.url))],{
+  env:{...process.env,GENERATION_WORKER_BASE_URL:`http://127.0.0.1:${address.port}`,GENERATION_WORKER_ENABLED:'true',INTERNAL_WORKER_API_KEY:'synthetic-worker-test-key'},stdio:'pipe',windowsHide:true,
+ });
+ try{
+  const [chunk]=await once(child.stderr!,'data',{signal:AbortSignal.timeout(10000)});
+  assert.match(String(chunk),/invalid result/);
  }finally{child.kill();await once(child,'exit');server.close();}
 });

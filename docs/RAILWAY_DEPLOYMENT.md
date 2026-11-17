@@ -28,7 +28,7 @@ Railway에는 영구 DB·Volume·Object Storage를 만들지 않습니다. 이�
 
 현재 Railway 프로젝트의 API 서비스는 `Postalk_backend`입니다. GitHub 저장소 `Superkid0714/Postalk_backend`의 `main` 브랜치를 Source로 선택합니다.
 
-복구 워커는 외부 AI 생성 작업을 실제로 운영할 때만 추가합니다. 현재는 `GENERATION_WORKER_ENABLED=false`를 유지합니다.
+운영에서는 생성 작업 복구용 `postalk-recovery`를 별도 서비스로 실행합니다. API 서비스의 변수만 true로 바꾸는 것으로는 워커가 실행되지 않습니다.
 
 ### API — `Postalk_backend`
 
@@ -53,13 +53,14 @@ Railway에는 영구 DB·Volume·Object Storage를 만들지 않습니다. 이�
 | `INTERNAL_WORKER_API_KEY` | 워커를 만들 때만 32자 이상 무작위 값 등록 |
 | `EXHIBITION_MODE_ENABLED` | 초기에는 `false` |
 | `EXHIBITION_PUBLISH_SECRET` | 새 32자 이상 무작위 값 |
-| `GENERATION_WORKER_ENABLED` | `false` |
+| `GENERATION_WORKER_ENABLED` | `true` |
+| `GENERATION_WORKER_SYNC_INSTAGRAM_ENABLED` | `false` — 생성 복구와 별도인 게시 동기화 |
 
 이번 게스트 인증 수정에서 `SUPABASE_SERVICE_ROLE_KEY` 변수명은 유지합니다. 값이 `sb_secret_` 형식이면 백엔드는 `apikey`로만 전송하고 SDK가 넣은 동일 값의 Bearer 헤더는 제거합니다. 레거시 JWT 키와 명시적 사용자 토큰은 유지합니다. 키 재발급이나 권한 변경은 필요하지 않습니다. 배포 후 같은 게스트 키로 `POST /api/guest-session`을 반복해 `storeId`가 유지되는지 확인합니다. `503 AUTH_UNAVAILABLE`이 지속되면 [운영 진단 절차](OPERATIONS.md#게스트-인증-장애-대응)를 따릅니다.
 
 `PORT`는 Railway가 자동 제공하므로 직접 고정하지 않습니다. `NEXT_PUBLIC_APP_URL`도 비워 두면 서버가 Railway public domain을 기준으로 URL을 계산합니다.
 
-### 선택: 워커 — `postalk-recovery`
+### 생성 복구 워커 — `postalk-recovery`
 
 - Builder: Dockerfile
 - Dockerfile 경로: `Dockerfile.worker` (`RAILWAY_DOCKERFILE_PATH=Dockerfile.worker`로 지정)
@@ -71,9 +72,9 @@ Railway에는 영구 DB·Volume·Object Storage를 만들지 않습니다. 이�
 
 | 변수 | 값 |
 | --- | --- |
-| `GENERATION_WORKER_BASE_URL` | Railway가 표시한 API private domain에 `:3000`을 붙인 주소 |
-| `INTERNAL_WORKER_API_KEY` | API와 **정확히 같은 값** |
-| `GENERATION_WORKER_ENABLED` | 초기에는 `false` |
+| `GENERATION_WORKER_HOSTPORT` | `${{Postalk_backend.RAILWAY_PRIVATE_DOMAIN}}:3000` |
+| `INTERNAL_WORKER_API_KEY` | `${{Postalk_backend.INTERNAL_WORKER_API_KEY}}` |
+| `GENERATION_WORKER_ENABLED` | 운영 `true`; 검증 전·일시 중지는 `false` |
 
 Railway의 private domain은 서비스 간 통신용이며 외부에 공개하지 않습니다. API가 기본적으로 3000 포트를 수신하므로 워커 주소에 `:3000`을 붙입니다.
 
@@ -101,7 +102,7 @@ Railway의 private domain은 서비스 간 통신용이며 외부에 공개하�
 4. 프론트 `NEXT_PUBLIC_API_BASE_URL`을 API public domain으로 설정하고 프론트를 재배포합니다.
 5. 운영 프론트와 `http://localhost:5173`에서 보낸 `OPTIONS` 요청에 `Access-Control-Allow-Origin`이 각각의 요청 origin으로 돌아오는지 확인합니다. 로그인 없이 작업 공간 열기·목록·자막·업로드도 확인합니다.
 6. 사진 10MiB와 영상 50MiB 이하를 실제로 올려 Supabase Storage·Railway 업로드 경로를 확인합니다.
-7. 카드뉴스와 BGM이 들어간 자막 릴스를 각각 1건 만들어 확인합니다. 이 단계까지 `GENERATION_WORKER_ENABLED=false`를 유지합니다.
+7. 카드뉴스와 BGM이 들어간 자막 릴스를 각각 1건 만들어 확인하고, 복구 워커를 true로 배포해 내부 인증·연결과 queued/임대 만료 processing 작업의 복구를 검증합니다.
 8. 상인이 직접 누르는 Instagram 게시 동작은 별도 리허설에서 1건 확인합니다.
 
 `SUPABASE_SERVICE_ROLE_KEY`를 Railway에 등록하면 Railway API 컨테이너가 DB·Storage 서버 작업을 수행할 수 있습니다. 이 키를 실제로 입력하기 직전에, 값과 목적지를 확인한 뒤에만 등록합니다.
@@ -109,3 +110,5 @@ Railway의 private domain은 서비스 간 통신용이며 외부에 공개하�
 ## 행사 종료
 
 결과·원본 파일이 Supabase에 남아 있는지 확인한 뒤 Railway의 API와 워커를 stop 또는 delete합니다. Railway Usage에서 컴퓨트 사용량이 증가하지 않는 것을 확인합니다. Supabase Pro 하향은 7일 백업과 파일 보관이 더 필요 없는 시점에 별도로 판단합니다.
+
+워커는 main 소스를 사용하고 `RAILWAY_DOCKERFILE_PATH=Dockerfile.worker`를 지정합니다. 운영 임대 시간과 중지 방법은 [생성 작업 자동 복구](OPERATIONS.md#생성-작업-자동-복구)를 참고합니다.

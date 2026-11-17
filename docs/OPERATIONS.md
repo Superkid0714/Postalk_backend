@@ -16,7 +16,8 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY
 MEDIA_STORAGE_PROVIDER=supabase
 EXHIBITION_MODE_ENABLED=false
-GENERATION_WORKER_ENABLED=false
+GENERATION_WORKER_ENABLED=true
+GENERATION_WORKER_SYNC_INSTAGRAM_ENABLED=false
 ```
 
 현재 운영 프론트와 로컬 개발 프론트의 CORS 허용 목록입니다.
@@ -93,3 +94,16 @@ node scripts/smoke-deployment.mjs https://postalkbackend-production.up.railway.a
 2. Railway API와 워커를 중지하거나 삭제합니다.
 3. Railway Usage가 더 증가하지 않는지 확인합니다.
 4. 보관이 더 필요 없을 때 Supabase Pro 하향 여부를 결정합니다.
+
+## 생성 작업 자동 복구
+
+운영 워커는 같은 Railway 환경의 `postalk-recovery`입니다. GitHub main의 `Dockerfile.worker`로 배포하며 공개 도메인은 만들지 않습니다. 워커에는 DB·AI 키 없이 내부 주소와 전용 인증 키만 전달합니다.
+
+- `GENERATION_WORKER_ENABLED=true`를 명시해야 20초 간격으로 복구를 요청합니다. API 서비스에 값만 설정해도 워커 프로세스가 생기는 것은 아닙니다.
+- `GENERATION_WORKER_HOSTPORT=${{Postalk_backend.RAILWAY_PRIVATE_DOMAIN}}:3000`으로 내부 API에 연결합니다. 다른 배포에서 API 포트를 바꾸면 함께 수정합니다.
+- 워커의 `INTERNAL_WORKER_API_KEY=${{Postalk_backend.INTERNAL_WORKER_API_KEY}}`는 API의 전용 키를 참조합니다.
+- 처리 중인 작업은 DB 임대 잠금으로 중복 실행을 막습니다. 임대는 15분이며 실행 중 30초마다 갱신합니다. 프로세스가 중단되면 마지막 임대 만료 후 다음 점검에서 다시 처리합니다.
+- queued/processing만 처리하며 기존 failed 작업을 임의로 재생성하지 않습니다. 한 번에 최대 5개를 점검하고 세션의 완료·실패 상태도 맞춥니다.
+- `GENERATION_WORKER_SYNC_INSTAGRAM_ENABLED=false`를 API에서 유지합니다. 생성 복구를 켜는 것만으로 Instagram 게시 동기화가 실행되지 않습니다.
+- 워커 로그의 `Generation recovery checked`와 checked/completed/errors를 확인합니다. 연결·인증·잘못된 응답은 오류 로그에 남기고 다음 주기에 재시도합니다. 이 로그는 전체 이력 감사나 알림 시스템을 대체하지 않습니다.
+- 중지 시 워커의 `GENERATION_WORKER_ENABLED=false`로 배포합니다. 생성 결과나 과거 실패 기록은 삭제하지 않습니다.
