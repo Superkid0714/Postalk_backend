@@ -493,7 +493,7 @@ function buildVideoRequest(
         assetType: "video_clip",
         title: "가게 간판",
         prompt: "가게 간판",
-        helperText: "가게 이름과 간판이 보이게 짧게 촬영해주세요.",
+        helperText: "휴대폰을 가로로 들고 가게 이름과 간판이 보이게 짧게 촬영해주세요.",
         reviewShotOrder: null,
       };
     case "video_storefront_entry":
@@ -502,7 +502,7 @@ function buildVideoRequest(
         assetType: "video_clip",
         title: "가게 입구 진입",
         prompt: "가게 입구에서 안으로 들어가는 모습",
-        helperText: "가게 앞에서 입구 안쪽으로 들어가는 느낌이 보이게 촬영해주세요.",
+        helperText: "휴대폰을 가로로 들고 가게 앞에서 입구 안쪽으로 들어가는 느낌이 보이게 촬영해주세요.",
         reviewShotOrder: null,
       };
     case "video_menu_board":
@@ -511,7 +511,7 @@ function buildVideoRequest(
         assetType: "video_clip",
         title: "메뉴판",
         prompt: "메뉴판",
-        helperText: "메뉴판이 화면 안에 보이도록 촬영해주세요.",
+        helperText: "휴대폰을 가로로 들고 메뉴판이 화면 안에 보이도록 촬영해주세요.",
         reviewShotOrder: null,
       };
     case "video_signature_menu":
@@ -520,7 +520,7 @@ function buildVideoRequest(
         assetType: "video_clip",
         title: primarySubject,
         prompt: primarySubject,
-        helperText: `${primarySubject}가 잘 보이도록 촬영해주세요.`,
+        helperText: `휴대폰을 가로로 들고 ${primarySubject}가 잘 보이도록 촬영해주세요.`,
         reviewShotOrder: null,
       };
     case "video_signature_interaction":
@@ -529,7 +529,7 @@ function buildVideoRequest(
         assetType: "video_clip",
         title: `${primarySubject} 상호작용`,
         prompt: `${primarySubject}을 집거나 먹는 모습`,
-        helperText: `${primarySubject}과 상호작용하는 장면이 자연스럽게 보이도록 촬영해주세요.`,
+        helperText: `휴대폰을 가로로 들고 ${primarySubject}과 상호작용하는 장면이 자연스럽게 보이도록 촬영해주세요.`,
         reviewShotOrder: null,
       };
     case "video_cooking_scene":
@@ -538,7 +538,7 @@ function buildVideoRequest(
         assetType: "video_clip",
         title: "조리 장면",
         prompt: `${primarySubject}을 조리하는 모습`,
-        helperText: "조리 과정이나 불판, 손동작이 보이도록 촬영해주세요.",
+        helperText: "휴대폰을 가로로 들고 조리 과정이나 불판, 손동작이 보이도록 촬영해주세요.",
         reviewShotOrder: null,
       };
     case "video_side_menu":
@@ -547,7 +547,7 @@ function buildVideoRequest(
         assetType: "video_clip",
         title: "서브메뉴",
         prompt: sideMenuSubject,
-        helperText: "주력메뉴 외에 함께 보여주고 싶은 다른 메뉴가 보이도록 촬영해주세요.",
+        helperText: "휴대폰을 가로로 들고 주력메뉴 외에 함께 보여주고 싶은 다른 메뉴가 보이도록 촬영해주세요.",
         reviewShotOrder: null,
       };
     case "video_side_menu_interaction":
@@ -556,7 +556,7 @@ function buildVideoRequest(
         assetType: "video_clip",
         title: "서브메뉴 상호작용",
         prompt: `${sideMenuSubject}을 집거나 먹는 모습`,
-        helperText: "다른 메뉴와 상호작용하는 장면이 보이도록 촬영해주세요.",
+        helperText: "휴대폰을 가로로 들고 다른 메뉴와 상호작용하는 장면이 보이도록 촬영해주세요.",
         reviewShotOrder: null,
       };
     default:
@@ -565,7 +565,7 @@ function buildVideoRequest(
         assetType: "video_clip",
         title: "영상",
         prompt: "영상",
-        helperText: "짧게 촬영해주세요.",
+        helperText: "휴대폰을 가로로 들고 짧게 촬영해주세요.",
         reviewShotOrder: null,
       };
   }

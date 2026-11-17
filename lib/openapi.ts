@@ -166,6 +166,7 @@ export const openApiDocument = {
     "/api/ad-sessions/{sessionId}/videos": {
       post: {
         tags: ["Creation"], summary: "릴스 영상 제출", security: storeSecurity,
+        description: "가로 촬영을 권장합니다. currentRequest.helperText와 다음 request.helperText로 촬영을 안내합니다. 가로 원본 전체를 중앙에 배치하고 위아래는 같은 영상의 흐린 배경으로 채우며, 세로 원본은 화면을 채웁니다. 결과는 1080×1920 MP4이며 배경음악은 콘셉트별 곡 목록에서 무작위로 선택합니다.",
         parameters: [{ $ref: "#/components/parameters/SessionId" }],
         requestBody: json({
           allOf: [
