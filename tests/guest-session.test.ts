@@ -122,6 +122,7 @@ test("guest database diagnostics identify the failed step without logging privat
   const privateValue = "private-session-hash";
   const records: unknown[][] = [];
   t.mock.method(console, "error", (...args: unknown[]) => { records.push(args); });
+  t.mock.method(console, "warn", () => {});
   let failure: "insert" | "update" | "lookup" | "empty" | "transport" = "insert";
   t.mock.method(globalThis, "fetch", async (_input: unknown, init?: RequestInit) => {
     if (failure === "transport") throw new TypeError("fetch failed: " + privateValue);
@@ -148,4 +149,67 @@ test("guest database diagnostics identify the failed step without logging privat
     assert.ok(!JSON.stringify(records).includes("private-store-name"));
     assert.ok(result.error || !result.data);
   }
+});
+
+
+test("guest opening recovers transient failures without duplicating a committed workspace", async t => {
+  t.mock.method(console, "warn", () => {});
+  const client = createClient("https://guest-recovery.invalid", "test-key");
+  let mode = "lost-insert";
+  let failed = false;
+  const stores = new Map<string, { id: string; store_name: string }>();
+  let writes = 0;
+  t.mock.method(globalThis, "fetch", async (input: unknown, init?: RequestInit) => {
+    const url = new URL(String(input));
+    const operation = init?.method === "POST" ? "insert" : init?.method === "PATCH" ? "update" : "lookup";
+    if (operation === "insert") {
+      writes++;
+      const body = JSON.parse(String(init?.body));
+      if (!stores.has(body.guest_session_hash)) stores.set(body.guest_session_hash, { id: FIRST_STORE, store_name: body.store_name });
+    }
+    if (!failed && mode === "lost-insert" && operation === "insert") {
+      failed = true;
+      throw new TypeError("fetch failed after commit");
+    }
+    if (!failed && mode === "update-503" && operation === "update") {
+      failed = true;
+      return Response.json({ code: "PGRST002", message: "unavailable" }, { status: 503 });
+    }
+    if (!failed && mode === "empty-lookup" && operation === "lookup") {
+      failed = true;
+      return Response.json([]);
+    }
+    if (operation === "insert") return new Response(null, { status: 201 });
+    const row = stores.get(url.searchParams.get("guest_session_hash")!.slice(3))!;
+    if (operation === "update") Object.assign(row, JSON.parse(String(init?.body)));
+    return Response.json([{ id: row.id }]);
+  });
+  for (const scenario of ["lost-insert", "update-503", "empty-lookup"]) {
+    mode = scenario; failed = false; writes = 0;
+    const result = await openGuestStore(client, FIRST_KEY, scenario === "update-503" ? { storeName: "updated" } : {});
+    assert.equal(result.error, null);
+    assert.equal(result.data?.id, FIRST_STORE);
+    assert.equal(writes, 2);
+    assert.equal(stores.size, 1);
+  }
+  assert.equal(stores.get(FIRST_KEY)?.store_name, "updated");
+});
+
+test("guest opening bounds retries and does not retry permanent database failures", async t => {
+  t.mock.method(console, "warn", () => {});
+  t.mock.method(console, "error", () => {});
+  const client = createClient("https://guest-failures.invalid", "test-key");
+  let calls = 0;
+  let status = 503;
+  t.mock.method(globalThis, "fetch", async () => {
+    calls++;
+    return Response.json({ code: status === 403 ? "42501" : "PGRST002", message: "failure" }, { status });
+  });
+  const failed = await openGuestStore(client, FIRST_KEY, {});
+  assert.equal(failed.error?.code, "PGRST002");
+  assert.equal(calls, 3);
+  status = 403; calls = 0;
+  const denied = await openGuestStore(client, FIRST_KEY, {});
+  assert.equal(denied.error?.code, "42501");
+  assert.equal(calls, 1);
 });

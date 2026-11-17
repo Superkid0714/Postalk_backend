@@ -88,7 +88,7 @@ export const openApiDocument = {
       post: {
         tags: ["Workspace"],
         summary: "게스트 작업 공간 열기",
-        description: "같은 x-guest-session 키로 다시 요청하면 같은 작업 공간을 반환합니다. Instagram 연결이 설정되면 canPublish=true이며, 같은 키로 본인이 만든 광고를 연결된 Instagram 계정에 게시할 수 있습니다.",
+        description: "같은 x-guest-session 키로 다시 요청하면 같은 작업 공간을 반환합니다. 일시적 DB 장애는 같은 키로 최대 3회 자동 재시도하며 시도당 제한은 5초입니다. 복구하지 못하면 503 AUTH_UNAVAILABLE을 반환하며 클라이언트도 기존 키를 유지해야 합니다. Instagram 연결이 설정되면 canPublish=true이며, 같은 키로 본인이 만든 광고를 연결된 Instagram 계정에 게시할 수 있습니다.",
         security: guestSecurity,
         requestBody: {
           required: false,
