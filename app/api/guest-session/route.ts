@@ -1,5 +1,5 @@
 import { errorResponse, successResponse } from "@/lib/api/response";
-import { readRequestBody } from "@/lib/api/request-body";
+import { validateRequestBody } from "@/lib/api/request-body";
 import { GUEST_SESSION_HEADER, guestCreationEnabled, guestSessionHash, openGuestStore } from "@/lib/auth/guest-session";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isInstagramConfigured } from "@/lib/instagram/publish";
@@ -17,7 +17,9 @@ export async function POST(request: Request) {
   let storeName: string | undefined;
   let marketName: string | undefined;
   try {
-    const body = request.body ? await readRequestBody(request) : {};
+    const raw = await request.text();
+    const body: unknown = raw.trim() ? JSON.parse(raw) : {};
+    validateRequestBody(body);
     storeName = typeof body.storeName === "string" ? body.storeName.trim() : undefined;
     marketName = typeof body.marketName === "string" ? body.marketName.trim() : undefined;
     if ([storeName, marketName].some(name => name !== undefined && (!name || name.length > 100))) {

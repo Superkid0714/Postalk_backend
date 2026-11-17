@@ -9,13 +9,8 @@ import { sanitizeFileName } from "@/lib/files";
 import { resolveActivatedStoreFromQrToken } from "@/lib/merchant-qr";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { resolveStore } from "@/lib/stores";
+import { MAX_UPLOAD_FILE_SIZE, MAX_UPLOAD_REQUEST_SIZE } from "@/lib/upload-limits";
 import { isUuid } from "@/lib/validation";
-
-const MAX_FILE_SIZE_BY_TYPE = {
-  menu_board: 10 * 1024 * 1024,
-  food_photo: 10 * 1024 * 1024,
-  video_clip: 50 * 1024 * 1024,
-} as const;
 
 const MIME_TYPES_BY_ASSET_TYPE: Record<AssetType, string[]> = {
   menu_board: ["image/jpeg", "image/png", "image/webp"],
@@ -23,7 +18,7 @@ const MIME_TYPES_BY_ASSET_TYPE: Record<AssetType, string[]> = {
   video_clip: ["video/mp4", "video/quicktime", "video/webm"],
 };
 
-type AssetType = keyof typeof MAX_FILE_SIZE_BY_TYPE;
+type AssetType = keyof typeof MAX_UPLOAD_FILE_SIZE;
 
 function isAssetType(value: string): value is AssetType {
   return (
@@ -34,7 +29,16 @@ function isAssetType(value: string): value is AssetType {
 }
 
 export async function POST(request: NextRequest) {
-  const formData = await request.formData();
+  if (Number(request.headers.get("content-length")) > MAX_UPLOAD_REQUEST_SIZE) {
+    return errorResponse("Upload request exceeds limit", 413, { code: "PAYLOAD_TOO_LARGE" });
+  }
+
+  let formData: FormData;
+  try {
+    formData = await request.formData();
+  } catch {
+    return errorResponse("Invalid multipart upload", 400, { code: "VALIDATION_ERROR" });
+  }
 
   const assetTypeValue = formData.get("assetType");
   const qrTokenValue = formData.get("qrToken");
@@ -76,7 +80,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const maxFileSize = MAX_FILE_SIZE_BY_TYPE[assetTypeValue];
+  const maxFileSize = MAX_UPLOAD_FILE_SIZE[assetTypeValue];
 
   if (fileValue.size > maxFileSize) {
     return errorResponse("File size exceeds limit", 413, {

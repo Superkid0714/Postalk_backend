@@ -65,6 +65,11 @@ test("guest access reopens the same workspace and enforces store and publishing 
   const first = await entry(FIRST_KEY);
   assert.equal(first.headers.get("cache-control"), "no-store");
   assert.deepEqual((await first.json()).data, { storeId: FIRST_STORE, canPublish: false });
+  // A reverse proxy can give a bodyless POST a non-null, empty request stream.
+  const emptyBody = await entry(FIRST_KEY, "");
+  assert.equal(emptyBody.status, 200);
+  assert.equal((await emptyBody.json()).data.storeId, FIRST_STORE);
+  assert.equal((await entry(FIRST_KEY, "{")).status, 400);
   assert.deepEqual((await (await entry(FIRST_KEY, JSON.stringify({ storeName: "분식집" }))).json()).data, {
     storeId: FIRST_STORE, canPublish: false,
   });

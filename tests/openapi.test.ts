@@ -9,6 +9,8 @@ test("OpenAPI 문서는 게스트 제작 흐름의 핵심 경로를 제공한다
   assert.ok(openApiDocument.paths["/api/guest-session"]?.post);
   assert.ok(openApiDocument.paths["/api/ad-sessions/start"]?.post);
   assert.ok(openApiDocument.paths["/api/generation-jobs/{jobId}/progress"]?.get);
+  assert.ok(openApiDocument.paths["/api/ad-sessions/{sessionId}/photos"].post.responses["404"]);
+  assert.ok(openApiDocument.paths["/api/ad-sessions/{sessionId}/videos"].post.responses["404"]);
 
   const response = GET();
   assert.equal(response.status, 200);

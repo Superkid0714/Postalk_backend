@@ -102,7 +102,7 @@ export const openApiDocument = {
         tags: ["Uploads"], summary: "원본 사진 또는 영상 업로드", security: guestSecurity,
         description: "food_photo는 JPEG, PNG, WebP를 파일당 최대 10 MiB까지 받습니다. video_clip은 video/mp4, video/quicktime, video/webm을 파일당 최대 50 MiB까지 받습니다. WebM 원본을 그대로 제출할 수 있으며 완성된 릴스는 MP4로 제공됩니다.",
         requestBody: { required: true, content: { "multipart/form-data": { schema: { type: "object", required: ["file", "storeId", "assetType"], properties: { file: { type: "string", format: "binary" }, storeId: { type: "string", format: "uuid" }, assetType: { type: "string", enum: ["food_photo", "video_clip"] } } } } } },
-        responses: { "201": success("업로드된 파일의 bucket, filePath, mimeType 등을 반환합니다."), ...standardErrors, "413": success("파일 크기가 제한을 넘었습니다.", errorEnvelope), "415": success("지원하지 않는 파일 MIME 타입입니다.", errorEnvelope) },
+        responses: { "201": success("업로드된 파일의 bucket, filePath, mimeType 등을 반환합니다."), ...standardErrors, "404": success("점포를 찾을 수 없습니다.", errorEnvelope), "413": success("업로드 요청 또는 파일 크기가 제한을 넘었습니다.", errorEnvelope), "415": success("지원하지 않는 파일 MIME 타입입니다.", errorEnvelope), "500": success("파일을 저장하지 못했습니다.", errorEnvelope) },
       },
     },
     "/api/ad-sessions/start": {
@@ -160,7 +160,7 @@ export const openApiDocument = {
         tags: ["Creation"], summary: "카드뉴스 사진 제출", security: storeSecurity,
         parameters: [{ $ref: "#/components/parameters/SessionId" }],
         requestBody: json({ $ref: "#/components/schemas/UploadedFile" }),
-        responses: { "200": submitPhotoResponse, ...standardErrors, "409": success("같은 카드뉴스 사진을 재사용했습니다.", errorEnvelope) },
+        responses: { "200": submitPhotoResponse, ...standardErrors, "404": success("촬영 세션을 찾을 수 없습니다.", errorEnvelope), "409": success("같은 카드뉴스 사진을 재사용했습니다.", errorEnvelope) },
       },
     },
     "/api/ad-sessions/{sessionId}/videos": {
@@ -179,7 +179,7 @@ export const openApiDocument = {
             },
           ],
         }),
-        responses: { "200": submitVideoResponse, ...standardErrors },
+        responses: { "200": submitVideoResponse, ...standardErrors, "404": success("촬영 세션을 찾을 수 없습니다.", errorEnvelope) },
       },
     },
     "/api/generation-jobs/{jobId}/progress": {
