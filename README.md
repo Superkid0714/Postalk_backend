@@ -79,6 +79,8 @@ x-guest-session: 브라우저에만 보관하는 64자리 난수
 
 카드뉴스 테마는 `minimal`, `christmas`이고, 릴스 콘셉트는 `simple`, `christmas`입니다. 마지막 파일 제출이 생성 작업을 시작하므로, 프론트는 `generationJobId`를 저장한 뒤 진행률 API를 폴링하면 됩니다. 게시 버튼은 `canPublish`를 따르며, 게스트의 성과 조회는 지원하지 않습니다.
 
+릴스 시작 요청은 `reelsMenus`에 메뉴 이름·설명 1~3개를 보내면 `menuIntro` 없이 시작할 수 있습니다. 이전 문자열 입력 방식도 지원합니다.
+
 카드뉴스 입력 예시와 미리보기 URL 갱신 방식은 [프론트엔드 API 연동 문서](docs/API_CHANGES.md)를 참고하세요.
 
 ### 호출 순서

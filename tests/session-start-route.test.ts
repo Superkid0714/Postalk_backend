@@ -81,6 +81,21 @@ test("session start keeps photo capture independent of the enabled reels service
   ]);
   assert.deepEqual(structuredVideo.reelsMenus, workflow?.reelsMenus);
 
+  const menuOnly = [{ name: " 떡볶이 ", description: "직접 만든 소스, 매콤해요.\n매일 준비해요." }, { name: "순대" }];
+  const structuredOnly = await request({ adType: "video", reelsMenus: menuOnly });
+  assert.equal(structuredOnly.status, 201);
+  const structuredOnlyBody = (await structuredOnly.json()).data;
+  const normalized = normalizeAdSessionWorkflow(workflow);
+  assert.deepEqual(normalized.reelsMenus, [{ ...menuOnly[0], name: "떡볶이" }, menuOnly[1]]);
+  assert.equal(normalized.menuIntro, "떡볶이 - 직접 만든 소스, 매콤해요.\n매일 준비해요.\n순대");
+  assert.equal(normalized.shotPlan?.length, 6);
+  assert.deepEqual(structuredOnlyBody.reelsMenus, normalized.reelsMenus);
+
+  const emptyMenuOnly = await request({ adType: "video", reelsMenus: [] });
+  assert.equal(emptyMenuOnly.status, 400);
+  const missingMenus = await request({ adType: "video" });
+  assert.equal(missingMenus.status, 400);
+
   process.env.REELS_API_URL = "";
   await start("photo");
   assert.deepEqual(workflow?.shotPlan, CARDNEWS_SHOT_PLAN);

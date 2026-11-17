@@ -70,7 +70,6 @@ export async function POST(request: NextRequest) {
   if (!body.menuIntro?.trim() && cardNewsMenus) {
     body.menuIntro = cardNewsMenus.map(({ name, description }) => description ? `${name} - ${description}` : name).join("\n");
   }
-  const combinedIntroText = buildCombinedIntroText(body);
   if (body.cardNewsTheme !== undefined && body.cardNewsTheme !== "minimal" && body.cardNewsTheme !== "christmas") {
     details.push({ field: "cardNewsTheme", reason: "Choose minimal or christmas" });
   }
@@ -86,6 +85,11 @@ export async function POST(request: NextRequest) {
   if (body.adType === "video" && reelsMenus.length === 0) {
     details.push({ field: "reelsMenus", reason: "Provide 1 to 3 menus with names up to 80 characters and optional descriptions up to 300 characters" });
   }
+
+  if (!body.menuIntro?.trim() && body.adType === "video" && reelsMenus.length > 0 && body.reelsMenus !== undefined) {
+    body.menuIntro = reelsMenus.map(({ name, description }) => description ? `${name} - ${description}` : name).join("\n");
+  }
+  const combinedIntroText = buildCombinedIntroText(body);
 
   if (!body.storeId || !isUuid(body.storeId)) {
     details.push({

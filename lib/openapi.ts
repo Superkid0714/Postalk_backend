@@ -120,7 +120,7 @@ export const openApiDocument = {
         requestBody: { required: true, ...json({
           type: "object",
           required: ["storeId", "adType", "storeSpecialty"],
-          anyOf: [{ required: ["menuIntro"] }, { required: ["cardNewsMenus"], properties: { adType: { enum: ["photo"] } } }],
+          anyOf: [{ required: ["menuIntro"] }, { required: ["cardNewsMenus"], properties: { adType: { enum: ["photo"] } } }, { required: ["reelsMenus"], properties: { adType: { enum: ["video"] } } }],
           properties: {
             storeId: { type: "string", format: "uuid" },
             adType: { type: "string", enum: ["photo", "video"] },
@@ -138,7 +138,7 @@ export const openApiDocument = {
             },
             reelsConcept: { type: "string", enum: ["simple", "christmas"], description: "영상 릴스 콘셉트(기본 simple)" },
             reelsMenus: {
-              type: "array", minItems: 1, maxItems: 3, description: "영상 릴스용 메뉴 1~3개. 항목마다 비어 있지 않은 이름과 선택 설명을 문자열로 보냅니다. 빈 배열이나 잘못된 항목은 400 VALIDATION_ERROR를 반환합니다. 영상 요청에서 이 필드를 생략하면 menuIntro를 메뉴 1개로 사용합니다.",
+              type: "array", minItems: 1, maxItems: 3, description: "영상 릴스용 메뉴 1~3개. 항목마다 비어 있지 않은 이름과 선택 설명을 문자열로 보냅니다. 빈 배열이나 잘못된 항목은 400 VALIDATION_ERROR를 반환합니다. 이 배열을 보내면 menuIntro를 생략할 수 있습니다. 영상 요청에서 이 필드를 생략하면 menuIntro를 메뉴 1개로 사용합니다.",
               items: {
                 type: "object", required: ["name"],
                 properties: {
@@ -151,7 +151,7 @@ export const openApiDocument = {
         }, {
           photo: { summary: "사진 카드뉴스: 상세 주소와 메뉴별 설명", value: { storeId: "22222222-2222-4222-8222-222222222222", adType: "photo", storeSpecialty: "매일 직접 만드는 양념", storeAddress: "광주광역시 서구 천변좌로 238", cardNewsMenus: [{ name: "제육볶음", description: "매콤한 양념, 아삭한 양파" }, { name: "채소비빔밥", description: "제철 채소를 곁들여요" }], cardNewsTheme: "minimal", cardNewsStyle: "잡지처럼 깔끔하게" } },
           video: { summary: "릴스: menuIntro를 메뉴 1개로 사용", value: { storeId: "22222222-2222-4222-8222-222222222222", adType: "video", menuIntro: "제육볶음", storeSpecialty: "매일 직접 만드는 양념", reelsConcept: "simple" } },
-          videoThreeMenus: { summary: "릴스: 메뉴 3개, 영상 8개 촬영", value: { storeId: "22222222-2222-4222-8222-222222222222", adType: "video", menuIntro: "제육볶음, 순대, 튀김", storeSpecialty: "매일 직접 만드는 양념", reelsMenus: [{ name: "제육볶음" }, { name: "순대" }, { name: "튀김" }], reelsConcept: "simple" } },
+          videoThreeMenus: { summary: "릴스: 구조화 메뉴 3개, menuIntro 없이 영상 8개 촬영", value: { storeId: "22222222-2222-4222-8222-222222222222", adType: "video", storeSpecialty: "매일 직접 만드는 양념", reelsMenus: [{ name: "제육볶음" }, { name: "순대" }, { name: "튀김" }], reelsConcept: "simple" } },
         }) },
         responses: { "201": sessionStartResponse, ...standardErrors, "404": success("점포를 찾을 수 없습니다.", errorEnvelope), "500": success("제작 세션을 시작하지 못했습니다.", errorEnvelope) },
       },
