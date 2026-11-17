@@ -6,7 +6,8 @@ import { NextRequest } from "next/server";
 import { POST as openSession } from "../app/api/guest-session/route.ts";
 import { GET as home } from "../app/api/home/route.ts";
 import { POST as publish } from "../app/api/publish-requests/route.ts";
-import { guestSessionHash } from "../lib/auth/guest-session.ts";
+import { createClient } from "@supabase/supabase-js";
+import { openGuestStore, guestSessionHash } from "../lib/auth/guest-session.ts";
 
 const FIRST_STORE = "11111111-1111-4111-8111-111111111111";
 const SECOND_STORE = "22222222-2222-4222-8222-222222222222";
@@ -112,5 +113,39 @@ test("guest migration preserves merchant name uniqueness and permits separate gu
     await assert.rejects(db.exec("insert into stores (market_name, store_name) values ('market', 'store')"), /duplicate key/);
   } finally {
     await db.close();
+  }
+});
+
+
+test("guest database diagnostics identify the failed step without logging private values", async t => {
+  const client = createClient("https://guest-diagnostics.invalid", "test-service-key");
+  const privateValue = "private-session-hash";
+  const records: unknown[][] = [];
+  t.mock.method(console, "error", (...args: unknown[]) => { records.push(args); });
+  let failure: "insert" | "update" | "lookup" | "empty" | "transport" = "insert";
+  t.mock.method(globalThis, "fetch", async (_input: unknown, init?: RequestInit) => {
+    if (failure === "transport") throw new TypeError("fetch failed: " + privateValue);
+    const operation = init?.method === "POST" ? "insert" : init?.method === "PATCH" ? "update" : "lookup";
+    if (operation === failure) return Response.json({
+      code: "TEST_DATABASE_ERROR", message: privateValue, details: privateValue,
+    }, { status: 503 });
+    if (operation === "insert") return new Response(null, { status: 201 });
+    return Response.json([]);
+  });
+  for (const step of ["insert", "update", "lookup", "empty", "transport"] as const) {
+    failure = step;
+    records.length = 0;
+    const result = await openGuestStore(client, privateValue, step === "update" ? { storeName: "private-store-name" } : {});
+    assert.equal(records.length, 1);
+    const info = records[0][1];
+    assert.deepEqual(info, {
+      operation: step === "empty" ? "lookup" : step === "transport" ? "insert" : step,
+      status: step === "empty" ? 200 : step === "transport" ? 0 : 503,
+      code: step === "empty" || step === "transport" ? null : "TEST_DATABASE_ERROR",
+      emptyResult: step === "empty",
+    });
+    assert.ok(!JSON.stringify(records).includes(privateValue));
+    assert.ok(!JSON.stringify(records).includes("private-store-name"));
+    assert.ok(result.error || !result.data);
   }
 });

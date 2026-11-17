@@ -17,24 +17,46 @@ export function findGuestStore(client: SupabaseClient, hash: string) {
     .maybeSingle<{ id: string }>();
 }
 
+function reportGuestStoreFailure(
+  operation: "insert" | "update" | "lookup",
+  result: { data: unknown; error: { code: string } | null; status: number },
+) {
+  if (result.error || !result.data) {
+    // Database messages/details can contain names or session hashes. Log only codes.
+    console.error("Guest workspace database operation failed", {
+      operation,
+      status: result.status,
+      code: result.error?.code || null,
+      emptyResult: !result.error && !result.data,
+    });
+  }
+}
+
 export async function openGuestStore(
   client: SupabaseClient,
   hash: string,
   names: { storeName?: string; marketName?: string },
 ) {
   // The unique hash makes a browser retry safe even if the first response was lost.
-  const { error } = await client.from("stores").upsert({
+  const inserted = await client.from("stores").upsert({
     market_name: names.marketName ?? "전통시장",
     store_name: names.storeName ?? "가게",
     guest_session_hash: hash,
   }, { onConflict: "guest_session_hash", ignoreDuplicates: true, defaultToNull: false });
 
-  if (error) return { data: null, error };
+  if (inserted.error) {
+    reportGuestStoreFailure("insert", inserted);
+    return { data: null, error: inserted.error };
+  }
   if (names.storeName || names.marketName) {
-    return client.from("stores").update({
+    const updated = await client.from("stores").update({
       ...(names.storeName && { store_name: names.storeName }),
       ...(names.marketName && { market_name: names.marketName }),
     }).eq("guest_session_hash", hash).select("id").maybeSingle<{ id: string }>();
+    reportGuestStoreFailure("update", updated);
+    return updated;
   }
-  return findGuestStore(client, hash);
+  const found = await findGuestStore(client, hash);
+  reportGuestStoreFailure("lookup", found);
+  return found;
 }

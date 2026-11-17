@@ -15,6 +15,8 @@
 3. 기존 상인용 홈, 업로드, 제작 세션, 생성 상태 조회 및 보관함 API에 같은 헤더를 보냅니다. `storeId`가 필요한 요청에는 받은 ID를 넣습니다. QR 토큰 필드는 생략합니다.
 4. Instagram 연결이 설정되어 있으면 게스트 응답의 `canPublish`는 `true`입니다. 게스트도 같은 작업 공간 키로 본인이 만든 광고를 서버에 연결된 Instagram 계정에 게시할 수 있습니다. 성과 조회는 기존 상인 권한을 사용합니다.
 
+게스트 작업 공간의 DB 저장·수정·조회가 실패하면 `503 AUTH_UNAVAILABLE`을 반환합니다. 운영 로그의 `Guest workspace database operation failed`에서 `operation`, HTTP `status`, DB `code`, `emptyResult`를 확인할 수 있습니다. 키·해시·입력값·DB 오류 원문은 기록하지 않습니다.
+
 키는 작업 공간에 접근할 수 있는 비밀 값입니다. URL이나 로그에 넣지 않습니다. 브라우저 저장소를 지우거나 다른 기기에서 접속하면 새 작업 공간이 열립니다.
 
 운영 DB에 `20261111_guest_sessions.sql`을 적용하고 Railway에서 `GUEST_CREATION_ENABLED=true`로 설정합니다. 프론트가 별도 도메인이면 Railway의 `CORS_ALLOWED_ORIGINS`에 추가합니다.
