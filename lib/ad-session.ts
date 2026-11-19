@@ -326,6 +326,7 @@ export function getRequestedShot(
   return buildCaptureRequest(adType, category, shotKey, {
     primarySubject: menu?.name ?? workflow.primarySubject ?? "주력 메뉴",
     storeSpecialty: workflow.storeSpecialty ?? null,
+    cardNewsMenus: workflow.cardNewsMenus,
   });
 }
 
@@ -352,6 +353,7 @@ export function getNextShot(
     request: buildCaptureRequest(adType, category, shotKey, {
       primarySubject: workflow.reelsMenus?.[adType === "video" ? Math.floor((nextIndex - 1) / 2) : 0]?.name ?? workflow.primarySubject ?? "주력 메뉴",
       storeSpecialty: workflow.storeSpecialty ?? null,
+      cardNewsMenus: workflow.cardNewsMenus,
     }),
   };
 }
@@ -400,10 +402,20 @@ export function buildPhotoRequest(
   options: {
     primarySubject: string;
     storeSpecialty?: string | null;
+    cardNewsMenus?: AdMenu[];
   },
 ): AdSessionPhotoRequest {
   if (isCardNewsShot(shotKey)) {
-    const { title, prompt } = CARDNEWS_SHOTS[shotKey];
+    const { title, prompt: defaultPrompt } = CARDNEWS_SHOTS[shotKey];
+    const menuIndex = shotKey === "card_bowl" || shotKey === "card_zoom" ? 0
+      : shotKey === "card_food1" ? 1 : shotKey === "card_food2" ? 2 : -1;
+    const menuName = menuIndex >= 0 ? options.cardNewsMenus?.[menuIndex]?.name
+      ?? (menuIndex === 0 ? options.primarySubject : undefined) : undefined;
+    const prompt = menuName
+      ? shotKey === "card_bowl" ? `${menuName}의 그릇 전체가 보이도록 찍어주세요.`
+        : shotKey === "card_zoom" ? `${menuName}의 식감이 보이도록 가까이서 찍어주세요.`
+        : `입력한 ${menuIndex + 1}번째 메뉴인 ${toObjectParticle(menuName)} 찍어주세요. 사진 라벨은 이 메뉴명으로 표시돼요.`
+      : defaultPrompt;
     return { shotKey, assetType: "food_photo", title, prompt, helperText: prompt, reviewShotOrder: null };
   }
 
@@ -578,6 +590,7 @@ function buildCaptureRequest(
   options: {
     primarySubject: string;
     storeSpecialty?: string | null;
+    cardNewsMenus?: AdMenu[];
   },
 ) {
   if (adType === "video") {

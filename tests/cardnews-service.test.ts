@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFile } from "node:fs/promises";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PGlite } from "@electric-sql/pglite";
-import { buildSessionWorkflowSeed, getRequestedShot, normalizeAdSessionWorkflow } from "../lib/ad-session.ts";
+import { buildSessionWorkflowSeed, getRequestedShot, getNextShot, normalizeAdSessionWorkflow } from "../lib/ad-session.ts";
 import { CARDNEWS_SHOTS, CARDNEWS_SHOT_PLAN, renderCardNews } from "../lib/ai/cardnews-service.ts";
 
 test("new sessions request six labeled photos while legacy sessions retain their shot plan", () => {
@@ -102,4 +102,26 @@ test("card news migration keeps legacy shots and adds the six new slots", async 
   } finally {
     await db.close();
   }
+});
+
+test("card-news capture instructions follow menu order and keep store shots generic", () => {
+  const workflow = normalizeAdSessionWorkflow(buildSessionWorkflowSeed("가게 소개", {
+    adType: "photo", cardNewsTheme: "minimal",
+    cardNewsMenus: [{ name: "소금빵" }, { name: "마카롱" }, { name: "쿠키" }],
+  }));
+  for (const [index, name] of [[0, "소금빵"], [1, "소금빵"], [2, "마카롱"], [3, "쿠키"]] as const) {
+    const current = { ...workflow, currentShotIndex: index, requestedShotKey: CARDNEWS_SHOT_PLAN[index] };
+    assert.ok(getRequestedShot(current, "restaurant_food")?.helperText.includes(name));
+    if (index > 0) {
+      assert.ok(getNextShot({ ...workflow, currentShotIndex: index - 1 }, "restaurant_food")?.request.helperText.includes(name));
+    }
+  }
+  for (const index of [4, 5]) {
+    const current = { ...workflow, currentShotIndex: index, requestedShotKey: CARDNEWS_SHOT_PLAN[index] };
+    const request = getRequestedShot(current, "restaurant_food");
+    assert.equal(request?.helperText, CARDNEWS_SHOTS[CARDNEWS_SHOT_PLAN[index]].prompt);
+    assert.doesNotMatch(request!.helperText, /소금빵|마카롱|쿠키/);
+  }
+  const short = { ...workflow, cardNewsMenus: [{ name: "소금빵" }], currentShotIndex: 2, requestedShotKey: "card_food1" as const };
+  assert.equal(getRequestedShot(short, "restaurant_food")?.helperText, CARDNEWS_SHOTS.card_food1.prompt);
 });

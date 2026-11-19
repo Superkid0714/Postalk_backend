@@ -130,7 +130,7 @@ export const openApiDocument = {
             cardNewsStyle: { type: "string", maxLength: 500 },
             storeAddress: { type: "string", maxLength: 200, description: "카드뉴스 Instagram 캡션에 표시할 상세 주소" },
             cardNewsMenus: {
-              type: "array", minItems: 1, maxItems: 3, description: "카드뉴스 메뉴의 이름과 설명. 첫 항목이 대표 메뉴입니다.",
+              type: "array", minItems: 1, maxItems: 3, description: "카드뉴스 메뉴의 이름과 설명. 입력 순서대로 첫 메뉴는 card_bowl/card_zoom, 두 번째는 card_food1, 세 번째는 card_food2 사진 라벨에 사용합니다. currentRequest/request의 helperText에 표시되는 메뉴에 맞는 사진을 제출합니다. 매장 사진에는 음식명을 붙이지 않습니다.",
               items: { type: "object", required: ["name"], properties: {
                 name: { type: "string", minLength: 1, maxLength: 80 },
                 description: { type: "string", maxLength: 300 },
