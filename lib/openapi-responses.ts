@@ -531,7 +531,7 @@ export const submitVideoResponse = ok(
 
 const adFields = {
   submissionId: uuid,
-  thumbnailUrl: { ...nullable(previewUrl), description: "표지 이미지 URL. 릴스는 JPEG이며 없으면 null입니다. 상세 영상의 video.poster에 연결합니다." },
+  thumbnailUrl: { ...nullable(previewUrl), description: "표지 이미지 URL. 릴스는 JPEG이며 없으면 null입니다. 목록 표지나 선택적 video.poster에 사용합니다. 신규 릴스 MP4는 기존 0.1초 미리보기를 위해 시작 검은 페이드 없이 생성합니다." },
   title: string,
   status: submissionStatus,
   statusLabel: string,
