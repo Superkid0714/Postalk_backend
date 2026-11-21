@@ -110,6 +110,18 @@ node scripts/smoke-deployment.mjs https://postalkbackend-production.up.railway.a
 - 워커의 `INTERNAL_WORKER_API_KEY=${{Postalk_backend.INTERNAL_WORKER_API_KEY}}`는 API의 전용 키를 참조합니다.
 - 처리 중인 작업은 DB 임대 잠금으로 중복 실행을 막습니다. 임대는 15분이며 실행 중 30초마다 갱신합니다. 프로세스가 중단되면 마지막 임대 만료 후 다음 점검에서 다시 처리합니다.
 - queued/processing만 처리하며 기존 failed 작업을 임의로 재생성하지 않습니다. 한 번에 최대 5개를 점검하고 세션의 완료·실패 상태도 맞춥니다.
-- `GENERATION_WORKER_SYNC_INSTAGRAM_ENABLED=false`를 API에서 유지합니다. 생성 복구를 켜는 것만으로 Instagram 게시 동기화가 실행되지 않습니다.
+- `GENERATION_WORKER_SYNC_INSTAGRAM_ENABLED=false`를 유지해 과거 대기 게시 전체의 일괄 동기화를 막습니다. 별도 10초 주기에서는 최신 /publish 요청에 기록된 autoCompleteRequested=true만 조회합니다. 이 루프는 긴 AI 생성 배치와 독립적으로 실행합니다.
 - 워커 로그의 `Generation recovery checked`와 checked/completed/errors를 확인합니다. 연결·인증·잘못된 응답은 오류 로그에 남기고 다음 주기에 재시도합니다. 이 로그는 전체 이력 감사나 알림 시스템을 대체하지 않습니다.
 - 중지 시 워커의 `GENERATION_WORKER_ENABLED=false`로 배포합니다. 생성 결과나 과거 실패 기록은 삭제하지 않습니다.
+
+## Instagram 게시 지연 확인
+
+2026-11-21 점검 표본의 요청→최종 확인 중앙값은 카드뉴스 약 33초(25건), 릴스 약 42초(30건)였습니다. 외부 처리와 서버 확인·저장 시간이 포함된 값이며 Meta 처리만의 측정값은 아닙니다.
+
+- 카드뉴스 자식 컨테이너는 두 장씩 병렬 준비하되 부모 컨테이너의 순서를 유지합니다.
+- 공개 /publish의 완료 확인은 요청 시작부터 45초의 대기 예산을 기준으로 합니다. 이미 실행 중인 외부 HTTP 요청까지 강제로 끊는 제한은 아니며 외부 응답 시간은 가변적입니다. 예산 이후에는 상태를 반환하고 명시 요청의 백그라운드 완료를 이어갑니다.
+- 명시적으로 /publish를 호출한 새 요청에는 autoCompleteRequested=true를 기록합니다. 서버는 최근 24시간 이내이고 processing·컨테이너 존재·게시 미시도·결과 불확실 아님 조건을 모두 만족하는 요청만 자동 마무리합니다.
+- 이전 대기 건, 삭제된 광고, 비동기 instagram-publish 경로만 호출한 건, 결과가 불확실하거나 이미 media_publish를 시도한 건은 새 자동 완료 대상이 아닙니다. HTTP 409 후 결과는 기존 상태 조회·보관함에서 확인합니다.
+- 복구 워커의 Instagram completion checked 로그를 확인합니다. 이 루프는 생성 복구와 독립적입니다.
+- API 로그의 Instagram publish timing에서 preparationMs(파일 준비·관련 저장), containerCreationMs(자식·부모 생성), elapsedMs(요청 이후 게시 처리)를 구분합니다. 이 값만으로 외부 플랫폼 내부 처리 시간을 단정하지 않습니다.
+- 게시 완료는 published·media ID로 판단합니다. IN_PROGRESS/FINISHED 컨테이너를 게시 완료로 표시하지 않습니다.

@@ -5,11 +5,16 @@ import { processAnyGenerationJob } from "@/lib/generation/process-any-job";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { syncInstagramPublishForSubmission } from "@/lib/instagram/publish";
 import { PublishBusyError } from "@/lib/instagram/publish-lock";
+import { recoverRequestedInstagramPublishes } from "@/lib/instagram/recover-pending";
 import { processExhibitionScript } from "@/lib/exhibition/scripts";
 
 export async function POST(request: NextRequest) {
   const authError = requireInternalWorkerKey(request);
   if (authError) return authError;
+  if (request.nextUrl.searchParams.get("scope") === "publish") {
+    try { return successResponse({ results: await recoverRequestedInstagramPublishes() }, "Requested Instagram publications checked"); }
+    catch { return errorResponse("Unable to load requested publications", 503, { code: "RECOVERY_FAILED" }); }
+  }
   const supabase = getSupabaseServiceClient();
   if (process.env.EXHIBITION_MODE_ENABLED === "true") {
     const { data: scripts, error: scriptError } = await supabase.from("script_jobs").select("id")

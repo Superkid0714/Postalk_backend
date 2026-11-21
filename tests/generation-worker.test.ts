@@ -7,9 +7,12 @@ import {fileURLToPath} from 'node:url';
 
 test('cloud worker uses the private hostport and authenticates its recovery request',async()=>{
  let calls=0;
+ const seen=new Set<string>();
+ let checked!:()=>void; const checkedBoth=new Promise<void>(resolve=>{checked=resolve;});
  const server=createServer((request,response)=>{
   calls++;
-  assert.equal(request.url,'/api/internal/generation-jobs/recover');
+  assert.ok(['/api/internal/generation-jobs/recover','/api/internal/generation-jobs/recover?scope=publish'].includes(request.url!));
+  seen.add(request.url!);if(seen.size===2)checked();
   assert.equal(request.method,'POST');
   assert.equal(request.headers['x-internal-worker-key'],'synthetic-worker-test-key');
   response.setHeader('content-type','application/json');
@@ -21,8 +24,8 @@ test('cloud worker uses the private hostport and authenticates its recovery requ
   env:{...process.env,GENERATION_WORKER_BASE_URL:'',GENERATION_WORKER_HOSTPORT:`127.0.0.1:${address.port}`,GENERATION_WORKER_ENABLED:'true',INTERNAL_WORKER_API_KEY:'synthetic-worker-test-key'},stdio:'pipe',windowsHide:true,
  });
  try {
-  await once(server,'request',{signal:AbortSignal.timeout(10000)});
-  assert.equal(calls,1);
+  await Promise.race([checkedBoth,new Promise((_,reject)=>setTimeout(()=>reject(new Error('Both worker loops must start')),10000).unref())]);
+  assert.equal(calls,2);
  } finally {child.kill(); await once(child,'exit');server.close();}
 });
 

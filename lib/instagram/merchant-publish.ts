@@ -6,6 +6,7 @@ import { isInstagramConfigured, startInstagramPublishForSubmission, waitForInsta
 import { PublishBusyError } from "@/lib/instagram/publish-lock";
 
 export async function handleMerchantPublish(request: Request, submissionId?: string, mediaType?: "photo" | "video", options?: { waitForCompletion?: boolean }) {
+  const requestStartedAt = Date.now();
   let body: Record<string, unknown>;
   try {
     const raw = await request.text();
@@ -27,15 +28,19 @@ export async function handleMerchantPublish(request: Request, submissionId?: str
     let result = await startInstagramPublishForSubmission(id, {
       mediaType: selectedType,
       captionOverride: typeof body.captionOverride === "string" ? body.captionOverride : undefined,
+      autoCompleteRequested: options?.waitForCompletion === true,
     });
     if (options?.waitForCompletion && result.status === "processing" && !result.requiresVerification) {
-      result = await waitForInstagramPublishCompletion(id, { maxAttempts: 10, delayMs: 2_000 });
+      result = await waitForInstagramPublishCompletion(id, {
+        maxAttempts: 20, delayMs: 2_000,
+        maxWaitMs: Math.max(0, 45_000 - (Date.now() - requestStartedAt)),
+      });
     }
     if (!result.ok) return errorResponse("Instagram publish failed", 502, { code: "INSTAGRAM_PUBLISH_FAILED" });
     if (options?.waitForCompletion && result.status !== "published") {
       return result.requiresVerification
         ? errorResponse("게시 결과를 확인하고 있어요. 인스타그램 계정에서 게시 여부를 확인해 주세요.", 409, { code: "INSTAGRAM_VERIFICATION_REQUIRED" })
-        : errorResponse("인스타그램에서 처리 중이에요. 잠시 후 다시 올리기를 누르면 진행 상태를 확인해요.", 409, { code: "INSTAGRAM_PROCESSING" });
+        : errorResponse("인스타그램에서 처리 중이에요. 서버에서 게시 완료를 계속 확인하고 있어요. 잠시 후 보관함을 새로고침해 주세요.", 409, { code: "INSTAGRAM_PROCESSING" });
     }
     return successResponse(result, result.status === "published" ? "Instagram post already published" : "Instagram publishing started", result.status === "processing" ? 202 : 200);
   } catch (error) {

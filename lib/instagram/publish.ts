@@ -1,5 +1,5 @@
 import { createInstagramMediaUrl } from "@/lib/instagram/media";
-import { withPublishLock } from "@/lib/instagram/publish-lock";
+import { withPublishLock, PublishBusyError } from "@/lib/instagram/publish-lock";
 import { getInstagramEnv } from "@/lib/env";
 import { fetchWithTimeout } from "@/lib/http";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
@@ -28,6 +28,7 @@ export type InstagramPublishMetadata = {
   lastError?: string | null;
   publishAttemptedAt?: string | null;
   outcomeUnknown?: boolean | null;
+  autoCompleteRequested?: boolean | null;
 };
 
 type InstagramSubmissionRow = {
@@ -94,6 +95,7 @@ type InstagramPublishedMediaSummary = {
 type WaitForInstagramPublishCompletionOptions = {
   maxAttempts?: number;
   delayMs?: number;
+  maxWaitMs?: number;
 };
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -509,16 +511,14 @@ async function publishInstagramMedia(
     if (mediaUrls.length > 1) {
       const childContainerIds: string[] = [];
 
-      for (const mediaUrl of mediaUrls) {
-        const child = await postGraphForm<{ id: string }>(
-          `/${config.igUserId}/media`,
-          {
-            image_url: mediaUrl,
-            is_carousel_item: "true",
-          },
-        );
-
-        childContainerIds.push(child.id);
+      // Bound parallelism while retaining the user's card order.
+      for (let index = 0; index < mediaUrls.length; index += 2) {
+        const children = await Promise.all(mediaUrls.slice(index, index + 2).map(mediaUrl =>
+          postGraphForm<{ id: string }>(`/${config.igUserId}/media`, {
+            image_url: mediaUrl, is_carousel_item: "true",
+          }),
+        ));
+        childContainerIds.push(...children.map(child => child.id));
       }
 
       const carousel = await postGraphForm<{ id: string }>(
@@ -638,6 +638,8 @@ async function publishInstagramContainer(
       });
     }
 
+    console.info("Instagram publish timing", { submissionId, phase: "published", mediaType,
+      elapsedMs: instagramPublish.requestedAt ? Date.now() - Date.parse(instagramPublish.requestedAt) : null });
     return {
       ok: true,
       submissionId,
@@ -718,6 +720,7 @@ async function startClaimedInstagramPublish(
   options?: {
     mediaType?: InstagramMediaType;
     captionOverride?: string;
+    autoCompleteRequested?: boolean;
   },
 ): Promise<InstagramPublishResult> {
   if (!isInstagramConfigured()) {
@@ -729,6 +732,10 @@ async function startClaimedInstagramPublish(
   if (submission.ai_metadata?.exhibitionDeletedAt) throw new Error("Deleted ads cannot be published");
   const existing = getInstagramPublishMetadata(submission.ai_metadata);
   if (existing.status === "published" || existing.publishedMediaId || existing.status === "processing") {
+    if (existing.status === "processing" && !existing.publishedMediaId && options?.autoCompleteRequested &&
+        !existing.outcomeUnknown && !existing.publishAttemptedAt) {
+      await updateInstagramMetadata(submissionId, { autoCompleteRequested: true });
+    }
     return getStoredInstagramPublishForSubmission(submissionId);
   }
 
@@ -771,10 +778,14 @@ async function startClaimedInstagramPublish(
     containerStatusCode: null,
     publishAttemptedAt: null,
     outcomeUnknown: false,
+    autoCompleteRequested: options?.autoCompleteRequested === true,
   });
 
+  const preparedAt = Date.now();
   try {
     const result = await publishInstagramMedia(mediaType, mediaUrls, caption, coverUrl);
+    console.info("Instagram publish timing", { submissionId, phase: "container-created", mediaType,
+      preparationMs: preparedAt - Date.parse(requestedAt), containerCreationMs: Date.now() - preparedAt });
 
     await updateInstagramMetadata(submissionId, {
       mediaType,
@@ -852,6 +863,7 @@ async function syncClaimedInstagramPublish(
   }
 
   const submission = await loadSubmission(submissionId);
+  if (submission.ai_metadata?.exhibitionDeletedAt) throw new Error("Deleted ads cannot be published");
   const instagramPublish = getInstagramPublishMetadata(submission.ai_metadata);
 
   if (!instagramPublish.containerId || !instagramPublish.mediaType) {
@@ -901,19 +913,29 @@ export async function waitForInstagramPublishCompletion(
 ): Promise<InstagramPublishResult> {
   const maxAttempts = Math.max(1, options?.maxAttempts ?? 3);
   const delayMs = Math.max(0, options?.delayMs ?? 2_000);
+  const deadline = options?.maxWaitMs === undefined ? Infinity : Date.now() + Math.max(0, options.maxWaitMs);
+  if (Date.now() >= deadline) return getStoredInstagramPublishForSubmission(submissionId);
 
-  let latestResult = await syncInstagramPublishForSubmission(submissionId);
+  const check = async () => {
+    try { return await syncInstagramPublishForSubmission(submissionId); }
+    catch (error) {
+      if (!(error instanceof PublishBusyError)) throw error;
+      return getStoredInstagramPublishForSubmission(submissionId);
+    }
+  };
+  let latestResult = await check();
 
   for (let attempt = 1; attempt < maxAttempts; attempt += 1) {
     if (latestResult.status !== "processing" || latestResult.requiresVerification) {
       return latestResult;
     }
 
+    if (Date.now() >= deadline) break;
     if (delayMs > 0) {
-      await sleep(delayMs);
+      await sleep(Math.min(delayMs, Math.max(0, deadline - Date.now())));
     }
-
-    latestResult = await syncInstagramPublishForSubmission(submissionId);
+    if (Date.now() >= deadline) break;
+    latestResult = await check();
   }
 
   return latestResult;
@@ -930,7 +952,7 @@ export async function getStoredInstagramPublishForSubmission(submissionId: strin
     requiresVerification: state.outcomeUnknown === true };
 }
 
-export async function startInstagramPublishForSubmission(submissionId: string, options?: { mediaType?: InstagramMediaType; captionOverride?: string }) {
+export async function startInstagramPublishForSubmission(submissionId: string, options?: { mediaType?: InstagramMediaType; captionOverride?: string; autoCompleteRequested?: boolean }) {
   return withPublishLock(submissionId, () => startClaimedInstagramPublish(submissionId, options));
 }
 

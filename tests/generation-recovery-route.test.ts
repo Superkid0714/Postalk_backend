@@ -10,9 +10,10 @@ test("generation recovery requires its key and does not start Instagram work by 
   delete process.env.GENERATION_WORKER_SYNC_INSTAGRAM_ENABLED;
   const originalFetch = globalThis.fetch;
   let publishQueries = 0;
+  let generationQueries = 0;
   globalThis.fetch = async (input, init) => {
     const url = new URL(new Request(input, init).url);
-    if (url.pathname.endsWith("/generation_jobs")) return Response.json([]);
+    if (url.pathname.endsWith("/generation_jobs")) { generationQueries++; return Response.json([]); }
     if (url.pathname.endsWith("/submissions")) { publishQueries++; return Response.json([]); }
     throw new Error("Unexpected recovery request");
   };
@@ -27,6 +28,12 @@ test("generation recovery requires its key and does not start Instagram work by 
     process.env.GENERATION_WORKER_SYNC_INSTAGRAM_ENABLED = "true";
     assert.equal((await POST(request())).status, 200);
     assert.equal(publishQueries, 1);
+    const before = generationQueries;
+    const publicationOnly = await POST(new NextRequest("https://backend.invalid/api/internal/generation-jobs/recover?scope=publish", {
+      method: "POST", headers: { "x-internal-worker-key": "worker-key" },
+    }));
+    assert.equal(publicationOnly.status, 200);
+    assert.equal(generationQueries, before, "publication checks must not run AI jobs");
   } finally {
     globalThis.fetch = originalFetch;
     for (const key of keys) { const value = previous[key]; if (value === undefined) delete process.env[key]; else process.env[key] = value; }
